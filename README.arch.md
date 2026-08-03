@@ -58,8 +58,20 @@ e executa migrations. Ele nunca dispara captura nem apaga arquivos. O segredo é
 gerado localmente e não deve ser copiado para o repositório.
 
 Ajuste `PHX_HOST` e `TETHER_LAN_IP` em `/etc/revela/revela.env` se necessário.
-Esta primeira distribuição não adiciona autenticação nem TLS: use apenas uma LAN
-confiável, conforme a decisão do captain.
+`PHX_HOST` identifica o host da URL da aplicação e `TETHER_LAN_IP` fixa o
+endereço anunciado no QR; se omitido, o endereço LAN é detectado. O serviço
+escuta a porta definida por `PORT` (4000 por padrão). Esta primeira distribuição
+não adiciona autenticação nem TLS: use apenas uma LAN confiável, conforme a
+decisão do captain.
+
+As variáveis de caminho podem ser alteradas antes de executar o assistente:
+`REVELA_DATA_DIR` define a raiz (padrão `/var/lib/revela`), enquanto
+`DATABASE_PATH`, `EDITORIALS_DIR` e `UPLOADS_DIR` substituem individualmente o
+banco, os originais e os previews. Os caminhos devem ser absolutos e ficar sob
+`/var/lib/revela`; o assistente rejeita caminhos reservados do sistema. `POOL_SIZE`
+define o pool SQLite e `REVELA_SERVICE_USER` e `REVELA_SERVICE_GROUP` permitem
+usar uma conta local diferente de `revela`, desde que ela já exista. O arquivo de
+ambiente pode ser escolhido com `revela-setup --env FILE`.
 
 ## Operação e LAN
 
@@ -68,6 +80,10 @@ sudo systemctl enable --now revela
 systemctl status revela
 journalctl -u revela -f
 ```
+
+A unidade permanece desabilitada até o primeiro comando acima. Para uma
+verificação sem habilitar o boot, use `sudo systemctl start revela` e depois
+`sudo systemctl stop revela`.
 
 Abra `http://localhost:4000/host` no computador e use o QR exibido para os
 celulares na mesma LAN. Verifique a presença com `gphoto2 --auto-detect` e o
