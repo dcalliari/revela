@@ -140,7 +140,13 @@ PHX_HOST=localhost
 PORT=4000
 EOF
   chmod 0600 "$env_file"
+  export SECRET_KEY_BASE="$secret_key_base"
 fi
+
+export REVELA_DATA_DIR="$data_dir"
+export DATABASE_PATH="$database_path"
+export EDITORIALS_DIR="$editorials_dir"
+export UPLOADS_DIR="$uploads_dir"
 
 systemd_dropin=/etc/systemd/system/revela.service.d/paths.conf
 install -d -m 0755 "$(dirname "$systemd_dropin")"
@@ -150,6 +156,6 @@ chmod 0644 "$systemd_dropin"
 systemctl daemon-reload
 
 "$release_bin" eval 'Revela.Release.migrate()'
-chown -R "$service_user:$service_group" "$data_dir"
-chown "$service_user:$service_group" "$database_path"
+chown -R "$service_user:$service_group" \
+  "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir"
 printf 'Configuração criada em %s; migrations concluídas.\n' "$env_file"
