@@ -49,7 +49,11 @@ if ((dry_run)); then
 fi
 
 [[ $EUID -eq 0 ]] || { printf 'Execute como root para preparar o serviço Arch.\n' >&2; exit 1; }
+service_user=${REVELA_SERVICE_USER:-revela}
+service_group=${REVELA_SERVICE_GROUP:-revela}
+id -u "$service_user" >/dev/null 2>&1 || { printf 'Usuário de serviço ausente: %s\n' "$service_user" >&2; exit 1; }
 install -d -m 0750 "$(dirname "$env_file")" "$data_dir" "$editorials_dir" "$uploads_dir"
+chown "$service_user:$service_group" "$data_dir" "$editorials_dir" "$uploads_dir"
 if [[ ! -e $env_file ]]; then
   secret_key_base=$(openssl rand -base64 48 | tr -d '\n')
   umask 0077
@@ -69,4 +73,5 @@ set -a
 source "$env_file"
 set +a
 "$(dirname "$(readlink -f "$0")")/revela" eval 'Revela.Release.migrate()'
+chown -R "$service_user:$service_group" "$data_dir"
 printf 'Configuração criada em %s; migrations concluídas.\n' "$env_file"

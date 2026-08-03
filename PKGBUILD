@@ -13,6 +13,7 @@ source=()
 sha256sums=()
 
 build() {
+  cd "$startdir"
   export MIX_ENV=prod
   mix deps.get --only prod
   mix assets.deploy
@@ -20,6 +21,7 @@ build() {
 }
 
 package() {
+  cd "$startdir"
   install -d "$pkgdir/usr/lib/revela" "$pkgdir/etc/revela"
   cp -a _build/prod/rel/revela/. "$pkgdir/usr/lib/revela/"
   install -Dm755 priv/revela/bin/setup "$pkgdir/usr/bin/revela-setup"
