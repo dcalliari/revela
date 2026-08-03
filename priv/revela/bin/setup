@@ -26,6 +26,7 @@ require_command gphoto2
 require_command magick
 require_command gio
 require_command openssl
+require_command realpath
 [[ -x $release_bin ]] || { printf 'Release ausente: %s\n' "$release_bin" >&2; exit 1; }
 
 service_user=${REVELA_SERVICE_USER:-revela}
@@ -91,6 +92,30 @@ database_dir=$(dirname "$database_path")
 editorials_dir=${EDITORIALS_DIR:-$data_dir/editorials}
 uploads_dir=${UPLOADS_DIR:-$data_dir/uploads}
 
+validate_path() {
+  local path=$1 resolved
+  [[ $path == /* && $path != *[$' \t\r\n%']* ]] || {
+    printf 'Caminho absoluto inválido: %s\n' "$path" >&2
+    exit 1
+  }
+  resolved=$(realpath -m -- "$path") || {
+    printf 'Caminho inválido: %s\n' "$path" >&2
+    exit 1
+  }
+  case "$resolved" in
+    /var/lib/revela|/var/lib/revela/*)
+      ;;
+    /|/boot|/boot/*|/dev|/dev/*|/etc|/etc/*|/home|/home/*|/lib|/lib/*|/lib64|/lib64/*|/opt|/opt/*|/proc|/proc/*|/root|/root/*|/run|/run/*|/sbin|/sbin/*|/sys|/sys/*|/usr|/usr/*|/var|/var/cache|/var/cache/*|/var/lib|/var/lib/*|/var/log|/var/log/*|/var/spool|/var/spool/*|/var/tmp|/var/tmp/*)
+      printf 'Caminho reservado: %s\n' "$path" >&2
+      exit 1
+      ;;
+  esac
+}
+
+for path in "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir"; do
+  validate_path "$path"
+done
+
 if ((dry_run)); then
   printf 'Dry-run: criaria %s, %s e %s\n' "$editorials_dir" "$uploads_dir" "$(dirname "$database_path")"
   printf 'Dry-run: validaria migrations em %s\n' "$database_path"
@@ -116,20 +141,6 @@ PORT=4000
 EOF
   chmod 0600 "$env_file"
 fi
-
-load_env "$env_file"
-data_dir=${REVELA_DATA_DIR:-$data_dir}
-database_path=${DATABASE_PATH:-$data_dir/revela.db}
-database_dir=$(dirname "$database_path")
-editorials_dir=${EDITORIALS_DIR:-$data_dir/editorials}
-uploads_dir=${UPLOADS_DIR:-$data_dir/uploads}
-
-for path in "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir"; do
-  [[ $path == /* && $path != *[$' \t\r\n%']* ]] || {
-    printf 'Caminho absoluto inválido: %s\n' "$path" >&2
-    exit 1
-  }
-done
 
 systemd_dropin=/etc/systemd/system/revela.service.d/paths.conf
 install -d -m 0755 "$(dirname "$systemd_dropin")"
