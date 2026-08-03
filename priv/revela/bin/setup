@@ -133,11 +133,12 @@ done
 
 systemd_dropin=/etc/systemd/system/revela.service.d/paths.conf
 install -d -m 0755 "$(dirname "$systemd_dropin")"
-printf '[Service]\nReadWritePaths=%s %s %s %s\n' \
-  "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir" >"$systemd_dropin"
+printf '[Service]\nUser=%s\nGroup=%s\nReadWritePaths=%s %s %s %s\n' \
+  "$service_user" "$service_group" "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir" >"$systemd_dropin"
 chmod 0644 "$systemd_dropin"
 systemctl daemon-reload
 
 "$release_bin" eval 'Revela.Release.migrate()'
 chown -R "$service_user:$service_group" "$data_dir"
+chown "$service_user:$service_group" "$database_path"
 printf 'Configuração criada em %s; migrations concluídas.\n' "$env_file"
