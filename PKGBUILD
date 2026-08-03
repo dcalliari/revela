@@ -26,7 +26,6 @@ package() {
   install -Dm755 priv/revela/bin/setup "$pkgdir/usr/bin/revela-setup"
   install -Dm644 packaging/revela.service "$pkgdir/usr/lib/systemd/system/revela.service"
   install -Dm644 README.arch.md "$pkgdir/usr/share/doc/revela/README.arch.md"
-  install -d -m 0750 "$pkgdir/var/lib/revela/editorials" "$pkgdir/var/lib/revela/uploads"
 }
 
 post_install() {
