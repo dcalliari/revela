@@ -65,14 +65,14 @@ load_env "$env_file"
 service_user=${REVELA_SERVICE_USER:-$service_user}
 service_group=${REVELA_SERVICE_GROUP:-$service_group}
 
-if ((dry_run)); then
-  camera_command=(gphoto2 --auto-detect)
-else
-  [[ $EUID -eq 0 ]] || { printf 'Execute como root para preparar o serviço Arch.\n' >&2; exit 1; }
+if ((EUID == 0)); then
   id -u "$service_user" >/dev/null 2>&1 || { printf 'Usuário de serviço ausente: %s\n' "$service_user" >&2; exit 1; }
   getent group "$service_group" >/dev/null || { printf 'Grupo de serviço ausente: %s\n' "$service_group" >&2; exit 1; }
   require_command runuser
   camera_command=(runuser --user "$service_user" -- gphoto2 --auto-detect)
+else
+  ((dry_run)) || { printf 'Execute como root para preparar o serviço Arch.\n' >&2; exit 1; }
+  camera_command=(gphoto2 --auto-detect)
 fi
 
 printf 'Validando câmera sem capturar: '

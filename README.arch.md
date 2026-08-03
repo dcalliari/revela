@@ -40,7 +40,7 @@ Com a câmera conectada, valide tudo sem criar diretórios, alterar configuraç�
 rodar migration ou capturar:
 
 ```bash
-sudo -u revela revela-setup --dry-run
+sudo revela-setup --dry-run
 ```
 
 Depois execute conscientemente o preparo, ainda com a câmera conectada:
