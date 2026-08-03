@@ -8,7 +8,6 @@ url='https://github.com/dcalliari/revela'
 license=('MIT')
 depends=('bash' 'gphoto2' 'imagemagick' 'gvfs' 'openssl' 'ncurses' 'zlib')
 makedepends=('elixir' 'npm')
-backup=('etc/revela/revela.env')
 source=()
 sha256sums=()
 
