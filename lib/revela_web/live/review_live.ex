@@ -51,7 +51,13 @@ defmodule RevelaWeb.ReviewLive do
         {:noreply, socket}
 
       photo ->
-        Capture.set_label(photo.id, socket.assigns.reviewer_id, socket.assigns.reviewer_name, color)
+        Capture.set_label(
+          photo.id,
+          socket.assigns.reviewer_id,
+          socket.assigns.reviewer_name,
+          color
+        )
+
         labels = Map.put(socket.assigns.labels, photo.id, color)
 
         # avanca para a proxima foto; se ela for a mais recente, religa o ao vivo

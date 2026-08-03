@@ -8,6 +8,9 @@ defmodule Revela.Capture.Ingest do
   require Logger
   alias Revela.Capture
 
+  # maior lado do preview web, em pixels
+  @preview_edge 1600
+
   @doc """
   Processa o JPEG em `path`. Ignora arquivos que nao sejam JPEG (o .cr2 e
   captado como irmao do JPEG, nao processado direto).
@@ -41,12 +44,30 @@ defmodule Revela.Capture.Ingest do
   end
 
   # Reduz o JPEG da camera para um preview web (so encolhe, nunca amplia).
+  #
+  # `jpeg:size` vem antes do arquivo de origem porque e uma dica de leitura: o
+  # libjpeg decodifica direto numa escala DCT reduzida em vez de abrir os 17.9 MP
+  # da T6 para so entao encolher. `-auto-orient` precisa continuar antes do
+  # `-thumbnail`, que descarta o EXIF junto com a tag de orientacao.
   defp make_preview(src, dest) do
     File.mkdir_p!(Path.dirname(dest))
 
     case System.cmd(
            "magick",
-           [src, "-auto-orient", "-resize", "1600x1600>", "-quality", "82", dest],
+           [
+             "-define",
+             "jpeg:size=#{@preview_edge}x#{@preview_edge}",
+             src,
+             "-auto-orient",
+             "-thumbnail",
+             "#{@preview_edge}x#{@preview_edge}>",
+             "-quality",
+             "82",
+             "-sampling-factor",
+             "4:2:0",
+             "-strip",
+             dest
+           ],
            stderr_to_stdout: true
          ) do
       {_, 0} -> :ok

@@ -148,11 +148,20 @@ defmodule RevelaWeb.HostLive do
       k when k in ~w(1 2 3 4 5) ->
         handle_event("pick", %{"color" => Integer.to_string(String.to_integer(k) - 1)}, socket)
 
-      "ArrowLeft" -> handle_event("prev", %{}, socket)
-      "ArrowRight" -> handle_event("next", %{}, socket)
-      "Escape" -> handle_event("close", %{}, socket)
-      k when k in ["0", "Backspace", "Delete"] -> handle_event("clear", %{}, socket)
-      _ -> {:noreply, socket}
+      "ArrowLeft" ->
+        handle_event("prev", %{}, socket)
+
+      "ArrowRight" ->
+        handle_event("next", %{}, socket)
+
+      "Escape" ->
+        handle_event("close", %{}, socket)
+
+      k when k in ["0", "Backspace", "Delete"] ->
+        handle_event("clear", %{}, socket)
+
+      _ ->
+        {:noreply, socket}
     end
   end
 
@@ -164,7 +173,11 @@ defmodule RevelaWeb.HostLive do
   def handle_info({:new_photo, _photo}, socket) do
     socket = load_photos(socket)
     # se o visualizador esta em modo ao vivo, acompanha a foto mais recente
-    idx = if socket.assigns.follow, do: max(length(socket.assigns.photos) - 1, 0), else: socket.assigns.idx
+    idx =
+      if socket.assigns.follow,
+        do: max(length(socket.assigns.photos) - 1, 0),
+        else: socket.assigns.idx
+
     {:noreply, assign(socket, idx: idx)}
   end
 
@@ -272,129 +285,102 @@ defmodule RevelaWeb.HostLive do
       <div class="max-w-5xl mx-auto relative">
         <div class="grid gap-6 lg:grid-cols-3">
           <div class="lg:col-span-1 flex flex-col gap-4">
-          <div :if={@notice} class="alert alert-info text-xs py-2 break-all">{@notice}</div>
+            <div :if={@notice} class="alert alert-info text-xs py-2 break-all">{@notice}</div>
 
-          <div class="card bg-base-100 shadow">
-            <div class="card-body gap-2">
-              <h2 class="card-title text-base">Editorial</h2>
+            <div class="card bg-base-100 shadow">
+              <div class="card-body gap-2">
+                <h2 class="card-title text-base">Editorial</h2>
 
-              <form :if={!@capture.editorial} phx-submit="start_editorial" class="flex gap-2">
-                <input
-                  name="name"
-                  placeholder="Nome do editorial"
-                  autocomplete="off"
-                  class="input input-bordered input-sm flex-1"
-                  required
-                />
-                <button type="submit" class="btn btn-primary btn-sm">Iniciar</button>
-              </form>
+                <form :if={!@capture.editorial} phx-submit="start_editorial" class="flex gap-2">
+                  <input
+                    name="name"
+                    placeholder="Nome do editorial"
+                    autocomplete="off"
+                    class="input input-bordered input-sm flex-1"
+                    required
+                  />
+                  <button type="submit" class="btn btn-primary btn-sm">Iniciar</button>
+                </form>
 
-              <div :if={@capture.editorial} class="flex items-center justify-between gap-2">
-                <span class="font-medium truncate">{@capture.editorial}</span>
-                <button
-                  phx-click="finish_editorial"
-                  data-confirm="Finalizar o editorial limpa a tela. Os originais ficam salvos. Continuar?"
-                  class="btn btn-outline btn-sm"
-                >
-                  Finalizar editorial
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card bg-base-100 shadow">
-            <div class="card-body items-center text-center gap-2">
-              <h2 class="card-title">Entrar no estudio</h2>
-              <%!-- placa sempre clara com modulos escuros: a leitura nao depende do tema.
-                   A zona de silencio ja vem dentro do SVG, entao o padding e minimo. --%>
-              <div class="rounded-2xl bg-white p-1.5 ring-1 ring-base-300">
-                <div class="size-48 text-neutral-900">{Phoenix.HTML.raw(@qr)}</div>
-              </div>
-              <a href={@url} class="link link-primary text-sm font-mono break-all">{@url}</a>
-              <p class="text-xs opacity-60">
-                Mesma rede Wi-Fi. Aponte a camera do celular para o QR.
-              </p>
-            </div>
-          </div>
-
-          <div class="card bg-base-100 shadow">
-            <div class="card-body gap-3">
-              <div class="flex items-center justify-between">
-                <h2 class="card-title text-base">Captura</h2>
-                <.status_badge capture={@capture} />
-              </div>
-              <p :if={@capture.message} class="text-xs text-warning">{@capture.message}</p>
-              <div class="flex gap-2">
-                <button
-                  :if={@capture.status not in [:running, :reconnecting]}
-                  phx-click="start"
-                  class="btn btn-primary btn-sm flex-1"
-                >
-                  Conectar câmera
-                </button>
-                <button
-                  :if={@capture.status in [:running, :reconnecting]}
-                  phx-click="stop"
-                  class="btn btn-outline btn-sm flex-1"
-                >
-                  Parar
-                </button>
-              </div>
-              <p class="text-xs opacity-60">
-                Camera ligada, Wi-Fi/NFC desativado e cabo USB firme.
-              </p>
-            </div>
-          </div>
-
-          <div class="card bg-base-100 shadow">
-            <div class="card-body gap-2">
-              <h2 class="card-title text-base">
-                No estudio ({length(@reviewers)})
-              </h2>
-              <div class="flex flex-wrap gap-1">
-                <span :for={r <- @reviewers} class="badge badge-neutral">{r.name}</span>
-                <span :if={@reviewers == []} class="text-xs opacity-50">ninguem conectado</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="lg:col-span-2 card bg-base-100 shadow">
-          <div class="card-body gap-4">
-            <div class="flex items-center justify-between">
-              <h2 class="card-title">Fotos ({@total})</h2>
-              <div class="flex gap-2 items-center text-xs opacity-70">
-                <span :for={c <- Colors.all()} class="flex items-center gap-1">
-                  <span class="h-3 w-3 rounded-full" style={"background-color: #{c.hex}"} />
-                </span>
-              </div>
-            </div>
-
-            <div :if={@recent == []} class="text-center opacity-50 py-16">
-              Nenhuma foto ainda.
-            </div>
-
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              <div
-                :for={photo <- @recent}
-                class="relative cursor-pointer"
-                phx-click="open"
-                phx-value-id={photo.id}
-              >
-                <img src={photo.web_path} class="w-full aspect-[3/2] object-cover rounded-lg" />
-                <div class="absolute bottom-1 left-1 right-1 flex gap-1 flex-wrap">
-                  <span
-                    :for={{color, count} <- Map.get(@tallies, photo.id, %{}) |> Enum.sort()}
-                    class="text-[10px] font-bold text-white rounded px-1 leading-4"
-                    style={"background-color: #{Colors.hex(color)}"}
+                <div :if={@capture.editorial} class="flex items-center justify-between gap-2">
+                  <span class="font-medium truncate">{@capture.editorial}</span>
+                  <button
+                    phx-click="finish_editorial"
+                    data-confirm="Finalizar o editorial limpa a tela. Os originais ficam salvos. Continuar?"
+                    class="btn btn-outline btn-sm"
                   >
-                    {count}
-                  </span>
+                    Finalizar editorial
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card bg-base-100 shadow">
+              <div class="card-body items-center text-center gap-2">
+                <h2 class="card-title">Entrar no estudio</h2>
+                <%!-- placa sempre clara com modulos escuros: a leitura nao depende do tema.
+                   A zona de silencio ja vem dentro do SVG, entao o padding e minimo. --%>
+                <div class="rounded-2xl bg-white p-1.5 ring-1 ring-base-300">
+                  <div class="size-48 text-neutral-900">{Phoenix.HTML.raw(@qr)}</div>
+                </div>
+                <a href={@url} class="link link-primary text-sm font-mono break-all">{@url}</a>
+                <p class="text-xs opacity-60">
+                  Mesma rede Wi-Fi. Aponte a camera do celular para o QR.
+                </p>
+              </div>
+            </div>
+
+            <.capture_card capture={@capture} />
+
+            <div class="card bg-base-100 shadow">
+              <div class="card-body gap-2">
+                <h2 class="card-title text-base">
+                  No estudio ({length(@reviewers)})
+                </h2>
+                <div class="flex flex-wrap gap-1">
+                  <span :for={r <- @reviewers} class="badge badge-neutral">{r.name}</span>
+                  <span :if={@reviewers == []} class="text-xs opacity-50">ninguem conectado</span>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+
+          <div class="lg:col-span-2 card bg-base-100 shadow">
+            <div class="card-body gap-4">
+              <div class="flex items-center justify-between">
+                <h2 class="card-title">Fotos ({@total})</h2>
+                <div class="flex gap-2 items-center text-xs opacity-70">
+                  <span :for={c <- Colors.all()} class="flex items-center gap-1">
+                    <span class="h-3 w-3 rounded-full" style={"background-color: #{c.hex}"} />
+                  </span>
+                </div>
+              </div>
+
+              <div :if={@recent == []} class="text-center opacity-50 py-16">
+                Nenhuma foto ainda.
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                <div
+                  :for={photo <- @recent}
+                  class="relative cursor-pointer"
+                  phx-click="open"
+                  phx-value-id={photo.id}
+                >
+                  <img src={photo.web_path} class="w-full aspect-[3/2] object-cover rounded-lg" />
+                  <div class="absolute bottom-1 left-1 right-1 flex gap-1 flex-wrap">
+                    <span
+                      :for={{color, count} <- Map.get(@tallies, photo.id, %{}) |> Enum.sort()}
+                      class="text-[10px] font-bold text-white rounded px-1 leading-4"
+                      style={"background-color: #{Colors.hex(color)}"}
+                    >
+                      {count}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -416,19 +402,106 @@ defmodule RevelaWeb.HostLive do
 
   attr :capture, :map, required: true
 
+  def capture_card(assigns) do
+    {action_label, action_event, action_disabled?, action_class} =
+      capture_action(assigns.capture)
+
+    assigns =
+      assign(assigns,
+        action_label: action_label,
+        action_event: action_event,
+        action_disabled?: action_disabled?,
+        action_class: action_class,
+        help: capture_help(assigns.capture),
+        help_class: capture_help_class(assigns.capture)
+      )
+
+    ~H"""
+    <div id="capture-card" class="card bg-base-100 shadow">
+      <div class="card-body gap-3">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="card-title text-base">Captura</h2>
+          <.status_badge capture={@capture} />
+        </div>
+
+        <button
+          id="capture-action"
+          type="button"
+          phx-click={@action_event}
+          disabled={@action_disabled?}
+          class={[
+            "btn btn-sm w-full transition-colors duration-200",
+            @action_class
+          ]}
+        >
+          {@action_label}
+        </button>
+
+        <p
+          id="capture-help"
+          class={["min-h-8 text-xs leading-relaxed", @help_class]}
+          aria-live="polite"
+        >
+          {@help}
+        </p>
+      </div>
+    </div>
+    """
+  end
+
+  defp capture_action(%{status: :running}),
+    do: {"Desvincular câmera", "stop", false, "btn-outline"}
+
+  defp capture_action(%{status: status}) when status in [:reconnecting, :waiting_camera],
+    do: {"Cancelar reconexão", "stop", false, "btn-outline"}
+
+  defp capture_action(%{camera_present: true}),
+    do: {"Vincular câmera", "start", false, "btn-primary"}
+
+  defp capture_action(_capture),
+    do: {"Conecte a câmera", nil, true, "btn-primary"}
+
+  defp capture_help(%{status: :running}),
+    do: "Câmera vinculada. Aguardando disparos."
+
+  defp capture_help(%{status: :waiting_camera}),
+    do: "A câmera foi desconectada. Reconecte o cabo USB para retomar automaticamente."
+
+  defp capture_help(%{status: :reconnecting, message: message}) when is_binary(message),
+    do: message
+
+  defp capture_help(%{status: :error, message: message}) when is_binary(message),
+    do: message
+
+  defp capture_help(%{camera_present: true}),
+    do: "Câmera detectada via USB e pronta para vincular."
+
+  defp capture_help(_capture),
+    do: "Ligue a câmera e conecte o cabo USB."
+
+  defp capture_help_class(%{status: :error}), do: "text-error"
+
+  defp capture_help_class(%{status: status})
+       when status in [:reconnecting, :waiting_camera],
+       do: "text-warning"
+
+  defp capture_help_class(_capture), do: "opacity-60"
+
   defp status_badge(assigns) do
     {label, class} =
-      case assigns.capture.status do
-        :running -> {"rodando", "badge-success"}
-        :reconnecting -> {"reconectando", "badge-warning"}
-        :error -> {"erro", "badge-error"}
-        _ -> {"parado", "badge-ghost"}
+      case assigns.capture do
+        %{status: :running} -> {"vinculada", "badge-success"}
+        %{status: :reconnecting} -> {"reconectando", "badge-warning"}
+        %{status: :waiting_camera} -> {"desconectada", "badge-warning"}
+        %{status: :error} -> {"erro", "badge-error"}
+        %{camera_present: true} -> {"detectada", "badge-info"}
+        _capture -> {"desconectada", "badge-ghost"}
       end
 
     assigns = assign(assigns, label: label, class: class)
 
     ~H"""
-    <span class={["badge", @class]}>{@label}</span>
+    <span id="capture-status" class={["badge", @class]}>{@label}</span>
     """
   end
 end

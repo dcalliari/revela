@@ -1,8 +1,10 @@
 defmodule RevelaWeb.PageControllerTest do
   use RevelaWeb.ConnCase
 
+  import Phoenix.LiveViewTest
+
   test "GET /", %{conn: conn} do
-    conn = get(conn, ~p"/")
-    assert html_response(conn, 200) =~ "Peace of mind from prototype to production"
+    {:ok, view, _html} = live(conn, ~p"/")
+    assert has_element?(view, "#identity-form")
   end
 end
