@@ -70,7 +70,11 @@ defmodule Revela.Capture do
     Repo.delete_all(Photo)
 
     uploads =
-      Application.get_env(:revela, :uploads_dir, Application.app_dir(:revela, "priv/static/uploads"))
+      Application.get_env(
+        :revela,
+        :uploads_dir,
+        Application.app_dir(:revela, "priv/static/uploads")
+      )
 
     if File.dir?(uploads) do
       for f <- File.ls!(uploads), do: File.rm(Path.join(uploads, f))
