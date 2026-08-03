@@ -30,11 +30,39 @@ require_command openssl
 
 service_user=${REVELA_SERVICE_USER:-revela}
 service_group=${REVELA_SERVICE_GROUP:-revela}
-if [[ -f $env_file ]]; then
-  set -a
-  source "$env_file"
-  set +a
-fi
+load_env() {
+  [[ -f $1 ]] || return 0
+
+  local line key value
+  while IFS= read -r line || [[ -n $line ]]; do
+    case "$line" in
+      ''|'#'*) continue ;;
+    esac
+    if [[ ! $line =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      printf 'Linha inválida no ambiente: %s\n' "$line" >&2
+      exit 1
+    fi
+    key=${BASH_REMATCH[1]}
+    value=${BASH_REMATCH[2]}
+    case "$key" in
+      REVELA_DATA_DIR|DATABASE_PATH|EDITORIALS_DIR|UPLOADS_DIR|SECRET_KEY_BASE|PHX_HOST|PORT|POOL_SIZE|TETHER_LAN_IP|DNS_CLUSTER_QUERY|REVELA_SERVICE_USER|REVELA_SERVICE_GROUP)
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    if [[ $value == \"*\" && $value == *\" ]]; then
+      value=${value:1:${#value}-2}
+    elif [[ $value == \'*\' && $value == *\' ]]; then
+      value=${value:1:${#value}-2}
+    fi
+    export "$key=$value"
+  done <"$1"
+}
+
+load_env "$env_file"
+service_user=${REVELA_SERVICE_USER:-$service_user}
+service_group=${REVELA_SERVICE_GROUP:-$service_group}
 
 if ((dry_run)); then
   camera_command=(gphoto2 --auto-detect)
@@ -89,9 +117,27 @@ EOF
   chmod 0600 "$env_file"
 fi
 
-set -a
-source "$env_file"
-set +a
+load_env "$env_file"
+data_dir=${REVELA_DATA_DIR:-$data_dir}
+database_path=${DATABASE_PATH:-$data_dir/revela.db}
+database_dir=$(dirname "$database_path")
+editorials_dir=${EDITORIALS_DIR:-$data_dir/editorials}
+uploads_dir=${UPLOADS_DIR:-$data_dir/uploads}
+
+for path in "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir"; do
+  [[ $path == /* && $path != *[$' \t\r\n%']* ]] || {
+    printf 'Caminho absoluto inválido: %s\n' "$path" >&2
+    exit 1
+  }
+done
+
+systemd_dropin=/etc/systemd/system/revela.service.d/paths.conf
+install -d -m 0755 "$(dirname "$systemd_dropin")"
+printf '[Service]\nReadWritePaths=%s %s %s %s\n' \
+  "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir" >"$systemd_dropin"
+chmod 0644 "$systemd_dropin"
+systemctl daemon-reload
+
 "$release_bin" eval 'Revela.Release.migrate()'
 chown -R "$service_user:$service_group" "$data_dir"
 printf 'Configuração criada em %s; migrations concluídas.\n' "$env_file"
