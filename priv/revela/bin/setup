@@ -30,6 +30,12 @@ require_command openssl
 
 service_user=${REVELA_SERVICE_USER:-revela}
 service_group=${REVELA_SERVICE_GROUP:-revela}
+if [[ -f $env_file ]]; then
+  set -a
+  source "$env_file"
+  set +a
+fi
+
 if ((dry_run)); then
   camera_command=(gphoto2 --auto-detect)
 else
@@ -53,6 +59,7 @@ printf 'ok\n'
 
 data_dir=${REVELA_DATA_DIR:-/var/lib/revela}
 database_path=${DATABASE_PATH:-$data_dir/revela.db}
+database_dir=$(dirname "$database_path")
 editorials_dir=${EDITORIALS_DIR:-$data_dir/editorials}
 uploads_dir=${UPLOADS_DIR:-$data_dir/uploads}
 
@@ -62,8 +69,11 @@ if ((dry_run)); then
   exit 0
 fi
 
-install -d -m 0750 "$(dirname "$env_file")" "$data_dir" "$editorials_dir" "$uploads_dir"
-chown "$service_user:$service_group" "$data_dir" "$editorials_dir" "$uploads_dir"
+install -d -m 0750 "$(dirname "$env_file")" "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir"
+chown "$service_user:$service_group" "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir"
+if [[ -e $database_path ]]; then
+  chown "$service_user:$service_group" "$database_path"
+fi
 if [[ ! -e $env_file ]]; then
   secret_key_base=$(openssl rand -base64 48 | tr -d '\n')
   umask 0077
