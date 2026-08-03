@@ -89,6 +89,6 @@ defmodule Revela.Capture.Ingest do
   end
 
   defp uploads_dir do
-    Application.app_dir(:revela, "priv/static/uploads")
+    Application.get_env(:revela, :uploads_dir, Application.app_dir(:revela, "priv/static/uploads"))
   end
 end

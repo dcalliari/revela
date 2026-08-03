@@ -41,16 +41,18 @@ if config_env() == :dev do
 end
 
 if config_env() == :prod do
-  database_path =
-    System.get_env("DATABASE_PATH") ||
-      raise """
-      environment variable DATABASE_PATH is missing.
-      For example: /etc/revela/revela.db
-      """
+  data_dir = System.get_env("REVELA_DATA_DIR", "/var/lib/revela")
+  database_path = System.get_env("DATABASE_PATH", Path.join(data_dir, "revela.db"))
+  editorials_dir = System.get_env("EDITORIALS_DIR", Path.join(data_dir, "editorials"))
+  uploads_dir = System.get_env("UPLOADS_DIR", Path.join(data_dir, "uploads"))
+
+  config :revela,
+    editorials_dir: editorials_dir,
+    uploads_dir: uploads_dir
 
   config :revela, Revela.Repo,
     database: database_path,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
+    pool_size: String.to_integer(System.get_env("POOL_SIZE", "5"))
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you

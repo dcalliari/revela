@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf 'Uso: %s [--dry-run] [--env FILE]\n' "$0"
+}
+
+dry_run=0
+env_file=/etc/revela/revela.env
+while (($#)); do
+  case "$1" in
+    --dry-run) dry_run=1 ;;
+    --env) shift; (($#)) || { usage >&2; exit 2; }; env_file=$1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+require_command() {
+  command -v "$1" >/dev/null || { printf 'Pré-requis ausente: %s\n' "$1" >&2; exit 1; }
+}
+
+require_command gphoto2
+require_command magick
+require_command gio
+require_command openssl
+
+printf 'Validando câmera sem capturar: '
+if ! camera_output=$(gphoto2 --auto-detect 2>&1); then
+  printf 'falhou\n%s\n' "$camera_output" >&2
+  exit 1
+fi
+if ! awk '/^---/{found=1; next} found && NF {found_camera=1; exit} END {exit !found_camera}' <<<"$camera_output"; then
+  printf 'nenhuma câmera detectada\n' >&2
+  exit 1
+fi
+printf 'ok\n'
+
+data_dir=${REVELA_DATA_DIR:-/var/lib/revela}
+database_path=${DATABASE_PATH:-$data_dir/revela.db}
+editorials_dir=${EDITORIALS_DIR:-$data_dir/editorials}
+uploads_dir=${UPLOADS_DIR:-$data_dir/uploads}
+
+if ((dry_run)); then
+  printf 'Dry-run: criaria %s, %s e %s\n' "$editorials_dir" "$uploads_dir" "$(dirname "$database_path")"
+  printf 'Dry-run: validaria migrations em %s\n' "$database_path"
+  exit 0
+fi
+
+[[ $EUID -eq 0 ]] || { printf 'Execute como root para preparar o serviço Arch.\n' >&2; exit 1; }
+install -d -m 0750 "$(dirname "$env_file")" "$data_dir" "$editorials_dir" "$uploads_dir"
+if [[ ! -e $env_file ]]; then
+  secret_key_base=$(openssl rand -base64 48 | tr -d '\n')
+  umask 0077
+  cat >"$env_file" <<EOF
+REVELA_DATA_DIR=$data_dir
+DATABASE_PATH=$database_path
+EDITORIALS_DIR=$editorials_dir
+UPLOADS_DIR=$uploads_dir
+SECRET_KEY_BASE=$secret_key_base
+PHX_HOST=localhost
+PORT=4000
+EOF
+  chmod 0600 "$env_file"
+fi
+
+set -a
+source "$env_file"
+set +a
+"$(dirname "$(readlink -f "$0")")/revela" eval 'Revela.Release.migrate()'
+printf 'Configuração criada em %s; migrations concluídas.\n' "$env_file"

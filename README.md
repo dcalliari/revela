@@ -31,6 +31,10 @@ As cores usam o mesmo mapeamento do darktable: `0` vermelho, `1` amarelo,
 
 ## Rodar
 
+Para a distribuição nativa Arch Linux x86_64, consulte [README.arch.md](README.arch.md).
+O pacote usa uma release Phoenix e mantém banco, editoriais, previews e configuração
+fora do artefato instalado.
+
 ```bash
 mix setup            # deps + banco (so na primeira vez)
 mix phx.server       # sobe em 0.0.0.0:4000
@@ -59,8 +63,9 @@ aparece nos celulares em segundos.
 ## Fluxo de dados
 
 - Originais (JPEG + RAW) baixam para `editorials/yyyy-mm-dd NOME/`.
-- Previews web ficam em `priv/static/uploads/` e sao servidos em `/uploads/...`.
-- Estado (fotos + labels) em SQLite (`*.db`).
+- Previews web ficam no diretório persistente configurado em `UPLOADS_DIR` e são
+  servidos em `/uploads/...`.
+- Estado (fotos + labels) fica no SQLite configurado em `DATABASE_PATH`.
 
 ## Pendente (proxima fase)
 
