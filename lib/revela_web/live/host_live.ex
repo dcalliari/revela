@@ -258,9 +258,24 @@ defmodule RevelaWeb.HostLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-dvh bg-base-200 p-4 sm:p-6">
-      <div class="max-w-5xl mx-auto">
-        <h1 class="text-2xl font-bold tracking-tight mb-4">Revela</h1>
+    <div class="min-h-dvh bg-base-200 p-4 sm:p-6 relative overflow-hidden">
+<%!-- Marca d'agua ancorada nas laterais livres: o conteudo tem max-w-5xl (64rem)
+           centralizado, entao o centro de cada faixa lateral fica em calc(25% - 16rem).
+           O corpo acompanha a largura da faixa e nunca passa da altura da tela. --%>
+      <div aria-hidden="true" class="absolute inset-0 pointer-events-none overflow-hidden select-none">
+        <div
+          :for={side <- ["left", "right"]}
+          class="absolute inset-y-0 w-0"
+          style={"#{side}: calc(25% - 16rem)"}
+        >
+          <span
+            class="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 rotate-[270deg] whitespace-nowrap font-serif italic lowercase leading-none tracking-tight text-base-content/[0.08]"
+            style="font-size: min(32vh, max(0px, (100vw - 64rem) / 1.55))"
+          >revela</span>
+        </div>
+      </div>
+
+      <div class="max-w-5xl mx-auto relative">
         <div class="grid gap-6 lg:grid-cols-3">
           <div class="lg:col-span-1 flex flex-col gap-4">
           <div :if={@notice} class="alert alert-info text-xs py-2 break-all">{@notice}</div>
