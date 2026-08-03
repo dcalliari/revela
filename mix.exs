@@ -10,6 +10,7 @@ defmodule Revela.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      releases: releases(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader]
     ]
@@ -28,6 +29,15 @@ defmodule Revela.MixProject do
   def cli do
     [
       preferred_envs: [precommit: :test]
+    ]
+  end
+
+  # O pacote Arch não depende de erlang do sistema: a release carrega o próprio ERTS.
+  defp releases do
+    [
+      revela: [
+        include_erts: true
+      ]
     ]
   end
 

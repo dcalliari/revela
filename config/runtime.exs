@@ -41,16 +41,18 @@ if config_env() == :dev do
 end
 
 if config_env() == :prod do
-  database_path =
-    System.get_env("DATABASE_PATH") ||
-      raise """
-      environment variable DATABASE_PATH is missing.
-      For example: /etc/revela/revela.db
-      """
+  data_dir = System.get_env("REVELA_DATA_DIR", "/var/lib/revela")
+  database_path = System.get_env("DATABASE_PATH", Path.join(data_dir, "revela.db"))
+  editorials_dir = System.get_env("EDITORIALS_DIR", Path.join(data_dir, "editorials"))
+  uploads_dir = System.get_env("UPLOADS_DIR", Path.join(data_dir, "uploads"))
+
+  config :revela,
+    editorials_dir: editorials_dir,
+    uploads_dir: uploads_dir
 
   config :revela, Revela.Repo,
     database: database_path,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
+    pool_size: String.to_integer(System.get_env("POOL_SIZE", "5"))
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
@@ -64,6 +66,7 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
+  # PHX_HOST is URL metadata; the Arch package serves plain HTTP on PORT.
   host = System.get_env("PHX_HOST") || "example.com"
 
   config :revela, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
@@ -71,8 +74,7 @@ if config_env() == :prod do
   config :revela, RevelaWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [
-      # Enable IPv6 and bind on all interfaces.
-      # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
+      # Bind on all interfaces for the trusted LAN deployment.
       # See the documentation on https://bandit.hexdocs.pm/Bandit.html#t:options/0
       # for details about using IPv6 vs IPv4 and loopback vs public addresses.
       ip: {0, 0, 0, 0, 0, 0, 0, 0}

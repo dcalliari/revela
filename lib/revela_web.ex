@@ -17,7 +17,7 @@ defmodule RevelaWeb do
   those modules here.
   """
 
-  def static_paths, do: ~w(assets fonts images favicon.ico robots.txt uploads site.webmanifest)
+  def static_paths, do: ~w(assets fonts images favicon.ico robots.txt site.webmanifest)
 
   def router do
     quote do

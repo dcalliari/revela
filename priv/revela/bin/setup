@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf 'Uso: %s [--dry-run] [--env FILE]\n' "$0"
+}
+
+dry_run=0
+env_file=/etc/revela/revela.env
+release_bin=${REVELA_RELEASE_BIN:-/usr/lib/revela/bin/revela}
+while (($#)); do
+  case "$1" in
+    --dry-run) dry_run=1 ;;
+    --env) shift; (($#)) || { usage >&2; exit 2; }; env_file=$1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+require_command() {
+  command -v "$1" >/dev/null || { printf 'Pré-requis ausente: %s\n' "$1" >&2; exit 1; }
+}
+
+require_command gphoto2
+require_command magick
+require_command gio
+require_command openssl
+require_command realpath
+[[ -x $release_bin ]] || { printf 'Release ausente: %s\n' "$release_bin" >&2; exit 1; }
+
+service_user=${REVELA_SERVICE_USER:-revela}
+service_group=${REVELA_SERVICE_GROUP:-revela}
+load_env() {
+  [[ -f $1 ]] || return 0
+
+  local line key value
+  while IFS= read -r line || [[ -n $line ]]; do
+    case "$line" in
+      ''|'#'*) continue ;;
+    esac
+    if [[ ! $line =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      printf 'Linha inválida no ambiente: %s\n' "$line" >&2
+      exit 1
+    fi
+    key=${BASH_REMATCH[1]}
+    value=${BASH_REMATCH[2]}
+    case "$key" in
+      REVELA_DATA_DIR|DATABASE_PATH|EDITORIALS_DIR|UPLOADS_DIR|SECRET_KEY_BASE|PHX_HOST|PORT|POOL_SIZE|TETHER_LAN_IP|DNS_CLUSTER_QUERY|REVELA_SERVICE_USER|REVELA_SERVICE_GROUP)
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    if [[ $value == \"*\" && $value == *\" ]]; then
+      value=${value:1:${#value}-2}
+    elif [[ $value == \'*\' && $value == *\' ]]; then
+      value=${value:1:${#value}-2}
+    fi
+    export "$key=$value"
+  done <"$1"
+}
+
+load_env "$env_file"
+service_user=${REVELA_SERVICE_USER:-$service_user}
+service_group=${REVELA_SERVICE_GROUP:-$service_group}
+
+if ((EUID == 0)); then
+  id -u "$service_user" >/dev/null 2>&1 || { printf 'Usuário de serviço ausente: %s\n' "$service_user" >&2; exit 1; }
+  getent group "$service_group" >/dev/null || { printf 'Grupo de serviço ausente: %s\n' "$service_group" >&2; exit 1; }
+  require_command runuser
+  camera_command=(runuser --user "$service_user" -- gphoto2 --auto-detect)
+else
+  ((dry_run)) || { printf 'Execute como root para preparar o serviço Arch.\n' >&2; exit 1; }
+  camera_command=(gphoto2 --auto-detect)
+fi
+
+printf 'Validando câmera sem capturar: '
+if ! camera_output=$("${camera_command[@]}" 2>&1); then
+  printf 'falhou\n%s\n' "$camera_output" >&2
+  exit 1
+fi
+if ! awk '/^---/{found=1; next} found && NF {found_camera=1; exit} END {exit !found_camera}' <<<"$camera_output"; then
+  printf 'nenhuma câmera detectada\n' >&2
+  exit 1
+fi
+printf 'ok\n'
+
+data_dir=${REVELA_DATA_DIR:-/var/lib/revela}
+database_path=${DATABASE_PATH:-$data_dir/revela.db}
+database_dir=$(dirname "$database_path")
+editorials_dir=${EDITORIALS_DIR:-$data_dir/editorials}
+uploads_dir=${UPLOADS_DIR:-$data_dir/uploads}
+
+validate_path() {
+  local path=$1 resolved
+  [[ $path == /* && $path != *[$' \t\r\n%']* ]] || {
+    printf 'Caminho absoluto inválido: %s\n' "$path" >&2
+    exit 1
+  }
+  resolved=$(realpath -m -- "$path") || {
+    printf 'Caminho inválido: %s\n' "$path" >&2
+    exit 1
+  }
+  case "$resolved" in
+    /var/lib/revela|/var/lib/revela/*)
+      ;;
+    /|/boot|/boot/*|/dev|/dev/*|/etc|/etc/*|/home|/home/*|/lib|/lib/*|/lib64|/lib64/*|/opt|/opt/*|/proc|/proc/*|/root|/root/*|/run|/run/*|/sbin|/sbin/*|/sys|/sys/*|/usr|/usr/*|/var|/var/cache|/var/cache/*|/var/lib|/var/lib/*|/var/log|/var/log/*|/var/spool|/var/spool/*|/var/tmp|/var/tmp/*)
+      printf 'Caminho reservado: %s\n' "$path" >&2
+      exit 1
+      ;;
+  esac
+}
+
+for path in "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir"; do
+  validate_path "$path"
+done
+
+if ((dry_run)); then
+  printf 'Dry-run: criaria %s, %s e %s\n' "$editorials_dir" "$uploads_dir" "$(dirname "$database_path")"
+  printf 'Dry-run: validaria migrations em %s\n' "$database_path"
+  exit 0
+fi
+
+install -d -m 0750 "$(dirname "$env_file")" "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir"
+chown "$service_user:$service_group" "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir"
+if [[ -e $database_path ]]; then
+  chown "$service_user:$service_group" "$database_path"
+fi
+if [[ ! -e $env_file ]]; then
+  secret_key_base=$(openssl rand -base64 48 | tr -d '\n')
+  umask 0077
+  cat >"$env_file" <<EOF
+REVELA_DATA_DIR=$data_dir
+DATABASE_PATH=$database_path
+EDITORIALS_DIR=$editorials_dir
+UPLOADS_DIR=$uploads_dir
+SECRET_KEY_BASE=$secret_key_base
+PHX_HOST=localhost
+PORT=4000
+EOF
+  chmod 0600 "$env_file"
+  export SECRET_KEY_BASE="$secret_key_base"
+fi
+
+export REVELA_DATA_DIR="$data_dir"
+export DATABASE_PATH="$database_path"
+export EDITORIALS_DIR="$editorials_dir"
+export UPLOADS_DIR="$uploads_dir"
+
+systemd_dropin=/etc/systemd/system/revela.service.d/paths.conf
+install -d -m 0755 "$(dirname "$systemd_dropin")"
+printf '[Service]\nUser=%s\nGroup=%s\nEnvironmentFile=%s\nReadWritePaths=%s %s %s %s\n' \
+  "$service_user" "$service_group" "$env_file" "$data_dir" "$database_dir" "$editorials_dir" "$uploads_dir" >"$systemd_dropin"
+chmod 0644 "$systemd_dropin"
+systemctl daemon-reload
+
+"$release_bin" eval 'Revela.Release.migrate()'
+chown -R "$service_user:$service_group" \
+  "$data_dir" "$editorials_dir" "$uploads_dir"
+if [[ -e $database_path ]]; then
+  chown "$service_user:$service_group" "$database_path"
+fi
+printf 'Configuração criada em %s; migrations concluídas.\n' "$env_file"

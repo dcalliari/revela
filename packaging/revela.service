@@ -1,0 +1,26 @@
+[Unit]
+Description=Revela tethered camera station
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=revela
+Group=revela
+SupplementaryGroups=camera
+WorkingDirectory=/var/lib/revela
+EnvironmentFile=/etc/revela/revela.env
+Environment=PHX_SERVER=true
+ExecStart=/usr/lib/revela/bin/revela start
+ExecStop=/usr/lib/revela/bin/revela stop
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/revela
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

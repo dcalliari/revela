@@ -22,7 +22,6 @@ import "phoenix_html"
 // Establish Phoenix Socket and LiveView configuration.
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
-import {hooks as colocatedHooks} from "phoenix-colocated/revela"
 import topbar from "../vendor/topbar"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
@@ -134,7 +133,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     reviewer_id: localStorage.getItem("reviewer_id"),
     reviewer_name: localStorage.getItem("reviewer_name")
   },
-  hooks: {...colocatedHooks, ...Hooks},
+  hooks: Hooks,
 })
 
 // Show progress bar on live navigation and form submits
