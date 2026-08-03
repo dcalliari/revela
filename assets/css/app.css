@@ -2,7 +2,6 @@
    https://tailwindcss.com/docs/configuration */
 
 @import "tailwindcss" source(none);
-@import "phoenix-colocated/revela/colocated.css";
 @source "../css";
 @source "../js";
 @source "../../lib/revela_web";
