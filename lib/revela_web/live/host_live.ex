@@ -247,10 +247,22 @@ defmodule RevelaWeb.HostLive do
   defp ipv4_rank({172, b, _, _}) when b in 16..31, do: 2
   defp ipv4_rank(_), do: 3
 
+  # QR no visual do site: modulos redondos e cor herdada do CSS (currentColor),
+  # sobre a placa clara do template. Os tres marcadores de deteccao continuam
+  # quadrados solidos (a propria lib garante isso), preservando a leitura.
   defp qr_svg(url) do
     url
     |> EQRCode.encode()
-    |> EQRCode.svg(width: 200, background_color: "#FFF", color: "#000")
+    |> EQRCode.svg(
+      color: "currentColor",
+      background_color: "transparent",
+      shape: "circle",
+      viewbox: true,
+      class: "block h-full w-full"
+    )
+    |> String.replace(~s(<?xml version="1.0" standalone="yes"?>), "")
+    # a lib fixa crispEdges, que serrilha os circulos
+    |> String.replace(~s(shape-rendering="crispEdges"), ~s(shape-rendering="geometricPrecision"))
   end
 
   # ── render ───────────────────────────────────────────────────────────────────
@@ -311,8 +323,12 @@ defmodule RevelaWeb.HostLive do
           <div class="card bg-base-100 shadow">
             <div class="card-body items-center text-center gap-2">
               <h2 class="card-title">Entrar no estudio</h2>
-              <div class="bg-white p-2 rounded-lg">{Phoenix.HTML.raw(@qr)}</div>
-              <a href={@url} class="link link-primary text-sm break-all">{@url}</a>
+              <%!-- placa sempre clara com modulos escuros: a leitura nao depende do tema.
+                   O padding faz a zona de silencio que o QR precisa em volta. --%>
+              <div class="rounded-2xl bg-white p-5 ring-1 ring-base-300">
+                <div class="size-44 text-neutral-900">{Phoenix.HTML.raw(@qr)}</div>
+              </div>
+              <a href={@url} class="link link-primary text-sm font-mono break-all">{@url}</a>
               <p class="text-xs opacity-60">
                 Mesma rede Wi-Fi. Aponte a camera do celular para o QR.
               </p>
