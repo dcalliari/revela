@@ -7,7 +7,7 @@ arch=('x86_64')
 url='https://github.com/dcalliari/revela'
 license=('MIT')
 depends=('bash' 'gphoto2' 'imagemagick' 'gvfs' 'openssl' 'ncurses' 'zlib')
-makedepends=('elixir' 'npm')
+makedepends=('elixir' 'erlang-parsetools' 'erlang-public_key' 'erlang-sasl' 'erlang-ssl' 'npm')
 source=()
 sha256sums=()
 
