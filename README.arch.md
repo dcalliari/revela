@@ -5,10 +5,13 @@ Esta é a distribuição nativa suportada nesta etapa. Ela usa uma release Phoen
 
 ## Dependências e pacote
 
-O `PKGBUILD` declara `erlang`, `bash`, `gphoto2`, `imagemagick`, `gvfs` e
-`openssl` como dependências de execução. `gphoto2` traz a integração da câmera
-(libgphoto2); `gvfs` fornece o `gio` usado para liberar a interface USB antes da
-captura. Elixir e npm são somente dependências de construção.
+O `PKGBUILD` declara `bash`, `gphoto2`, `imagemagick`, `gvfs`, `openssl`,
+`ncurses` e `zlib` como dependências de execução. `gphoto2` traz a integração da
+câmera (libgphoto2); `gvfs` fornece o `gio` usado para liberar a interface USB
+antes da captura; `openssl`, `ncurses` e `zlib` são as bibliotecas que o ERTS
+embutido carrega. Elixir, Erlang e npm são somente dependências de construção: a
+release empacota o próprio ERTS (`include_erts: true` em `mix.exs`), então o
+pacote não exige `erlang` instalado no sistema.
 
 Construa em um checkout/tag, sem alterar o sistema:
 
@@ -46,7 +49,9 @@ Depois execute conscientemente o preparo, ainda com a câmera conectada:
 sudo revela-setup
 ```
 
-O assistente exige `gphoto2`, `magick`, `gio` e `openssl`, executa somente
+O assistente exige `gphoto2`, `magick`, `gio`, `openssl` e a release instalada
+em `/usr/lib/revela/bin/revela` (sobrescrevível por `REVELA_RELEASE_BIN`),
+executa somente
 `gphoto2 --auto-detect` para validar a câmera, cria `/var/lib/revela/editorials`,
 `/var/lib/revela/uploads` e o banco, gera `/etc/revela/revela.env` com modo 0600
 e executa migrations. Ele nunca dispara captura nem apaga arquivos. O segredo é
