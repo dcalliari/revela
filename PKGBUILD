@@ -14,10 +14,9 @@ sha256sums=()
 
 build() {
   cd "$startdir"
-  export MIX_ENV=prod
-  mix deps.get --only prod
-  mix assets.deploy
-  mix release
+  MIX_ENV=dev mix deps.get
+  MIX_ENV=dev mix assets.deploy
+  MIX_ENV=prod mix release
 }
 
 package() {

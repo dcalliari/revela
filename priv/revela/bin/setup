@@ -28,8 +28,20 @@ require_command gio
 require_command openssl
 [[ -x $release_bin ]] || { printf 'Release ausente: %s\n' "$release_bin" >&2; exit 1; }
 
+service_user=${REVELA_SERVICE_USER:-revela}
+service_group=${REVELA_SERVICE_GROUP:-revela}
+if ((dry_run)); then
+  camera_command=(gphoto2 --auto-detect)
+else
+  [[ $EUID -eq 0 ]] || { printf 'Execute como root para preparar o serviço Arch.\n' >&2; exit 1; }
+  id -u "$service_user" >/dev/null 2>&1 || { printf 'Usuário de serviço ausente: %s\n' "$service_user" >&2; exit 1; }
+  getent group "$service_group" >/dev/null || { printf 'Grupo de serviço ausente: %s\n' "$service_group" >&2; exit 1; }
+  require_command runuser
+  camera_command=(runuser --user "$service_user" -- gphoto2 --auto-detect)
+fi
+
 printf 'Validando câmera sem capturar: '
-if ! camera_output=$(gphoto2 --auto-detect 2>&1); then
+if ! camera_output=$("${camera_command[@]}" 2>&1); then
   printf 'falhou\n%s\n' "$camera_output" >&2
   exit 1
 fi
@@ -50,10 +62,6 @@ if ((dry_run)); then
   exit 0
 fi
 
-[[ $EUID -eq 0 ]] || { printf 'Execute como root para preparar o serviço Arch.\n' >&2; exit 1; }
-service_user=${REVELA_SERVICE_USER:-revela}
-service_group=${REVELA_SERVICE_GROUP:-revela}
-id -u "$service_user" >/dev/null 2>&1 || { printf 'Usuário de serviço ausente: %s\n' "$service_user" >&2; exit 1; }
 install -d -m 0750 "$(dirname "$env_file")" "$data_dir" "$editorials_dir" "$uploads_dir"
 chown "$service_user:$service_group" "$data_dir" "$editorials_dir" "$uploads_dir"
 if [[ ! -e $env_file ]]; then
