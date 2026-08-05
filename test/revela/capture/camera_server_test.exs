@@ -62,18 +62,85 @@ defmodule Revela.Capture.CameraServerTest do
 
     wait_for_presence_check(server)
 
-    assert CameraServer.start_capture(server) == %{
-             camera_present: false,
-             editorial: nil,
-             message: nil,
-             status: :idle
-           }
+    assert %{camera_present: false, editorial: nil, message: nil, status: :idle} =
+             CameraServer.start_capture(server)
 
     Agent.update(detector_state, fn _present? -> true end)
     send(server, :poll_presence)
 
     assert_receive {:capture_status, %{camera_present: true, status: :idle}}
     assert CameraServer.status(server).status == :idle
+  end
+
+  test "expoe espaco livre e a estimativa de fotos restantes no status" do
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 42_000_000_000 end
+      })
+
+    status = CameraServer.status(server)
+
+    assert status.free_disk_bytes == 42_000_000_000
+    assert is_integer(status.estimated_shots_left)
+    assert status.estimated_shots_left > 0
+  end
+
+  test "para a captura sozinha quando o espaco livre cai abaixo do minimo, sem transferencia em curso" do
+    detector_state =
+      start_supervised!(Supervisor.child_spec({Agent, fn -> true end}, id: :detector_state))
+
+    Capture.subscribe_status()
+
+    disk_state =
+      start_supervised!(Supervisor.child_spec({Agent, fn -> 10_000_000_000 end}, id: :disk_state))
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> Agent.get(detector_state, & &1) end,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        min_free_disk_bytes: 5_000_000_000,
+        disk_checker: fn _dir -> Agent.get(disk_state, & &1) end
+      })
+
+    wait_for_presence_check(server)
+
+    # forca :running sem depender de um binario gphoto2 real: o que se testa
+    # aqui e a logica de parada por disco, nao o spawn do processo externo.
+    :sys.replace_state(server, &%{&1 | status: :running, desired: true})
+
+    # ainda com espaco de sobra: o poll nao deve parar a captura
+    send(server, :poll_disk)
+    refute_receive {:capture_status, %{status: :disk_full}}, 100
+    assert CameraServer.status(server).status == :running
+
+    # simula uma transferencia em curso (arquivo ainda "assentando"): mesmo
+    # com o disco baixo, a parada NAO pode acontecer nesse instante
+    :sys.replace_state(server, &%{&1 | pending: %{"/tmp/foo.jpg" => make_ref()}})
+    Agent.update(disk_state, fn _free -> 1_000_000_000 end)
+    send(server, :poll_disk)
+    refute_receive {:capture_status, %{status: :disk_full}}, 100
+    assert CameraServer.status(server).status == :running
+
+    # transferencia concluida (pending vazio de novo): agora sim, entre
+    # disparos, e seguro parar
+    :sys.replace_state(server, &%{&1 | pending: %{}})
+    send(server, :poll_disk)
+
+    assert_receive {:capture_status, %{status: :disk_full, message: message}}
+    assert message =~ "Espaço em disco"
+
+    final = CameraServer.status(server)
+    assert final.status == :disk_full
+    assert :sys.get_state(server).port == nil
   end
 
   test "trocar de editorial cancela settles pendentes da pasta anterior" do

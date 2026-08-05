@@ -414,7 +414,8 @@ defmodule RevelaWeb.HostLive do
         action_disabled?: action_disabled?,
         action_class: action_class,
         help: capture_help(assigns.capture),
-        help_class: capture_help_class(assigns.capture)
+        help_class: capture_help_class(assigns.capture),
+        disk_hint: free_space_hint(assigns.capture)
       )
 
     ~H"""
@@ -445,6 +446,10 @@ defmodule RevelaWeb.HostLive do
         >
           {@help}
         </p>
+
+        <p :if={@disk_hint} id="capture-disk-hint" class="text-xs opacity-50">
+          {@disk_hint}
+        </p>
       </div>
     </div>
     """
@@ -474,19 +479,30 @@ defmodule RevelaWeb.HostLive do
   defp capture_help(%{status: :error, message: message}) when is_binary(message),
     do: message
 
+  defp capture_help(%{status: :disk_full, message: message}) when is_binary(message),
+    do: message
+
   defp capture_help(%{camera_present: true}),
     do: "Câmera detectada via USB e pronta para vincular."
 
   defp capture_help(_capture),
     do: "Ligue a câmera e conecte o cabo USB."
 
-  defp capture_help_class(%{status: :error}), do: "text-error"
+  defp capture_help_class(%{status: status}) when status in [:error, :disk_full],
+    do: "text-error"
 
   defp capture_help_class(%{status: status})
        when status in [:reconnecting, :waiting_camera],
        do: "text-warning"
 
   defp capture_help_class(_capture), do: "opacity-60"
+
+  # traduz espaco livre para o que o fotografo entende: quantas fotos ainda
+  # cabem, calculado a partir da media real de bytes por disparo do editorial.
+  defp free_space_hint(%{estimated_shots_left: n}) when is_integer(n),
+    do: "Espaço livre: cabem ~#{n} fotos."
+
+  defp free_space_hint(_capture), do: nil
 
   defp status_badge(assigns) do
     {label, class} =
@@ -495,6 +511,7 @@ defmodule RevelaWeb.HostLive do
         %{status: :reconnecting} -> {"reconectando", "badge-warning"}
         %{status: :waiting_camera} -> {"desconectada", "badge-warning"}
         %{status: :error} -> {"erro", "badge-error"}
+        %{status: :disk_full} -> {"espaço cheio", "badge-error"}
         %{camera_present: true} -> {"detectada", "badge-info"}
         _capture -> {"desconectada", "badge-ghost"}
       end
