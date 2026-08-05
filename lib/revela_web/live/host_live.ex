@@ -72,7 +72,7 @@ defmodule RevelaWeb.HostLive do
 
       name ->
         {:ok, %{folder: folder}} = CameraServer.set_editorial(name)
-        Capture.clear_all()
+        {:ok, _editorial} = Capture.start_editorial(name, folder)
 
         {:noreply,
          socket
@@ -89,7 +89,7 @@ defmodule RevelaWeb.HostLive do
   # finaliza o editorial atual: para a captura e limpa a tela; originais ficam salvos
   def handle_event("finish_editorial", _params, socket) do
     CameraServer.finish_editorial()
-    Capture.clear_all()
+    Capture.finish_editorial()
 
     {:noreply,
      socket
@@ -306,7 +306,7 @@ defmodule RevelaWeb.HostLive do
                   <span class="font-medium truncate">{@capture.editorial}</span>
                   <button
                     phx-click="finish_editorial"
-                    data-confirm="Finalizar o editorial limpa a tela. Os originais ficam salvos. Continuar?"
+                    data-confirm="Finalizar o editorial limpa a tela de revisao. Os originais e as classificacoes ficam salvos no banco. Continuar?"
                     class="btn btn-outline btn-sm"
                   >
                     Finalizar editorial

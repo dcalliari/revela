@@ -1,5 +1,19 @@
 This is a web application written using the Phoenix web framework.
 
+## Domain: editorials
+
+An "editorial" (photo review session) is a persistent `Revela.Capture.Editorial` row,
+not an ephemeral state. Photos (`Revela.Capture.Photo`) belong to the editorial active
+when they were captured via `editorial_id`; at most one editorial has `finished_at: nil`
+(active) at a time, enforced by a partial unique index. `Revela.Capture.start_editorial/2`
+and `finish_editorial/0` never delete photos or labels — they only flip which editorial
+is active, and `list_photos/0`, `labels_for_reviewer/1`, and `tallies/0` scope to the
+current one via `current_editorial_id/0`. See `lib/revela/capture.ex` and
+`test/revela/capture_test.exs` for the reasoning: an earlier version used
+`Capture.clear_all/0` (`delete_all` on Photo/Label) on both start and finish, which
+silently destroyed a client session's classifications when the host started the next
+editorial. Never reintroduce a delete-everything path here.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
@@ -447,3 +461,10 @@ And **never** do this:
 <!-- phoenix:liveview-end -->
 
 <!-- usage-rules-end -->
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.

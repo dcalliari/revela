@@ -9,6 +9,7 @@ defmodule Revela.Capture.Photo do
     field :raw_path, :string
     field :shot_at, :utc_datetime_usec
 
+    belongs_to :editorial, Revela.Capture.Editorial
     has_many :labels, Revela.Capture.Label
 
     timestamps(type: :utc_datetime_usec)
@@ -16,7 +17,7 @@ defmodule Revela.Capture.Photo do
 
   def changeset(photo, attrs) do
     photo
-    |> cast(attrs, [:seq, :web_path, :original_path, :raw_path, :shot_at])
+    |> cast(attrs, [:seq, :web_path, :original_path, :raw_path, :shot_at, :editorial_id])
     |> validate_required([:seq, :web_path])
     |> unique_constraint(:seq)
   end
