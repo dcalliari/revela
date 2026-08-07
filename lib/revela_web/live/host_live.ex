@@ -200,10 +200,11 @@ defmodule RevelaWeb.HostLive do
   end
 
   # Page-level D only (classification stays on the open viewer). Bound only when
-  # @capture.demo with phx-key="d"; window keyups still fire while an editable
-  # is focused, so do not assume LiveView skips them.
+  # demo is armed and an editorial is active — window keyups still fire while
+  # the name <input> is focused, so keep the binding off while that form shows.
+  # Pre-editorial shots use #demo-fire.
   def handle_event("demo_key", %{"key" => key}, socket) when key in ["d", "D"] do
-    if Map.get(socket.assigns.capture, :demo) == true do
+    if demo_window_key?(socket.assigns.capture) do
       handle_event("demo_fire", %{}, socket)
     else
       {:noreply, socket}
@@ -323,8 +324,8 @@ defmodule RevelaWeb.HostLive do
     ~H"""
     <div
       class="min-h-dvh bg-base-200 p-4 sm:p-6 relative overflow-hidden"
-      phx-window-keyup={Map.get(@capture, :demo) == true && "demo_key"}
-      phx-key={Map.get(@capture, :demo) == true && "d"}
+      phx-window-keyup={demo_window_key?(@capture) && "demo_key"}
+      phx-key={demo_window_key?(@capture) && "d"}
     >
       <%!-- Marca d'agua repetida no fundo. O corpo e fixo em vh (acompanha so a
            escala vertical, nunca encolhe com a largura) e as colunas tilam a
@@ -550,8 +551,12 @@ defmodule RevelaWeb.HostLive do
   defp capture_action(_capture),
     do: {"Conecte a câmera", nil, true, "btn-primary"}
 
+  defp capture_help(%{status: :running, demo: true, editorial: name})
+       when is_binary(name) and name != "",
+       do: "Demo armada. Dispare com o botão ou a tecla D."
+
   defp capture_help(%{status: :running, demo: true}),
-    do: "Demo armada. Dispare com o botão ou a tecla D."
+    do: "Demo armada. Dispare com o botão."
 
   defp capture_help(%{status: :running}),
     do: "Câmera vinculada. Aguardando disparos."
@@ -573,6 +578,13 @@ defmodule RevelaWeb.HostLive do
 
   defp capture_help(_capture),
     do: "Ligue a câmera e conecte o cabo USB."
+
+  # Window D only when demo is armed and the editorial name form is gone.
+  defp demo_window_key?(%{demo: true, status: :running, editorial: name})
+       when is_binary(name) and name != "",
+       do: true
+
+  defp demo_window_key?(_capture), do: false
 
   defp capture_help_class(%{status: status}) when status in [:error, :disk_full],
     do: "text-error"

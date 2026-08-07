@@ -85,11 +85,28 @@ defmodule RevelaWeb.HostLiveTest do
         status: :running,
         message: nil,
         camera_present: true,
-        demo: true
+        demo: true,
+        editorial: nil
       })
 
     assert selected_count(document, "#demo-fire") == 1
     assert selected_text(document, "#demo-fire") == "Disparar (demo)"
+    help = selected_text(document, "#capture-help")
+    assert help =~ "botão"
+    refute help =~ "tecla D"
+  end
+
+  test "demo armada com editorial menciona tecla D" do
+    document =
+      render_capture_card(%{
+        status: :running,
+        message: nil,
+        camera_present: true,
+        demo: true,
+        editorial: "Sessão"
+      })
+
+    assert selected_count(document, "#demo-fire") == 1
     assert selected_text(document, "#capture-help") =~ "tecla D"
   end
 
