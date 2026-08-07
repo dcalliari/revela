@@ -41,9 +41,13 @@ defmodule Revela.Capture do
       open: Map.get(state, :open, false) == true
     }
 
-    :persistent_term.put(@host_viewer_key, normalized)
-    PubSub.broadcast(Revela.PubSub, @host_viewer_topic, {:host_viewer, normalized})
-    :ok
+    if host_viewer_state() == normalized do
+      :ok
+    else
+      :persistent_term.put(@host_viewer_key, normalized)
+      PubSub.broadcast(Revela.PubSub, @host_viewer_topic, {:host_viewer, normalized})
+      :ok
+    end
   end
 
   @doc "Ultimo estado do visualizador do Host (ou follow ao vivo se ainda nao houve broadcast)."

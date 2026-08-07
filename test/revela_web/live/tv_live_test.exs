@@ -58,7 +58,8 @@ defmodule RevelaWeb.TvLiveTest do
     assert render(tv) =~ "ESPELHO"
     assert has_element?(tv, "#tv-idle-hint")
 
-    send(tv.pid, :idle_return_live)
+    %{socket: %{assigns: %{idle_gen: gen}}} = :sys.get_state(tv.pid)
+    send(tv.pid, {:idle_return_live, gen})
     _ = :sys.get_state(tv.pid)
 
     assert render(tv) =~ "tv-photo-#{photo_b.id}"
@@ -89,6 +90,74 @@ defmodule RevelaWeb.TvLiveTest do
     assert html =~ "ESPELHO"
     assert has_element?(tv, "#tv-idle-hint")
     assert has_element?(tv, "#tv-idle-seconds")
+  end
+
+  test "nova foto do Host parado nao reinicia idle nem desfaz AO VIVO do /tv", %{conn: conn} do
+    {:ok, photo_a} = Capture.create_photo(%{web_path: "/uploads/park-a.jpg"})
+    {:ok, _photo_b} = Capture.create_photo(%{web_path: "/uploads/park-b.jpg"})
+
+    {:ok, host, _html} = live(conn, ~p"/host")
+    {:ok, tv, _html} = live(conn, ~p"/tv")
+
+    open_photo(host, photo_a)
+    assert has_element?(tv, "#tv-idle-hint")
+
+    %{socket: %{assigns: %{idle_deadline: deadline, idle_gen: gen}}} = :sys.get_state(tv.pid)
+    assert is_integer(deadline)
+
+    {:ok, photo_c} = Capture.create_photo(%{web_path: "/uploads/park-c.jpg"})
+    _ = :sys.get_state(host.pid)
+    _ = :sys.get_state(tv.pid)
+
+    %{socket: %{assigns: tv_assigns}} = :sys.get_state(tv.pid)
+    assert tv_assigns.idle_deadline == deadline
+    assert tv_assigns.idle_gen == gen
+    assert tv_assigns.follow == false
+    assert tv_assigns.photo_id == photo_a.id
+    assert has_element?(tv, "#tv-idle-hint")
+
+    send(tv.pid, {:idle_return_live, gen})
+    _ = :sys.get_state(tv.pid)
+
+    assert render(tv) =~ "tv-photo-#{photo_c.id}"
+    assert render(tv) =~ "AO VIVO"
+    refute has_element?(tv, "#tv-idle-hint")
+
+    {:ok, photo_d} = Capture.create_photo(%{web_path: "/uploads/park-d.jpg"})
+    _ = :sys.get_state(host.pid)
+    _ = :sys.get_state(tv.pid)
+
+    # Host estacionado: broadcast no-op; /tv permanece ao vivo e avanca via :new_photo
+    assert Capture.host_viewer_state() == %{photo_id: photo_a.id, follow: false, open: true}
+    assert render(tv) =~ "tv-photo-#{photo_d.id}"
+    assert render(tv) =~ "AO VIVO"
+    refute has_element?(tv, "#tv-idle-hint")
+
+    host_html = render(host)
+    assert host_html =~ photo_a.web_path
+    refute host_html =~ "AO VIVO"
+  end
+
+  test "timer idle cancelado (gen antigo) e ignorado", %{conn: conn} do
+    {:ok, photo_a} = Capture.create_photo(%{web_path: "/uploads/stale-a.jpg"})
+    {:ok, _photo_b} = Capture.create_photo(%{web_path: "/uploads/stale-b.jpg"})
+
+    {:ok, host, _html} = live(conn, ~p"/host")
+    {:ok, tv, _html} = live(conn, ~p"/tv")
+
+    open_photo(host, photo_a)
+    %{socket: %{assigns: %{idle_gen: stale_gen}}} = :sys.get_state(tv.pid)
+
+    render_click(element(tv, "#tv-presentation"))
+    %{socket: %{assigns: %{idle_gen: fresh_gen}}} = :sys.get_state(tv.pid)
+    assert fresh_gen > stale_gen
+
+    send(tv.pid, {:idle_return_live, stale_gen})
+    _ = :sys.get_state(tv.pid)
+
+    assert render(tv) =~ "tv-photo-#{photo_a.id}"
+    assert render(tv) =~ "ESPELHO"
+    assert has_element?(tv, "#tv-idle-hint")
   end
 
   test "subscribe no mount recebe estado retido do Host", %{conn: conn} do
