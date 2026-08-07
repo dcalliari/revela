@@ -63,6 +63,41 @@ defmodule Revela.Capture do
     end
   end
 
+  @doc "Fotos com `raw_path` nulo ou vazio (qualquer editorial), ordenadas por id."
+  def list_photos_missing_raw do
+    from(p in Photo,
+      where: is_nil(p.raw_path) or p.raw_path == "",
+      order_by: [asc: p.id]
+    )
+    |> Repo.all()
+  end
+
+  @doc "Conjunto de caminhos RAW ja associados a alguma foto."
+  def claimed_raw_paths do
+    from(p in Photo,
+      where: not is_nil(p.raw_path) and p.raw_path != "",
+      select: p.raw_path
+    )
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  @doc """
+  Preenche `raw_path` de uma foto que ainda nao tem RAW associado.
+  Nao sobrescreve um `raw_path` ja preenchido.
+  """
+  def update_raw_path(%Photo{} = photo, raw_path) when is_binary(raw_path) and raw_path != "" do
+    if present_raw_path?(photo.raw_path) do
+      {:ok, photo}
+    else
+      photo
+      |> Photo.changeset(%{raw_path: raw_path})
+      |> Repo.update()
+    end
+  end
+
+  defp present_raw_path?(path), do: is_binary(path) and path != ""
+
   # ── Editoriais ───────────────────────────────────────────────────────────────
 
   @doc """

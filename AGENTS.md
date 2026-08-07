@@ -38,6 +38,14 @@ re-apply transform so LiveView patches (tallies, presence) do not wipe zoom.
 Do not reintroduce center-origin CSS on the viewer `<img>` or unconditional
 `resetZoom()` in `updated()`.
 
+## Domain: JPEG↔RAW sibling matching
+
+gphoto2 names with `%Y%m%d-%H%M%S-%03n.%C`. In RAW+JPEG each shot is two files
+with adjacent sequence indices (JPEG N, RAW N+1) and the name timestamp can
+skew ~1s. Exact-basename match is insufficient — see
+`Revela.Capture.Ingest.find_raw_sibling/2`, `attach_raw/1` (RAW-after-JPEG), and
+`mix revela.backfill_raw_paths`. Never attach the same RAW to two photos.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
