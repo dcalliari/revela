@@ -1,8 +1,11 @@
 defmodule RevelaWeb.ViewerComponents do
   @moduledoc """
   Visualizador imersivo (tela cheia preta) compartilhado pela tela de revisao
-  (celular) e pela tela do host. Os eventos (`pick`, `clear`, `prev`, `next`,
-  `go_live`, `close`, `key`) sao tratados pelo LiveView que renderiza o componente.
+  (celular), pela tela do host e pela superficie de apresentacao `/tv`.
+
+  Em modo interativo, os eventos (`pick`, `clear`, `prev`, `next`, `go_live`,
+  `close`, `key`) sao tratados pelo LiveView que renderiza o componente.
+  `presentation/1` e display-only: sem chips, setas ou Presence.
 
   O rodape nao exibe indicacao visual dos atalhos (nem legenda, nem numeros
   nas bolinhas); cada botao mantem o `aria-label` correspondente para
@@ -131,6 +134,79 @@ defmodule RevelaWeb.ViewerComponents do
           ></button>
         </div>
       </footer>
+    </div>
+    """
+  end
+
+  attr :photo, :map, default: nil
+  attr :count, :integer, required: true
+  attr :idx, :integer, required: true
+  attr :follow, :boolean, required: true
+  attr :idle_remaining, :integer, default: nil
+  attr :fs_id, :string, default: "fs-tv"
+
+  @doc "Superficie de apresentacao (`/tv`): so a foto, sem controles de classificacao."
+  def presentation(assigns) do
+    ~H"""
+    <div
+      id="tv-presentation"
+      class="fixed inset-0 z-50 flex flex-col bg-black text-white select-none"
+      phx-click="tv_activity"
+      phx-window-keydown="tv_activity"
+      phx-window-keyup="tv_activity"
+    >
+      <header class="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-3 text-sm pointer-events-none">
+        <span class="font-serif italic lowercase tracking-tight text-white/40 text-lg">revela</span>
+        <div class="flex items-center gap-3 pointer-events-auto">
+          <span :if={@count > 0} class="tabular-nums text-white/50 text-xs">
+            {@idx + 1} / {@count}
+          </span>
+          <span
+            id="tv-live-badge"
+            class={[
+              "px-2 py-1 rounded text-xs font-semibold transition-opacity duration-300",
+              @follow && "bg-red-600 text-white",
+              !@follow && "bg-neutral-800/80 text-neutral-300"
+            ]}
+          >
+            {if @follow, do: "AO VIVO", else: "ESPELHO"}
+          </span>
+          <button
+            id={@fs_id}
+            type="button"
+            phx-hook="Fullscreen"
+            aria-label="Tela cheia"
+            class="px-2 py-1 rounded text-xs bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700 transition-colors"
+          >
+            ⛶
+          </button>
+        </div>
+      </header>
+
+      <div
+        :if={not @follow and is_integer(@idle_remaining)}
+        id="tv-idle-hint"
+        class="absolute bottom-0 inset-x-0 z-20 flex justify-center pb-8 pointer-events-none"
+      >
+        <p class="rounded-full bg-black/55 px-4 py-2 text-xs tracking-wide text-white/70 tabular-nums backdrop-blur-sm transition-opacity duration-300">
+          volta ao vivo em <span id="tv-idle-seconds">{@idle_remaining}</span>s
+        </p>
+      </div>
+
+      <main class="flex-1 relative flex items-center justify-center overflow-hidden">
+        <div :if={@count == 0} id="tv-waiting" class="text-center opacity-60 animate-pulse">
+          <p class="text-2xl font-serif italic lowercase">revela</p>
+          <p class="text-sm mt-3 tracking-wide uppercase">Aguardando fotos</p>
+        </div>
+
+        <img
+          :if={@photo}
+          id={"tv-photo-#{@photo.id}"}
+          src={@photo.web_path}
+          class="max-h-full max-w-full object-contain transition-opacity duration-200"
+          draggable="false"
+        />
+      </main>
     </div>
     """
   end
