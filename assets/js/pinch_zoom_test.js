@@ -4,6 +4,8 @@ import {
   clampScale,
   touchDistance,
   touchMidpoint,
+  clientToImgLocal,
+  imgLocalMidpoint,
   focalTranslate,
   shouldDoubleTapReset,
   photoIdentityFromImg
@@ -23,6 +25,18 @@ describe("touch geometry", () => {
     const b = {clientX: 30, clientY: 40}
     assert.equal(touchDistance(a, b), 50)
     assert.deepEqual(touchMidpoint(a, b), {x: 15, y: 20})
+  })
+
+  it("converts viewport midpoint into img-local coords", () => {
+    // flex-centered img: layout origin at (40, 60), current translate (10, 5)
+    const rect = {left: 50, top: 65}
+    const tx = 10
+    const ty = 5
+    assert.deepEqual(clientToImgLocal({x: 100, y: 80}, rect, tx, ty), {x: 60, y: 20})
+
+    const a = {clientX: 90, clientY: 70}
+    const b = {clientX: 110, clientY: 90}
+    assert.deepEqual(imgLocalMidpoint(a, b, rect, tx, ty), {x: 60, y: 20})
   })
 })
 
@@ -46,38 +60,101 @@ describe("focalTranslate", () => {
     assert.equal(tx + 100 * 2, 150)
     assert.equal(ty + 100 * 2, 120)
   })
+
+  it("does not jump when layout origin is offset from viewport (0,0)", () => {
+    // Same pinch as first test, but mids expressed relative to a flex-centered layout
+    // origin at (40, 60) — i.e. after clientToImgLocal conversion.
+    const start = {scale: 1, tx: 0, ty: 0, mid: {x: 100, y: 80}}
+    const mid = {x: 100, y: 80}
+    const {tx, ty} = focalTranslate(start, mid, 2)
+    assert.equal(tx, -100)
+    assert.equal(ty, -80)
+    // If raw client mids (140, 140) were used instead of img-local (100, 80),
+    // tx would be -140 and the image would jump by -origin*(1-ratio).
+  })
 })
 
 describe("shouldDoubleTapReset", () => {
   it("does not reset while fingers remain", () => {
-    const r = shouldDoubleTapReset({multiTouch: false, touchesRemaining: 1, now: 1000, lastTap: 900})
+    const r = shouldDoubleTapReset({
+      multiTouch: false,
+      singleFinger: true,
+      touchesRemaining: 1,
+      now: 1000,
+      lastTap: 900
+    })
     assert.equal(r.reset, false)
   })
 
   it("ignores pinch end as a double-tap", () => {
-    const first = shouldDoubleTapReset({multiTouch: true, touchesRemaining: 0, now: 1000, lastTap: 0})
+    const first = shouldDoubleTapReset({
+      multiTouch: true,
+      singleFinger: false,
+      touchesRemaining: 0,
+      now: 1000,
+      lastTap: 0
+    })
     assert.equal(first.reset, false)
     assert.equal(first.clearMulti, true)
+    assert.equal(first.clearSingle, true)
     assert.equal(first.lastTap, 0)
 
-    // second finger already covered by multiTouch; a rapid follow-up must not reset
+    // second empty touchend after multi cleared must not seed lastTap
     const second = shouldDoubleTapReset({
-      multiTouch: true,
+      multiTouch: false,
+      singleFinger: false,
       touchesRemaining: 0,
       now: 1050,
-      lastTap: 1000
+      lastTap: 0
     })
     assert.equal(second.reset, false)
     assert.equal(second.lastTap, 0)
+    assert.equal(second.clearSingle, true)
+  })
+
+  it("does not reset from a single tap within 300ms after pinch", () => {
+    shouldDoubleTapReset({
+      multiTouch: true,
+      singleFinger: false,
+      touchesRemaining: 0,
+      now: 1000,
+      lastTap: 0
+    })
+    const stray = shouldDoubleTapReset({
+      multiTouch: false,
+      singleFinger: false,
+      touchesRemaining: 0,
+      now: 1010,
+      lastTap: 0
+    })
+    assert.equal(stray.lastTap, 0)
+
+    const realTap = shouldDoubleTapReset({
+      multiTouch: false,
+      singleFinger: true,
+      touchesRemaining: 0,
+      now: 1200,
+      lastTap: stray.lastTap
+    })
+    assert.equal(realTap.reset, false)
+    assert.equal(realTap.lastTap, 1200)
   })
 
   it("resets on real single-finger double-tap", () => {
-    const t1 = shouldDoubleTapReset({multiTouch: false, touchesRemaining: 0, now: 1000, lastTap: 0})
+    const t1 = shouldDoubleTapReset({
+      multiTouch: false,
+      singleFinger: true,
+      touchesRemaining: 0,
+      now: 1000,
+      lastTap: 0
+    })
     assert.equal(t1.reset, false)
     assert.equal(t1.lastTap, 1000)
+    assert.equal(t1.clearSingle, true)
 
     const t2 = shouldDoubleTapReset({
       multiTouch: false,
+      singleFinger: true,
       touchesRemaining: 0,
       now: 1200,
       lastTap: t1.lastTap
@@ -86,7 +163,13 @@ describe("shouldDoubleTapReset", () => {
   })
 
   it("does not reset when taps are far apart", () => {
-    const r = shouldDoubleTapReset({multiTouch: false, touchesRemaining: 0, now: 2000, lastTap: 1000})
+    const r = shouldDoubleTapReset({
+      multiTouch: false,
+      singleFinger: true,
+      touchesRemaining: 0,
+      now: 2000,
+      lastTap: 1000
+    })
     assert.equal(r.reset, false)
     assert.equal(r.lastTap, 2000)
   })

@@ -17,9 +17,24 @@ export function touchMidpoint(a, b) {
 }
 
 /**
+ * Convert a viewport/client point into the img layout box (transform-origin 0 0).
+ * rect is getBoundingClientRect() under the current translate(tx,ty) scale.
+ */
+export function clientToImgLocal(client, rect, tx, ty) {
+  return {
+    x: client.x - rect.left + tx,
+    y: client.y - rect.top + ty
+  }
+}
+
+export function imgLocalMidpoint(a, b, rect, tx, ty) {
+  return clientToImgLocal(touchMidpoint(a, b), rect, tx, ty)
+}
+
+/**
  * Focal-point zoom: keep the content under `mid` fixed while scale changes
  * from `startScale`→`newScale`, given the transform at pinch start.
- * Assumes CSS transform-origin is top-left (0 0).
+ * Assumes CSS transform-origin is top-left (0 0) and mid is img-local.
  */
 export function focalTranslate(start, mid, newScale) {
   const ratio = newScale / start.scale
@@ -32,14 +47,29 @@ export function focalTranslate(start, mid, newScale) {
 /**
  * Decide whether a touchend (all fingers up) should reset via double-tap.
  * Pinch / multi-touch endings must not count as taps.
+ * Only gestures that began as one-finger may seed lastTap.
  */
-export function shouldDoubleTapReset({multiTouch, touchesRemaining, now, lastTap, windowMs = 300}) {
-  if (touchesRemaining !== 0) return {reset: false, lastTap, clearMulti: false}
-  if (multiTouch) return {reset: false, lastTap: 0, clearMulti: true}
-  if (lastTap > 0 && now - lastTap < windowMs) {
-    return {reset: true, lastTap: now, clearMulti: false}
+export function shouldDoubleTapReset({
+  multiTouch,
+  singleFinger = true,
+  touchesRemaining,
+  now,
+  lastTap,
+  windowMs = 300
+}) {
+  if (touchesRemaining !== 0) {
+    return {reset: false, lastTap, clearMulti: false, clearSingle: false}
   }
-  return {reset: false, lastTap: now, clearMulti: false}
+  if (multiTouch) {
+    return {reset: false, lastTap: 0, clearMulti: true, clearSingle: true}
+  }
+  if (!singleFinger) {
+    return {reset: false, lastTap: 0, clearMulti: false, clearSingle: true}
+  }
+  if (lastTap > 0 && now - lastTap < windowMs) {
+    return {reset: true, lastTap: now, clearMulti: false, clearSingle: true}
+  }
+  return {reset: false, lastTap: now, clearMulti: false, clearSingle: true}
 }
 
 export function photoIdentityFromImg(img) {

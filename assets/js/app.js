@@ -27,7 +27,7 @@ import topbar from "../vendor/topbar"
 import {
   clampScale,
   touchDistance,
-  touchMidpoint,
+  imgLocalMidpoint,
   focalTranslate,
   shouldDoubleTapReset,
   photoIdentityFromImg
@@ -78,7 +78,8 @@ const Hooks = {
         startMid: null,
         panStart: null,
         lastTap: 0,
-        multiTouch: false
+        multiTouch: false,
+        singleFinger: false
       }
       const img = () => this.el.querySelector("img")
       const apply = () => {
@@ -88,6 +89,11 @@ const Hooks = {
         im.style.transform = `translate(${s.tx}px, ${s.ty}px) scale(${s.scale})`
       }
       const reset = () => { s.scale = 1; s.tx = 0; s.ty = 0; apply() }
+      const pinchMid = (t0, t1) => {
+        const im = img()
+        if (!im) return {x: 0, y: 0}
+        return imgLocalMidpoint(t0, t1, im.getBoundingClientRect(), s.tx, s.ty)
+      }
       this.resetZoom = reset
       this.applyZoom = apply
       this._photoId = photoIdentityFromImg(img())
@@ -95,14 +101,18 @@ const Hooks = {
       this.el.addEventListener("touchstart", e => {
         if (e.touches.length >= 2) {
           s.multiTouch = true
+          s.singleFinger = false
           s.panStart = null
           s.startDist = touchDistance(e.touches[0], e.touches[1]) || 1
           s.startScale = s.scale
           s.startTx = s.tx
           s.startTy = s.ty
-          s.startMid = touchMidpoint(e.touches[0], e.touches[1])
-        } else if (e.touches.length === 1 && s.scale > 1) {
-          s.panStart = {x: e.touches[0].clientX - s.tx, y: e.touches[0].clientY - s.ty}
+          s.startMid = pinchMid(e.touches[0], e.touches[1])
+        } else if (e.touches.length === 1) {
+          if (!s.multiTouch) s.singleFinger = true
+          if (s.scale > 1) {
+            s.panStart = {x: e.touches[0].clientX - s.tx, y: e.touches[0].clientY - s.ty}
+          }
         }
       }, {passive: false})
 
@@ -110,7 +120,7 @@ const Hooks = {
         if (e.touches.length >= 2) {
           e.preventDefault()
           const newScale = clampScale(s.startScale * touchDistance(e.touches[0], e.touches[1]) / s.startDist)
-          const mid = touchMidpoint(e.touches[0], e.touches[1])
+          const mid = pinchMid(e.touches[0], e.touches[1])
           const {tx, ty} = focalTranslate(
             {scale: s.startScale, tx: s.startTx, ty: s.startTy, mid: s.startMid},
             mid,
@@ -132,11 +142,13 @@ const Hooks = {
         if (s.scale <= 1) reset()
         const decision = shouldDoubleTapReset({
           multiTouch: s.multiTouch,
+          singleFinger: s.singleFinger,
           touchesRemaining: e.touches.length,
           now: Date.now(),
           lastTap: s.lastTap
         })
         if (decision.clearMulti) s.multiTouch = false
+        if (decision.clearSingle) s.singleFinger = false
         s.lastTap = decision.lastTap
         if (decision.reset) reset()
         s.panStart = null
