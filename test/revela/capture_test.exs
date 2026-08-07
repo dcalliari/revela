@@ -35,8 +35,35 @@ defmodule Revela.CaptureTest do
 
       assert Repo.aggregate(Revela.Capture.Label, :count) == 1
       assert Repo.aggregate(Revela.Capture.Photo, :count) == 1
+      assert Capture.list_photos() == []
       assert Capture.labels_for_reviewer("host") == %{}
+      assert Capture.tallies() == %{}
       assert is_nil(Capture.current_editorial_id())
+    end
+
+    test "sem editorial ativo nao lista fotos com editorial_id nulo" do
+      {:ok, limbo} =
+        %Revela.Capture.Photo{}
+        |> Revela.Capture.Photo.changeset(%{web_path: "/uploads/limbo.jpg", seq: 1})
+        |> Repo.insert()
+
+      assert is_nil(limbo.editorial_id)
+      assert Capture.list_photos() == []
+      assert Capture.labels_for_reviewer("host") == %{}
+      assert Capture.tallies() == %{}
+    end
+
+    test "indice impede mais de um editorial ativo" do
+      {:ok, _} = Capture.start_editorial("Um", "/tmp/um")
+
+      assert {:error, %Ecto.Changeset{}} =
+               %Revela.Capture.Editorial{}
+               |> Revela.Capture.Editorial.changeset(%{
+                 name: "Dois",
+                 folder: "/tmp/dois",
+                 started_at: DateTime.utc_now()
+               })
+               |> Repo.insert()
     end
   end
 end

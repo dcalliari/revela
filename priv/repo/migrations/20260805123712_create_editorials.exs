@@ -11,8 +11,7 @@ defmodule Revela.Repo.Migrations.CreateEditorials do
       timestamps(type: :utc_datetime_usec)
     end
 
-    # no maximo um editorial ativo (finished_at nulo) por vez
-    create unique_index(:editorials, [:finished_at],
+    create unique_index(:editorials, ["(1)"],
              where: "finished_at IS NULL",
              name: :editorials_active_index
            )

@@ -31,7 +31,7 @@ defmodule Revela.Capture do
 
   # ── Fotos ─────────────────────────────────────────────────────────────────
 
-  @doc "Fotos do editorial atual (ou sem editorial), em ordem de captura."
+  @doc "Fotos do editorial atual, em ordem de captura. Vazio se nao ha editorial ativo."
   def list_photos do
     from(p in Photo, as: :photo, where: ^editorial_scope(), order_by: [asc: p.seq])
     |> Repo.all()
@@ -112,7 +112,7 @@ defmodule Revela.Capture do
 
   defp editorial_scope do
     case current_editorial_id() do
-      nil -> dynamic([photo: p], is_nil(p.editorial_id))
+      nil -> dynamic([photo: _p], false)
       id -> dynamic([photo: p], p.editorial_id == ^id)
     end
   end

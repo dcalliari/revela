@@ -17,5 +17,6 @@ defmodule Revela.Capture.Editorial do
     editorial
     |> cast(attrs, [:name, :folder, :started_at, :finished_at])
     |> validate_required([:name, :folder, :started_at])
+    |> unique_constraint(:finished_at, name: :editorials_active_index)
   end
 end
