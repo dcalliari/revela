@@ -1,9 +1,10 @@
 defmodule RevelaWeb.HostLive do
   @moduledoc """
   Tela de controle no laptop: QR code + URL da LAN para os celulares entrarem,
-  status do captura (start/stop), estimativa de fotos restantes no disco
-  (ou aviso se o monitoramento estiver indisponivel), quem esta online e a
-  agregacao de cores (consenso) de cada foto entre todos os revisores.
+  status do captura (start/stop), estimativa de fotos restantes no disco,
+  quem esta online e a agregacao de cores (consenso) de cada foto entre todos
+  os revisores. Indisponibilidade do monitoramento de disco (:os_mon) nao
+  aparece na UI — so um aviso no console do browser.
 
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
@@ -32,18 +33,22 @@ defmodule RevelaWeb.HostLive do
 
     url = review_url()
 
+    capture = CameraServer.status()
+
     {:ok,
      socket
      |> assign(:url, url)
      |> assign(:qr, qr_svg(url))
-     |> assign(:capture, CameraServer.status())
+     |> assign(:capture, capture)
+     |> assign(:disk_warn_pushed, false)
      |> assign(:reviewers, Presence.list_reviewers())
      |> assign(:open, false)
      |> assign(:idx, 0)
      |> assign(:follow, true)
      |> assign(:notice, nil)
      |> assign(:labels, Capture.labels_for_reviewer(@host_id))
-     |> load_photos()}
+     |> load_photos()
+     |> maybe_warn_disk(capture)}
   end
 
   @impl true
@@ -179,7 +184,10 @@ defmodule RevelaWeb.HostLive do
 
   @impl true
   def handle_info({:capture_status, status}, socket) do
-    {:noreply, assign(socket, :capture, status)}
+    {:noreply,
+     socket
+     |> assign(:capture, status)
+     |> maybe_warn_disk(status)}
   end
 
   def handle_info({:new_photo, _photo}, socket) do
@@ -514,16 +522,28 @@ defmodule RevelaWeb.HostLive do
 
   # traduz espaco livre para o que o fotografo entende: quantas fotos ainda
   # cabem, calculado a partir da media real de bytes por disparo do editorial.
-  # Se o monitoramento de disco nao estiver disponivel (:os_mon ausente), avisa.
+  # Sem os_mon (:disk_awareness :unavailable) nao polui a UI — o aviso vai ao
+  # console do browser via push_event "disk-awareness" (ver maybe_warn_disk/1).
   defp free_space_hint(%{estimated_shots_left: n}) when is_integer(n),
     do: "Espaço livre: cabem ~#{n} fotos."
 
-  defp free_space_hint(%{disk_awareness: :unavailable}),
-    do:
-      "Aviso: monitoramento de disco indisponível (pacote erlang-os_mon). " <>
-        "Parada preventiva desativada."
-
   defp free_space_hint(_capture), do: nil
+
+  # aviso de os_mon ausente so no DevTools (uma vez por conexao LiveView)
+  defp maybe_warn_disk(socket, %{disk_awareness: :unavailable}) do
+    if connected?(socket) and not socket.assigns[:disk_warn_pushed] do
+      socket
+      |> assign(:disk_warn_pushed, true)
+      |> push_event("disk-awareness", %{
+        message:
+          "monitoramento de disco indisponível (pacote erlang-os_mon); parada preventiva desativada"
+      })
+    else
+      socket
+    end
+  end
+
+  defp maybe_warn_disk(socket, _capture), do: socket
 
   defp status_badge(assigns) do
     {label, class} =
