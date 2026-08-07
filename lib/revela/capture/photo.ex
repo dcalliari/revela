@@ -20,5 +20,6 @@ defmodule Revela.Capture.Photo do
     |> cast(attrs, [:seq, :web_path, :original_path, :raw_path, :shot_at, :editorial_id])
     |> validate_required([:seq, :web_path])
     |> unique_constraint(:seq)
+    |> unique_constraint(:raw_path, name: :photos_raw_path_unique_index)
   end
 end

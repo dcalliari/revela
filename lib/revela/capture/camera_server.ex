@@ -3,7 +3,9 @@ defmodule Revela.Capture.CameraServer do
   Supervisiona o processo `gphoto2 --capture-tethered` e observa a pasta de
   downloads via inotify. Quando o fotografo dispara, o gphoto2 baixa a foto
   para a pasta observada; o watcher detecta o arquivo, espera ele terminar de
-  escrever, e chama a ingestao.
+  escrever, e processa: JPEG via `Ingest.process/1`; RAW (`.cr2`/`.cr3`) via
+  `Ingest.attach_raw/1` para preencher `raw_path` se o JPEG ja existir (nao
+  cria foto nova).
 
   A pasta observada e a do editorial ativo (restaurada do banco no boot) ou o
   limbo `_sem-editorial` quando nao ha sessao. Trocar de editorial reserva uma
@@ -141,7 +143,8 @@ defmodule Revela.Capture.CameraServer do
       presence_timer: nil,
       # arquivos aguardando "assentar": %{path => timer_ref}. Nao vazio == ha
       # uma transferencia do gphoto2 em curso; nunca mata o processo nesse estado.
-      # Inclui JPEG e RAW (.cr2/.cr3) so para gating de parada; so JPEG e ingerido.
+      # Inclui JPEG e RAW (.cr2/.cr3) para gating de parada; JPEG e ingerido,
+      # RAW so associa raw_path via Ingest.attach_raw/1.
       pending: %{},
       processed: MapSet.new(),
       disk_checker: Keyword.get(opts, :disk_checker, &default_disk_checker/1),
@@ -713,8 +716,20 @@ defmodule Revela.Capture.CameraServer do
         end
 
       raw_path?(path) ->
-        # RAW so entra em pending para nao SIGKILL no meio do PTP; nao ingerir.
-        %{state | processed: MapSet.put(state.processed, path)}
+        # RAW so entra em pending para nao SIGKILL no meio do PTP; nao ingerir
+        # como foto. Se o JPEG ja foi ingerido (ordem tipica), associa o raw_path.
+        case Ingest.attach_raw(path) do
+          {:ok, _photo} ->
+            %{state | processed: MapSet.put(state.processed, path)}
+
+          :ignore ->
+            %{state | processed: MapSet.put(state.processed, path)}
+
+          {:error, reason} ->
+            Logger.warning("Falha ao associar RAW #{path}: #{inspect(reason)}")
+            # deixa fora do processed para permitir nova tentativa em evento futuro
+            state
+        end
 
       true ->
         state
