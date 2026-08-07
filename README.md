@@ -32,7 +32,8 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
   iniciar/finalizar editorial, estimativa de fotos restantes no disco, quem
   esta online e o consenso de cores; o viewer imersivo reusa os mesmos atalhos.
 - `RevelaWeb.ViewerComponents` visualizador compartilhado: legenda de atalhos
-  no rodape e numeros `1`–`5` / `0` nas bolinhas.
+  no rodape, numeros `1`–`5` / `0` nas bolinhas, e pinch-zoom no celular
+  (hook `PinchZoom`).
 
 As cores no banco usam o mesmo mapeamento do darktable: `0` vermelho,
 `1` amarelo, `2` verde, `3` azul, `4` roxo. No teclado/UI as teclas `1`–`5`
@@ -49,6 +50,10 @@ Com o viewer aberto (no host, apos abrir uma foto):
 | ← / → | Foto anterior / proxima |
 | `L` | Ir ao vivo (ultima foto) |
 | Escape | Fechar viewer (so no host) |
+
+No celular (mesmo viewer): pinçar amplia com ponto focal sob os dedos; com
+zoom > 1 da para arrastar; toque duplo (um dedo) reseta. O zoom permanece
+quando so mudam contagens/presence; troca de foto zera.
 
 Estar na foto mais recente **e** estar ao vivo: qualquer caminho que chegue la
 (seta, classificacao, `L`) religa o acompanhamento; um disparo novo avanca a

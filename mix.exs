@@ -94,12 +94,19 @@ defmodule Revela.MixProject do
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind revela", "esbuild revela"],
+      "assets.test": "cmd node --test assets/js/pinch_zoom_test.js",
       "assets.deploy": [
         "tailwind revela --minify",
         "esbuild revela --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: [
+        "compile --warnings-as-errors",
+        "deps.unlock --unused",
+        "format",
+        "assets.test",
+        "test"
+      ]
     ]
   end
 end

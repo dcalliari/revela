@@ -180,28 +180,30 @@ sobre cada bolinha de cor/limpar.
 
 ### 4. Zoom instável no celular
 
-**Status**: EM ANDAMENTO (ship PinchZoom: false double-tap, focal point, persist across LiveView).
+**Status**: FEITO em 2026-08-07 via
+https://github.com/dcalliari/revela/pull/6 (`8b3bc7e`).
 
 **Observado**: o pinçar às vezes só dava zoom enquanto o dedo estava na tela, o
-zoom só funcionava no centro da imagem, e o comportamento era inconsistente.
+zoom só funcionava no centro da imagem, e o comportamento era inconsistente
+(reset aleatório no meio da sessão quando outro revisor classificava).
 
-**Estado atual**: hook `PinchZoom` em `assets/js/app.js:57-100`. Três causas
-distintas, todas confirmadas na leitura do código:
+**Causa (histórico)**: hook `PinchZoom` em `assets/js/app.js`. Três causas
+distintas:
 
-1. **Fim do pinçar é lido como toque duplo** (`app.js:91-97`). Ao soltar dois
-   dedos, o `touchend` dispara duas vezes seguidas. O segundo evento cai na
-   condição de toque duplo (`now - s.lastTap < 300`) e chama `reset()`. É
-   exatamente o sintoma "só dá zoom enquanto o dedo encosta". Precisa distinguir
-   fim de gesto multi-toque de toque duplo real.
-2. **Zoom ancorado no centro fixo** (`transform-origin: center center` em
-   `viewer_components.ex:77`). A escala não segue o ponto médio entre os dedos,
-   então só dá para ampliar o centro da foto. Precisa de zoom com ponto focal:
-   ajustar `tx`/`ty` para manter sob os dedos o ponto que estava sob eles.
-3. **Qualquer re-render zera o zoom** (`app.js:99`, `updated()` chama
-   `resetZoom()`). O `updated()` roda a cada mudança de assign, inclusive quando
-   outro revisor classifica uma foto e as contagens mudam. Explica o "às vezes
-   funcionava". Resetar deve depender da foto ter trocado de verdade, não de ter
-   havido re-render.
+1. **Fim do pinçar era lido como toque duplo**. Ao soltar dois dedos, o
+   `touchend` disparava duas vezes; o segundo caía na janela de toque duplo
+   (`now - lastTap < 300`) e chamava `reset()`.
+2. **Zoom ancorado no centro fixo** (`transform-origin: center center` no
+   `<img>`). A escala não seguia o ponto médio entre os dedos.
+3. **Qualquer re-render zerava o zoom** (`updated()` sempre chamava
+   `resetZoom()`), inclusive quando só mudavam contagens/presence.
+
+**O que entrou**: helpers puros em `assets/js/pinch_zoom.js` (cobertos por
+`mix assets.test`, incluso no `precommit`); focal zoom com
+`transform-origin: 0 0` + ajuste de `tx`/`ty`; fim de multi-toque /
+`touchcancel` não conta como toque duplo (só gesto de um dedo); `updated()`
+só reseta quando a identidade da foto (`img` src) muda, senão reaplica o
+transform.
 
 ### 5. Paginação e filtro por cor na grade do host
 
