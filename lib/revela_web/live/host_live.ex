@@ -4,6 +4,10 @@ defmodule RevelaWeb.HostLive do
   status do captura (start/stop), estimativa de fotos restantes no disco
   (ou aviso se o monitoramento estiver indisponivel), quem esta online e a
   agregacao de cores (consenso) de cada foto entre todos os revisores.
+
+  No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
+  (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
+  (cores, setas, limpar) e a legenda ficam em `ViewerComponents`.
   """
   use RevelaWeb, :live_view
 

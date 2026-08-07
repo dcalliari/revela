@@ -3,6 +3,10 @@ defmodule RevelaWeb.ViewerComponents do
   Visualizador imersivo (tela cheia preta) compartilhado pela tela de revisao
   (celular) e pela tela do host. Os eventos (`pick`, `clear`, `prev`, `next`,
   `go_live`, `close`, `key`) sao tratados pelo LiveView que renderiza o componente.
+
+  O rodape expoe a legenda `#shortcuts-legend` (`1`–`5` cores, `0` limpar,
+  setas, `L` ao vivo) e numeros nas bolinhas; o mapeamento das teclas vive em
+  `HostLive` / `ReviewLive`.
   """
   use RevelaWeb, :html
 

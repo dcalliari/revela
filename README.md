@@ -26,13 +26,33 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
 - `Revela.Capture.Ingest` gera o preview (namespaced por editorial) e registra
   a foto.
 - `RevelaWeb.ReviewLive` (`/`) tela de revisao mobile, botoes de cor,
-  voltar, modo ao vivo. Identidade leve por `localStorage`.
+  navegacao e modo ao vivo (`follow == (idx == last)`). Identidade leve por
+  `localStorage`.
 - `RevelaWeb.HostLive` (`/host`) QR + URL da LAN, start/stop da captura,
   iniciar/finalizar editorial, estimativa de fotos restantes no disco, quem
-  esta online e o consenso de cores.
+  esta online e o consenso de cores; o viewer imersivo reusa os mesmos atalhos.
+- `RevelaWeb.ViewerComponents` visualizador compartilhado: legenda de atalhos
+  no rodape e numeros `1`–`5` / `0` nas bolinhas.
 
-As cores usam o mesmo mapeamento do darktable: `0` vermelho, `1` amarelo,
-`2` verde, `3` azul, `4` roxo.
+As cores no banco usam o mesmo mapeamento do darktable: `0` vermelho,
+`1` amarelo, `2` verde, `3` azul, `4` roxo. No teclado/UI as teclas `1`–`5`
+escolhem essas cores (`tecla - 1`); `0` limpa a marca.
+
+### Atalhos do visualizador (host e revisao)
+
+Com o viewer aberto (no host, apos abrir uma foto):
+
+| Tecla | Acao |
+|---|---|
+| `1`–`5` | Marcar cor (vermelho…roxo) |
+| `0` / Backspace / Delete | Limpar cor |
+| ← / → | Foto anterior / proxima |
+| `L` | Ir ao vivo (ultima foto) |
+| Escape | Fechar viewer (so no host) |
+
+Estar na foto mais recente **e** estar ao vivo: qualquer caminho que chegue la
+(seta, classificacao, `L`) religa o acompanhamento; um disparo novo avanca a
+tela. Voltar para tras pausa o ao vivo ate voltar a ultima.
 
 ## Rodar
 

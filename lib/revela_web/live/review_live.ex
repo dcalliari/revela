@@ -2,8 +2,12 @@ defmodule RevelaWeb.ReviewLive do
   @moduledoc """
   Tela de revisao ao vivo (mobile-first). Cada revisor tem a sua identidade leve
   guardada no dispositivo e classifica as fotos com as suas proprias cores.
-  Modo "ao vivo" acompanha a foto mais recente conforme ela e disparada; navegar
-  para tras pausa o modo ao vivo para permitir corrigir a classificacao.
+
+  `follow` e derivado do indice (`follow == (idx == last)`): estar na foto mais
+  recente e estar ao vivo. Navegar para tras pausa o acompanhamento; chegar de
+  novo na ultima (seta, classificacao ou tecla `L`/`l`) religa. Atalhos:
+  `1`..`5` cores, setas, `0`/Backspace/Delete limpar, `L` ao vivo — anunciados
+  no rodape do viewer (`ViewerComponents`).
   """
   use RevelaWeb, :live_view
 

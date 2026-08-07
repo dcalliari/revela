@@ -137,55 +137,43 @@ Falta o primeiro armar.
 
 ### 1. Atalho de teclado para voltar ao vivo
 
-**Status**: EM ANDAMENTO (ship empacotado com itens 2 e 3).
+**Status**: FEITO em 2026-08-07 via `33346ed` (ship empacotado com itens 2 e 3
+na branch `fm/revela-live-ux-pack-123`).
 
 **Observado**: o fotógrafo folheava as fotos e depois precisava achar o botão
 "ir ao vivo" no canto do cabeçalho com o mouse. Esquecia com frequência, e a TV
 ficava parada numa foto antiga enquanto a sessão continuava.
 
-**Estado atual**: só existe o botão em `viewer_components.ex:33-42`. O handler
-`go_live` já existe nas duas LiveViews (`host_live.ex:141`, `review_live.ex:91`),
-falta só o mapeamento de tecla em `handle_event("key", ...)`.
-
-**Proposta**: tecla `L` (de live) nas duas telas. Custo baixo, resolve a maior
-parte do problema.
+**O que entrou**: tecla `L`/`l` mapeada para `go_live` em `HostLive` e
+`ReviewLive` (`handle_event("key", ...)`). O botão no cabeçalho do viewer
+continua existindo.
 
 ### 2. Ao vivo deve ligar sempre que se chega na foto mais recente
 
-**Status**: EM ANDAMENTO (ship empacotado com itens 1 e 3).
+**Status**: FEITO em 2026-08-07 via `33346ed` (ship empacotado com itens 1 e 3
+na branch `fm/revela-live-ux-pack-123`).
 
-**Observado**: hoje o retorno automático ao vivo só acontece quando se
-classifica a penúltima foto. Chegar na última pela seta não religa. Isso
-"deprecia" a funcionalidade que já existe, porque na prática ela quase nunca
-dispara.
+**Observado**: o retorno automático ao vivo só acontecia quando se classificava
+a penúltima foto. Chegar na última pela seta não religava. Isso "depreciava" a
+funcionalidade, porque na prática quase nunca disparava.
 
-**Estado atual**: `follow` é estado próprio, setado só no `pick`
-(`host_live.ex:117`, `review_live.ex:67`). O handler `next`
-(`host_live.ex:136`, `review_live.ex:86`) move o índice sem tocar em `follow`.
-
-**Proposta**: tornar `follow` derivado do índice, com a invariante
-`follow == (idx == last)`. Estar na foto mais recente **é** estar ao vivo, por
-qualquer caminho que se tenha chegado lá (seta, classificação, atalho). Isso
-elimina uma variável de estado em vez de acrescentar lógica.
-
-**Efeito colateral a aceitar**: deixa de existir o caso "estou na última foto
-mas quero ficar parado nela quando chegar a próxima". Pelo relato, esse caso não
-é desejado.
+**O que entrou**: `follow` passou a ser derivado do índice via `navigate/2` nas
+duas LiveViews, com a invariante `follow == (idx == last)`. Estar na foto mais
+recente **é** estar ao vivo, por qualquer caminho (seta, classificação, atalho
+`L`). Aceito o tradeoff: não existe mais "parado na última foto sem avançar
+quando chega um disparo novo".
 
 ### 3. Descoberta dos atalhos que já existem
 
-**Status**: EM ANDAMENTO (ship empacotado com itens 1 e 2).
+**Status**: FEITO em 2026-08-07 via `33346ed` (ship empacotado com itens 1 e 2
+na branch `fm/revela-live-ux-pack-123`).
 
-**Observado**: pedido de atalhos `1`-`5` para as cores, no estilo darktable.
+**Observado**: pedido de atalhos `1`-`5` para as cores, no estilo darktable. Os
+atalhos já existiam nas duas telas, mas nada na interface indicava.
 
-**Estado atual**: **já implementado** e funcionando nas duas telas
-(`host_live.ex:148`, `review_live.ex:99`), junto com setas para navegar e
-`0`/`Backspace`/`Delete` para limpar. Não foi usado em produção porque nada na
-interface indica que existe.
-
-**Proposta**: não é implementar, é anunciar. Legenda discreta de atalhos no
-rodapé do visualizador (ou overlay com `?`), incluindo o `L` do item 1. Opcional:
-número pequeno sobre cada bolinha de cor.
+**O que entrou**: legenda discreta `#shortcuts-legend` no rodapé do viewer
+(`1–5` cores, `0` limpar, setas, `L` ao vivo) e número pequeno (`1`–`5` / `0`)
+sobre cada bolinha de cor/limpar.
 
 ### 4. Zoom instável no celular
 
