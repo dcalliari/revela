@@ -137,8 +137,9 @@ Falta o primeiro armar.
 
 ### 1. Atalho de teclado para voltar ao vivo
 
-**Status**: FEITO em 2026-08-07 via `33346ed` (ship empacotado com itens 2 e 3
-na branch `fm/revela-live-ux-pack-123`).
+**Status**: FEITO em 2026-08-07 via
+https://github.com/dcalliari/revela/pull/4 (`33346ed`, ship empacotado com
+itens 2 e 3).
 
 **Observado**: o fotógrafo folheava as fotos e depois precisava achar o botão
 "ir ao vivo" no canto do cabeçalho com o mouse. Esquecia com frequência, e a TV
@@ -150,8 +151,9 @@ continua existindo.
 
 ### 2. Ao vivo deve ligar sempre que se chega na foto mais recente
 
-**Status**: FEITO em 2026-08-07 via `33346ed` (ship empacotado com itens 1 e 3
-na branch `fm/revela-live-ux-pack-123`).
+**Status**: FEITO em 2026-08-07 via
+https://github.com/dcalliari/revela/pull/4 (`33346ed`, ship empacotado com
+itens 1 e 3).
 
 **Observado**: o retorno automático ao vivo só acontecia quando se classificava
 a penúltima foto. Chegar na última pela seta não religava. Isso "depreciava" a
@@ -165,8 +167,9 @@ quando chega um disparo novo".
 
 ### 3. Descoberta dos atalhos que já existem
 
-**Status**: FEITO em 2026-08-07 via `33346ed` (ship empacotado com itens 1 e 2
-na branch `fm/revela-live-ux-pack-123`).
+**Status**: FEITO em 2026-08-07 via
+https://github.com/dcalliari/revela/pull/4 (`33346ed`, ship empacotado com
+itens 1 e 2).
 
 **Observado**: pedido de atalhos `1`-`5` para as cores, no estilo darktable. Os
 atalhos já existiam nas duas telas, mas nada na interface indicava.
