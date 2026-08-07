@@ -1,10 +1,12 @@
 defmodule RevelaWeb.HostLive do
   @moduledoc """
   Tela de controle no laptop: QR code + URL da LAN para os celulares entrarem,
-  status do captura (start/stop), estimativa de fotos restantes no disco,
-  quem esta online e a agregacao de cores (consenso) de cada foto entre todos
-  os revisores. Indisponibilidade do monitoramento de disco (:os_mon) nao
-  aparece na UI — so um aviso no console do browser.
+  status honesto do tether (auto-arm pendente, armado automaticamente,
+  retomar apos stop, ingestao degradada), estimativa de fotos restantes no
+  disco, quem esta online e a agregacao de cores (consenso) de cada foto entre
+  todos os revisores. Sem `:os_mon`, a estimativa de fotos nao aparece e o
+  help pede vinculo manual quando ha camera; o console do browser tambem
+  recebe um aviso via `push_event("disk-awareness", ...)`.
 
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
@@ -484,11 +486,28 @@ defmodule RevelaWeb.HostLive do
   defp capture_action(%{status: status}) when status in [:reconnecting, :waiting_camera],
     do: {"Cancelar reconexão", "stop", false, "btn-outline"}
 
+  defp capture_action(%{auto_arm_pending: true}),
+    do: {"Armando tether…", nil, true, "btn-primary"}
+
+  defp capture_action(%{operator_stopped: true, camera_present: true}),
+    do: {"Retomar captura", "start", false, "btn-primary"}
+
   defp capture_action(%{camera_present: true}),
     do: {"Vincular câmera", "start", false, "btn-primary"}
 
   defp capture_action(_capture),
     do: {"Conecte a câmera", nil, true, "btn-primary"}
+
+  defp capture_help(%{auto_arm_pending: true}),
+    do: "Câmera detectada; armando tether automaticamente…"
+
+  defp capture_help(%{status: :running, ingest_awareness: :unavailable}),
+    do:
+      "Tether armado, mas ingestão por pasta indisponível (inotify). " <>
+        "Fotos não entram na revisão automaticamente."
+
+  defp capture_help(%{status: :running, armed_automatically: true}),
+    do: "Câmera vinculada automaticamente. Aguardando disparos."
 
   defp capture_help(%{status: :running}),
     do: "Câmera vinculada. Aguardando disparos."
@@ -505,11 +524,25 @@ defmodule RevelaWeb.HostLive do
   defp capture_help(%{status: :disk_full, message: message}) when is_binary(message),
     do: message
 
+  defp capture_help(%{operator_stopped: true, camera_present: true}),
+    do: "Captura pausada. Clique para retomar o tether."
+
+  defp capture_help(%{camera_present: true, editorial: nil}),
+    do: "Câmera detectada. Inicie um editorial para armar o tether automaticamente."
+
+  defp capture_help(%{camera_present: true, disk_awareness: :unavailable}),
+    do: "Câmera detectada. Vincule manualmente — monitoramento de disco indisponível."
+
   defp capture_help(%{camera_present: true}),
-    do: "Câmera detectada via USB e pronta para vincular."
+    do: "Câmera detectada; o tether arma automaticamente quando o disco estiver OK."
 
   defp capture_help(_capture),
     do: "Ligue a câmera e conecte o cabo USB."
+
+  defp capture_help_class(%{auto_arm_pending: true}), do: "opacity-60"
+
+  defp capture_help_class(%{status: :running, ingest_awareness: :unavailable}),
+    do: "text-warning"
 
   defp capture_help_class(%{status: status}) when status in [:error, :disk_full],
     do: "text-error"
@@ -522,8 +555,9 @@ defmodule RevelaWeb.HostLive do
 
   # traduz espaco livre para o que o fotografo entende: quantas fotos ainda
   # cabem, calculado a partir da media real de bytes por disparo do editorial.
-  # Sem os_mon (:disk_awareness :unavailable) nao polui a UI — o aviso vai ao
-  # console do browser via push_event "disk-awareness" (ver maybe_warn_disk/1).
+  # Sem os_mon (:disk_awareness :unavailable) esta dica some; o aviso de
+  # monitoramento vai ao help (camera presente) e ao console via push_event
+  # "disk-awareness" (ver maybe_warn_disk/1).
   defp free_space_hint(%{estimated_shots_left: n}) when is_integer(n),
     do: "Espaço livre: cabem ~#{n} fotos."
 
@@ -548,6 +582,8 @@ defmodule RevelaWeb.HostLive do
   defp status_badge(assigns) do
     {label, class} =
       case assigns.capture do
+        %{auto_arm_pending: true} -> {"armando", "badge-info"}
+        %{status: :running, ingest_awareness: :unavailable} -> {"sem ingestão", "badge-warning"}
         %{status: :running} -> {"vinculada", "badge-success"}
         %{status: :reconnecting} -> {"reconectando", "badge-warning"}
         %{status: :waiting_camera} -> {"desconectada", "badge-warning"}

@@ -118,12 +118,12 @@ externo antes da próxima produção.
 
 ### 14. Tether deve armar sozinho ao detectar a câmera
 
-**Status**: EM ANDAMENTO (ship após o freio de disco do item 0).
+**Status**: FEITO via https://github.com/dcalliari/revela/pull/5 (ship após o freio de disco do item 0).
 
-**Observado / decisão**: na produção o caminho feliz é tether. Hoje a presença
-USB já é polled (`gphoto2 --auto-detect`), mas a captura só sobe no clique
-**Conectar câmera**. Depois de `desired=true`, a reconexão já é automática.
-Falta o primeiro armar.
+**Observado / decisão**: na produção o caminho feliz é tether. A presença USB
+já era polled (`gphoto2 --auto-detect`), mas a captura só subia no clique
+**Conectar câmera** / **Vincular câmera**. Depois de `desired=true`, a
+reconexão já era automática — faltava o primeiro armar.
 
 **Contrato aceito (captain, 2026-08-07)**:
 
@@ -134,6 +134,11 @@ Falta o primeiro armar.
    operador pedir de novo (ou até um “retomar”/start explícito).
 3. Debounce curto na borda USB para não thrashar o gphoto2.
 4. Sem editorial ativo: não armar no limbo `_sem-editorial`.
+
+**O que entrou**: `CameraServer` auto-arma sob o contrato (debounce,
+`operator_stopped`, cooldown após falha de spawn, `ingest_awareness` quando o
+watcher falha). Host mostra armando/retomar/degradado; README/AGENTS
+documentam o comportamento.
 
 ### 1. Atalho de teclado para voltar ao vivo
 
