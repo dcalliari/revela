@@ -151,6 +151,24 @@ defmodule Revela.Capture.IngestTest do
     assert updated.raw_path == raw
   end
 
+  test "attach_raw rejeita RAW com indice N-1 (so N+1)", %{dir: dir} do
+    # JPEG do tiro 2 (indice 028); RAW do tiro 1 (indice 027) nao e elegivel.
+    jpeg = touch!(dir, "20260804-133708-028.jpg")
+
+    {:ok, photo} =
+      Capture.create_photo(%{
+        web_path: "/uploads/wrong-dir.jpg",
+        original_path: jpeg,
+        raw_path: nil,
+        shot_at: DateTime.utc_now()
+      })
+
+    raw = touch!(dir, "20260804-133708-027.cr2")
+
+    assert Ingest.attach_raw(raw) == :ignore
+    assert Capture.get_photo!(photo.id).raw_path in [nil, ""]
+  end
+
   test "JPEG-only permanece sem raw_path", %{dir: dir} do
     jpeg = touch!(dir, "20260804-133708-027.jpg")
 
@@ -258,6 +276,25 @@ defmodule Revela.Capture.IngestTest do
 
     assert {:ok, same} = Capture.update_raw_path(photo, touch!(dir, "20260804-133708-028.cr2"))
     assert same.raw_path == "/keep/me.cr2"
+  end
+
+  test "update_raw_path com struct stale e outro RAW ja gravado retorna erro", %{dir: dir} do
+    jpeg = touch!(dir, "20260804-133708-027.jpg")
+    other = touch!(dir, "20260804-133708-028.cr2")
+    attempted = touch!(dir, "20260804-133709-030.cr2")
+
+    {:ok, photo} =
+      Capture.create_photo(%{
+        web_path: "/uploads/stale.jpg",
+        original_path: jpeg,
+        raw_path: nil,
+        shot_at: DateTime.utc_now()
+      })
+
+    assert {:ok, _} = Capture.update_raw_path(photo, other)
+
+    assert {:error, :already_has_other_raw} = Capture.update_raw_path(photo, attempted)
+    assert Capture.get_photo!(photo.id).raw_path == other
   end
 
   test "update_raw_path rejeita mesmo RAW em duas fotos", %{dir: dir} do

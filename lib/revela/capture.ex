@@ -109,7 +109,13 @@ defmodule Revela.Capture do
           {:ok, %{photo | raw_path: raw_path, updated_at: now}}
 
         {0, _} ->
-          {:ok, get_photo!(photo.id)}
+          current = get_photo!(photo.id)
+
+          if current.raw_path == raw_path do
+            {:ok, current}
+          else
+            {:error, :already_has_other_raw}
+          end
       end
     rescue
       e in [Ecto.ConstraintError, Exqlite.Error] ->
