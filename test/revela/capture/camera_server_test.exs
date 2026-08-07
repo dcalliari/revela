@@ -747,7 +747,9 @@ defmodule Revela.Capture.CameraServerTest do
     Capture.subscribe_status()
 
     disk_state =
-      start_supervised!(Supervisor.child_spec({Agent, fn -> 10_000_000_000 end}, id: :auto_arm_disk))
+      start_supervised!(
+        Supervisor.child_spec({Agent, fn -> 10_000_000_000 end}, id: :auto_arm_disk)
+      )
 
     server =
       start_supervised!({
@@ -1027,8 +1029,7 @@ defmodule Revela.Capture.CameraServerTest do
     send(server, {:file_event, fake_watcher, :stop})
     _ = :sys.get_state(server)
 
-    assert_receive {:capture_status,
-                    %{status: :running, ingest_awareness: :unavailable}}
+    assert_receive {:capture_status, %{status: :running, ingest_awareness: :unavailable}}
 
     assert :sys.get_state(server).watcher_pid == nil
     if Process.alive?(fake_watcher), do: Agent.stop(fake_watcher)
