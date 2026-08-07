@@ -120,6 +120,13 @@ Sem o env, o comportamento e o de producao. Nao ha toggle no Host — so o env
 `REVELA_DEMO=1` / `true` / `yes` (compile-time `config :revela, :demo` nao
 ativa o modo; `runtime.exs` sempre redefine a partir do env).
 
+### Descarte do JPEG da camera
+
+Depois que o preview web e gerado e o RAW irmao esta assentado, o JPEG da
+camera e descartado por padrao para reduzir o uso de disco. O RAW e o preview
+nunca sao removidos. Para manter os JPEGs, use `REVELA_KEEP_CAMERA_JPEG=1` ou
+`config :revela, :keep_camera_jpeg, true`.
+
 Em Arch Linux, instale `erlang-os_mon` (ou use um Erlang via mise que ja
 traga `os_mon`). Sem isso o app sobe normalmente, mas o `/host` avisa
 **monitoramento de disco indisponivel**, a parada preventiva fica desligada

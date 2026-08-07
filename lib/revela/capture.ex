@@ -183,6 +183,18 @@ defmodule Revela.Capture do
   Nao sobrescreve um `raw_path` ja preenchido. Usa UPDATE condicional e o indice
   unico parcial em `raw_path` nao-vazio para impedir o mesmo RAW em duas fotos.
   """
+  @doc "Limpa o caminho do JPEG original apos o arquivo ser removido com sucesso."
+  def clear_original_path(%Photo{} = photo) do
+    now = DateTime.utc_now(:microsecond)
+
+    case Repo.update_all(from(p in Photo, where: p.id == ^photo.id),
+           set: [original_path: nil, updated_at: now]
+         ) do
+      {1, _} -> {:ok, %{photo | original_path: nil, updated_at: now}}
+      {0, _} -> {:error, :photo_not_found}
+    end
+  end
+
   def update_raw_path(%Photo{} = photo, raw_path) when is_binary(raw_path) and raw_path != "" do
     if present_raw_path?(photo.raw_path) do
       {:ok, photo}

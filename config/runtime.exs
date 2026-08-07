@@ -31,6 +31,10 @@ demo_mode? =
 
 config :revela, :demo, demo_mode?
 
+if keep_camera_jpeg = System.get_env("REVELA_KEEP_CAMERA_JPEG") do
+  config :revela, :keep_camera_jpeg, keep_camera_jpeg in ~w(1 true TRUE yes YES)
+end
+
 config :revela, RevelaWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
