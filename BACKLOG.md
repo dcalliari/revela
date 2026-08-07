@@ -384,7 +384,7 @@ essa reconstrução por completo.
 
 ### 13. Fotos capturadas com a câmera desconectada
 
-**Status**: EM ANDAMENTO (ship import pasta → editorial ativo).
+**Status**: FEITO (import pasta → editorial ativo; PR URL ao shipar).
 
 **Observado**: quando o disco encheu, a saída foi desconectar a câmera e seguir
 fotografando no cartão microSD, para não interromper o editorial. Essas fotos
@@ -396,6 +396,10 @@ arquivos no editorial de 2026-08-04).
 gerando preview e registro como se tivessem chegado pela captura. Isso
 transforma o contorno de emergência num caminho suportado, útil sempre que a
 captura tethered cair no meio da produção.
+
+**Entrega**: `Revela.Capture.CardImport` + ação Host "Importar do cartão";
+recusa sem editorial ativo; idempotente via `source_hash`; casas JPEG↔RAW
+(stem exato + índice adjacente em `Ingest.find_raw_sibling/1`).
 
 **Contexto relacionado**: conectar a câmera direto na TV por HDMI foi testado
 como alternativa para ter o feed, mas a experiência é bem inferior à do Revela,

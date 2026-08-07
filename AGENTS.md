@@ -15,7 +15,9 @@ onto a later editorial. See `lib/revela/capture.ex` and `test/revela/capture_tes
 for the reasoning: an earlier version used `Capture.clear_all/0` (`delete_all` on
 Photo/Label) on both start and finish, which silently destroyed a client session's
 classifications when the host started the next editorial. Never reintroduce a
-delete-everything path here.
+delete-everything path here. Card-folder import (`Revela.Capture.CardImport` /
+Host "Importar do cartão") likewise requires an active editorial and never writes
+into `_sem-editorial`; re-imports are idempotent via `photos.source_hash`.
 
 ## Project guidelines
 

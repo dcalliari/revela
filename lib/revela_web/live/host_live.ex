@@ -38,6 +38,7 @@ defmodule RevelaWeb.HostLive do
      |> assign(:idx, 0)
      |> assign(:follow, true)
      |> assign(:notice, nil)
+     |> assign(:import_path, "")
      |> assign(:labels, Capture.labels_for_reviewer(@host_id))
      |> load_photos()}
   end
@@ -102,6 +103,48 @@ defmodule RevelaWeb.HostLive do
      |> assign(:labels, %{})
      |> assign(:notice, "Editorial finalizado. Os originais ficam salvos na pasta.")
      |> load_photos()}
+  end
+
+  # importa pasta do cartao (JPEG/RAW) para o editorial ativo; recusa sem editorial
+  def handle_event("import_card", %{"path" => path}, socket) do
+    path = String.trim(path)
+
+    socket = assign(socket, :import_path, path)
+
+    case Capture.import_from_folder(path) do
+      {:ok, %{imported: imported, skipped: skipped, errors: errors}} ->
+        notice =
+          cond do
+            errors != [] ->
+              "Importação parcial: #{imported} novas, #{skipped} já existentes, " <>
+                "#{length(errors)} com erro."
+
+            imported == 0 and skipped > 0 ->
+              "Nenhuma foto nova (#{skipped} já estavam no editorial)."
+
+            imported == 0 ->
+              "Nenhum JPEG/RAW suportado na pasta."
+
+            true ->
+              "Importadas #{imported} foto(s)" <>
+                if(skipped > 0, do: " (#{skipped} já existentes).", else: ".")
+          end
+
+        {:noreply,
+         socket
+         |> assign(:notice, notice)
+         |> load_photos()}
+
+      {:error, :no_active_editorial} ->
+        {:noreply,
+         assign(socket, :notice, "Abra um editorial antes de importar fotos do cartão.")}
+
+      {:error, :not_a_directory} ->
+        {:noreply, assign(socket, :notice, "Pasta não encontrada: #{path}")}
+
+      {:error, :empty_path} ->
+        {:noreply, assign(socket, :notice, "Informe o caminho da pasta do cartão.")}
+    end
   end
 
   def handle_event("pick", %{"color" => c}, socket) do
@@ -314,6 +357,37 @@ defmodule RevelaWeb.HostLive do
                     Finalizar editorial
                   </button>
                 </div>
+              </div>
+            </div>
+
+            <div id="card-import" class="card bg-base-100 shadow">
+              <div class="card-body gap-2">
+                <h2 class="card-title text-base">Importar do cartão</h2>
+                <p class="text-xs opacity-60 leading-relaxed">
+                  Quando a captura tethered cair, copie a pasta do microSD e importe
+                  JPEG/RAW (.jpg/.jpeg/.cr2/.cr3) para o editorial aberto.
+                </p>
+                <form id="card-import-form" phx-submit="import_card" class="flex flex-col gap-2">
+                  <input
+                    id="card-import-path"
+                    name="path"
+                    value={@import_path}
+                    placeholder="/caminho/para/DCIM/..."
+                    autocomplete="off"
+                    class="input input-bordered input-sm w-full font-mono text-xs"
+                  />
+                  <button
+                    id="card-import-submit"
+                    type="submit"
+                    disabled={!@capture.editorial}
+                    class="btn btn-secondary btn-sm"
+                  >
+                    Importar pasta
+                  </button>
+                </form>
+                <p :if={!@capture.editorial} id="card-import-hint" class="text-xs text-warning">
+                  Inicie um editorial para habilitar a importação.
+                </p>
               </div>
             </div>
 

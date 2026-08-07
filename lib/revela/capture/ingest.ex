@@ -12,6 +12,8 @@ defmodule Revela.Capture.Ingest do
   # maior lado do preview web, em pixels
   @preview_edge 1600
 
+  @raw_exts ~w(.cr2 .CR2 .cr3 .CR3)
+
   @doc """
   Processa o JPEG em `path`. Ignora arquivos que nao sejam JPEG (o .cr2 e
   captado como irmao do JPEG, nao processado direto).
@@ -58,13 +60,11 @@ defmodule Revela.Capture.Ingest do
     end
   end
 
-  # Reduz o JPEG da camera para um preview web (so encolhe, nunca amplia).
-  #
-  # `jpeg:size` vem antes do arquivo de origem porque e uma dica de leitura: o
-  # libjpeg decodifica direto numa escala DCT reduzida em vez de abrir os 17.9 MP
-  # da T6 para so entao encolher. `-auto-orient` precisa continuar antes do
-  # `-thumbnail`, que descarta o EXIF junto com a tag de orientacao.
-  defp make_preview(src, dest) do
+  @doc """
+  Reduz a imagem de origem (JPEG ou RAW legivel pelo ImageMagick) para um
+  preview web. So encolhe, nunca amplia.
+  """
+  def make_preview(src, dest) do
     File.mkdir_p!(Path.dirname(dest))
 
     case System.cmd(
@@ -90,18 +90,56 @@ defmodule Revela.Capture.Ingest do
     end
   end
 
-  defp find_raw_sibling(path) do
-    base = Path.rootname(path)
+  @doc """
+  Localiza o RAW irmao de um JPEG (ou outro path) no mesmo diretorio.
 
-    [".cr2", ".CR2", ".cr3", ".CR3"]
-    |> Enum.map(&(base <> &1))
+  1. Mesmo stem (`foto.jpg` → `foto.cr2`)
+  2. Indice adjacente no sufixo numerico (RAW+JPEG tethered: `…-027.jpg` ↔
+     `…-028.cr2`), porque a camera grava indices sequenciais distintos.
+  """
+  def find_raw_sibling(path) do
+    dir = Path.dirname(path)
+    stem = path |> Path.basename() |> Path.rootname()
+
+    find_raw_with_stem(dir, stem) || find_adjacent_raw(dir, stem)
+  end
+
+  defp find_raw_with_stem(dir, stem) do
+    @raw_exts
+    |> Enum.map(&Path.join(dir, stem <> &1))
     |> Enum.find(&File.exists?/1)
   end
 
-  defp jpeg?(path) do
+  defp find_adjacent_raw(dir, stem) do
+    case Regex.run(~r/^(.*?)(\d+)$/, stem) do
+      [_, prefix, digits] ->
+        n = String.to_integer(digits)
+        width = String.length(digits)
+
+        Enum.find_value([n + 1, n - 1], fn adj ->
+          adj_stem = prefix <> String.pad_leading(Integer.to_string(adj), width, "0")
+          find_raw_with_stem(dir, adj_stem)
+        end)
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc false
+  def jpeg?(path) do
     ext = path |> Path.extname() |> String.downcase()
     ext in [".jpg", ".jpeg"]
   end
+
+  @doc false
+  def raw?(path) do
+    ext = path |> Path.extname() |> String.downcase()
+    ext in [".cr2", ".cr3"]
+  end
+
+  @doc false
+  def supported_photo?(path), do: jpeg?(path) or raw?(path)
 
   defp uploads_dir do
     Application.app_dir(:revela, "priv/static/uploads")
