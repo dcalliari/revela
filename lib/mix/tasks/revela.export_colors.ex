@@ -18,7 +18,9 @@ defmodule Mix.Tasks.Revela.ExportColors do
       --ids LISTA          So estes photo ids (ex: 10,11,12)
 
   Prefere `raw_path`; se vazio/ausente, exporta o JPEG/preview e registra aviso.
-  Google Drive/Fotos fica fora desta tarefa — ver README (entrega vs arquivo).
+  Em `--mode move`, preview web nao e movido (quebraria a UI); RAW/JPEG movidos
+  atualizam o caminho no banco. Google Drive/Fotos fica fora desta tarefa — ver
+  README (entrega vs arquivo).
   """
 
   use Mix.Task
@@ -104,9 +106,13 @@ defmodule Mix.Tasks.Revela.ExportColors do
   defp parse_colors(nil), do: nil
 
   defp parse_colors(str) do
-    str
-    |> String.split(",", trim: true)
-    |> Enum.map(&parse_color_token/1)
+    tokens = String.split(str, ",", trim: true)
+
+    if tokens == [] do
+      Mix.raise("cor desconhecida: (vazio)")
+    else
+      Enum.map(tokens, &parse_color_token/1)
+    end
   end
 
   defp parse_color_token(token) do
@@ -115,7 +121,12 @@ defmodule Mix.Tasks.Revela.ExportColors do
     cond do
       match?({_, ""}, Integer.parse(token)) ->
         {n, ""} = Integer.parse(token)
-        n
+
+        if Map.has_key?(@folder_names, n) do
+          n
+        else
+          Mix.raise("cor desconhecida: #{token}")
+        end
 
       true ->
         case Enum.find(@folder_names, fn {_k, name} -> name == token end) do

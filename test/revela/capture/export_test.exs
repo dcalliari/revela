@@ -93,7 +93,7 @@ defmodule Revela.Capture.ExportTest do
     refute File.dir?(Path.join(dest, "verde"))
   end
 
-  test "move em vez de copiar quando mode: :move", %{tmp: tmp} do
+  test "move em vez de copiar quando mode: :move e atualiza raw_path", %{tmp: tmp} do
     {:ok, _} = Capture.start_editorial("Move", Path.join(tmp, "ed-m"))
     raw = Path.join(tmp, "move.CR2")
     File.write!(raw, "x")
@@ -108,8 +108,74 @@ defmodule Revela.Capture.ExportTest do
 
     dest = Path.join(tmp, "out-m")
     assert {:ok, _} = Export.export(dest: dest, mode: :move)
-    assert File.read!(Path.join(dest, "azul/move.CR2")) == "x"
+    moved = Path.join(dest, "azul/move.CR2")
+    assert File.read!(moved) == "x"
     refute File.exists?(raw)
+    assert Revela.Repo.get!(Revela.Capture.Photo, photo.id).raw_path == moved
+  end
+
+  test "recusa move quando a unica fonte e o preview web", %{tmp: tmp} do
+    {:ok, editorial} = Capture.start_editorial("Preview move", Path.join(tmp, "ed-pv"))
+    uploads = Path.join(Application.app_dir(:revela, "priv/static/uploads"), to_string(editorial.id))
+    File.mkdir_p!(uploads)
+    preview = Path.join(uploads, "only.jpg")
+    File.write!(preview, "preview-bytes")
+    on_exit(fn -> File.rm_rf!(uploads) end)
+
+    {:ok, photo} =
+      Capture.create_photo(%{
+        web_path: "/uploads/#{editorial.id}/only.jpg",
+        original_path: nil,
+        raw_path: nil
+      })
+
+    {:ok, _} = Capture.set_label(photo.id, "host", "host", 1)
+
+    dest = Path.join(tmp, "out-pv")
+    assert {:ok, result} = Export.export(dest: dest, mode: :move)
+    assert result.exported == []
+    assert [%{photo_id: id, reason: :preview_move_refused}] = result.skipped
+    assert id == photo.id
+    assert File.exists?(preview)
+  end
+
+  test "rejeita cores invalidas em vez de filtrar em silencio", %{tmp: tmp} do
+    {:ok, _} = Capture.start_editorial("Bad color", Path.join(tmp, "ed-bc"))
+    assert {:error, {:invalid_colors, [5]}} = Export.export(dest: Path.join(tmp, "x"), colors: [5])
+    assert {:error, {:invalid_colors, []}} = Export.export(dest: Path.join(tmp, "x"), colors: [])
+  end
+
+  test "reporta photo_ids ausentes ou de outro editorial", %{tmp: tmp} do
+    {:ok, ed_a} = Capture.start_editorial("Ids A", Path.join(tmp, "ed-a"))
+    raw = Path.join(tmp, "a.CR2")
+    File.write!(raw, "a")
+
+    {:ok, photo_a} =
+      Capture.create_photo(%{web_path: "/uploads/a.jpg", raw_path: raw})
+
+    {:ok, _} = Capture.set_label(photo_a.id, "host", "host", 0)
+    Capture.finish_editorial()
+
+    {:ok, _ed_b} = Capture.start_editorial("Ids B", Path.join(tmp, "ed-b"))
+    missing_id = photo_a.id + 999_999
+
+    dest = Path.join(tmp, "out-ids")
+
+    assert {:ok, result} =
+             Export.export(
+               dest: dest,
+               photo_ids: [photo_a.id, missing_id]
+             )
+
+    assert result.exported == []
+
+    reasons =
+      result.skipped
+      |> Enum.map(&{&1.photo_id, &1.reason})
+      |> Map.new()
+
+    assert reasons[photo_a.id] == {:wrong_editorial, ed_a.id}
+    assert reasons[missing_id] == :not_found
   end
 
   test "exige editorial ativo ou --editorial", %{tmp: tmp} do
