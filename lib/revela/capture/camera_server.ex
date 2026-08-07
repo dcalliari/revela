@@ -377,11 +377,9 @@ defmodule Revela.Capture.CameraServer do
               settle_file(path, state)
           end
 
-        # checagem imediata (no-op se quiet ainda aberta) + reagendamento para
-        # quando a janela quiet expirar, cobrindo o buraco JPEG→RAW sem esperar
-        # o poll de 15s.
         state =
           state
+          |> note_transfer_activity()
           |> check_disk_between_shots()
           |> maybe_schedule_quiet_disk_check()
 
@@ -764,7 +762,7 @@ defmodule Revela.Capture.CameraServer do
             _other -> @fallback_avg_bytes_per_shot
           end
 
-        estimated_shots = max(div(free_bytes, trunc(avg_bytes)), 0)
+        estimated_shots = max(div(free_bytes, max(trunc(avg_bytes), 1)), 0)
 
         %{
           state

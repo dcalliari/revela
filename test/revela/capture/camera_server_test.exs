@@ -281,6 +281,67 @@ defmodule Revela.Capture.CameraServerTest do
     assert CameraServer.status(server).estimated_shots_left == 4
   end
 
+  test "estima fotos com media fracionaria abaixo de 1 byte sem crashar" do
+    editorials_dir = temporary_editorials_dir()
+    captures_dir = Path.join(editorials_dir, "_sem-editorial")
+    File.mkdir_p!(captures_dir)
+    File.write!(Path.join(captures_dir, "tiny.jpg"), <<0>>)
+    File.write!(Path.join(captures_dir, "empty1.jpg"), "")
+    File.write!(Path.join(captures_dir, "empty2.jpg"), "")
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10 end
+      })
+
+    assert CameraServer.status(server).estimated_shots_left == 10
+  end
+
+  test "settle refresca last_transfer_at antes da checagem de disco" do
+    editorials_dir = temporary_editorials_dir()
+    captures_dir = Path.join(editorials_dir, "_sem-editorial")
+    File.mkdir_p!(captures_dir)
+    raw_path = Path.join(captures_dir, "shot.cr2")
+    File.write!(raw_path, <<0, 1, 2>>)
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        transfer_quiet_ms: 5_000,
+        min_free_disk_bytes: 5_000_000_000,
+        disk_checker: fn _dir -> 1_000_000_000 end
+      })
+
+    stale_at = System.monotonic_time(:millisecond) - 10_000
+
+    :sys.replace_state(
+      server,
+      &%{
+        &1
+        | status: :running,
+          desired: true,
+          pending: %{raw_path => make_ref()},
+          last_transfer_at: stale_at
+      }
+    )
+
+    send(server, {:settle, raw_path})
+    state = :sys.get_state(server)
+
+    assert state.last_transfer_at > stale_at
+    assert state.status == :running
+    assert map_size(state.pending) == 0
+  end
+
   test "mensagem de disco baixo inclui cabem ~0 fotos" do
     Capture.subscribe_status()
 
