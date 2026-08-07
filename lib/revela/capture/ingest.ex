@@ -251,7 +251,7 @@ defmodule Revela.Capture.Ingest do
                       "backfill raw_path: falha ao gravar photo=#{photo.id} raw=#{raw_path}: #{inspect(reason)}"
                     )
 
-                    {Map.update!(summary, :not_found, &(&1 + 1)), MapSet.put(taken, raw_path)}
+                    {Map.update!(summary, :not_found, &(&1 + 1)), taken}
                 end
             end
 
