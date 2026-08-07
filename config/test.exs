@@ -31,5 +31,5 @@ config :phoenix_live_view,
 config :phoenix,
   sort_verified_routes_query_params: true
 
-# Superficie /tv: timeout curto nos testes do retorno automatico ao vivo
-config :revela, :tv_idle_ms, 50
+# Superficie /tv: idle alto nos testes; retorno ao vivo via mensagem explicita
+config :revela, :tv_idle_ms, 60_000
