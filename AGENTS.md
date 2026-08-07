@@ -17,6 +17,16 @@ Photo/Label) on both start and finish, which silently destroyed a client session
 classifications when the host started the next editorial. Never reintroduce a
 delete-everything path here.
 
+## Domain: viewer live follow
+
+In `HostLive` and `ReviewLive`, viewer `follow` is derived from the index via
+`navigate/2`: invariant `follow == (idx == last)`. Being on the latest photo **is**
+live; any path that lands on last (arrow, classify, `L`/`l`) enables follow so a
+new capture advances the view. There is no “parked on last without advancing.”
+Keyboard shortcuts (`1`–`5`, `0`/Backspace/Delete, arrows, `L`) and the footer
+legend live in those LiveViews + `ViewerComponents` (see README). Do not reintroduce
+a special-case that only sets follow on pick of the penultimate photo.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues

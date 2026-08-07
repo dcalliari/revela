@@ -3,6 +3,10 @@ defmodule RevelaWeb.ViewerComponents do
   Visualizador imersivo (tela cheia preta) compartilhado pela tela de revisao
   (celular) e pela tela do host. Os eventos (`pick`, `clear`, `prev`, `next`,
   `go_live`, `close`, `key`) sao tratados pelo LiveView que renderiza o componente.
+
+  O rodape expoe a legenda `#shortcuts-legend` (`1`–`5` cores, `0` limpar,
+  setas, `L` ao vivo) e numeros nas bolinhas; o mapeamento das teclas vive em
+  `HostLive` / `ReviewLive`.
   """
   use RevelaWeb, :html
 
@@ -103,22 +107,35 @@ defmodule RevelaWeb.ViewerComponents do
             :for={color <- Colors.all()}
             phx-click="pick"
             phx-value-color={color.value}
-            aria-label={color.name}
+            aria-label={"#{color.name} (#{color.value + 1})"}
             class={[
-              "h-12 w-12 rounded-full transition-transform active:scale-90 ring-offset-2 ring-offset-neutral-900 touch-manipulation",
+              "relative h-12 w-12 rounded-full transition-transform active:scale-90 ring-offset-2 ring-offset-neutral-900 touch-manipulation",
               @labels[@photo.id] == color.value && "ring-4 ring-white scale-110",
               @labels[@photo.id] != color.value && "ring-0 opacity-80"
             ]}
             style={"background-color: #{color.hex}"}
-          />
+          >
+            <span class="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-white/90 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] pointer-events-none">
+              {color.value + 1}
+            </span>
+          </button>
           <button
             phx-click="clear"
-            aria-label="Limpar cor"
-            class="h-12 w-12 rounded-full border-2 border-neutral-600 text-neutral-400 flex items-center justify-center active:scale-90 touch-manipulation"
+            aria-label="Limpar cor (0)"
+            class="relative h-12 w-12 rounded-full border-2 border-neutral-600 text-neutral-400 flex items-center justify-center active:scale-90 touch-manipulation"
           >
-            ✕
+            <span class="text-[11px] font-semibold opacity-70">0</span>
           </button>
         </div>
+        <p
+          id="shortcuts-legend"
+          class="mt-2.5 text-center text-[10px] leading-relaxed tracking-wide text-neutral-500"
+        >
+          <span class="tabular-nums">1–5</span>
+          cores · <span class="tabular-nums">0</span>
+          limpar · ← → · <kbd class="font-sans">L</kbd>
+          ao vivo
+        </p>
       </footer>
     </div>
     """

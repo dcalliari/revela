@@ -4,6 +4,10 @@ defmodule RevelaWeb.HostLive do
   status do captura (start/stop), estimativa de fotos restantes no disco
   (ou aviso se o monitoramento estiver indisponivel), quem esta online e a
   agregacao de cores (consenso) de cada foto entre todos os revisores.
+
+  No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
+  (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
+  (cores, setas, limpar) e a legenda ficam em `ViewerComponents`.
   """
   use RevelaWeb, :live_view
 
@@ -57,7 +61,7 @@ defmodule RevelaWeb.HostLive do
     id = String.to_integer(id)
     last = max(length(socket.assigns.photos) - 1, 0)
     idx = Enum.find_index(socket.assigns.photos, &(&1.id == id)) || last
-    {:noreply, assign(socket, open: true, idx: idx, follow: idx == last)}
+    {:noreply, socket |> assign(:open, true) |> navigate(idx)}
   end
 
   def handle_event("close", _params, socket) do
@@ -116,7 +120,11 @@ defmodule RevelaWeb.HostLive do
         labels = Map.put(socket.assigns.labels, photo.id, color)
         last = max(length(socket.assigns.photos) - 1, 0)
         next_idx = min(socket.assigns.idx + 1, last)
-        {:noreply, assign(socket, labels: labels, idx: next_idx, follow: next_idx == last)}
+
+        {:noreply,
+         socket
+         |> assign(:labels, labels)
+         |> navigate(next_idx)}
     end
   end
 
@@ -132,17 +140,16 @@ defmodule RevelaWeb.HostLive do
   end
 
   def handle_event("prev", _params, socket) do
-    {:noreply, assign(socket, idx: max(socket.assigns.idx - 1, 0), follow: false)}
+    {:noreply, navigate(socket, socket.assigns.idx - 1)}
   end
 
   def handle_event("next", _params, socket) do
-    last = max(length(socket.assigns.photos) - 1, 0)
-    {:noreply, assign(socket, idx: min(socket.assigns.idx + 1, last))}
+    {:noreply, navigate(socket, socket.assigns.idx + 1)}
   end
 
   def handle_event("go_live", _params, socket) do
     last = max(length(socket.assigns.photos) - 1, 0)
-    {:noreply, assign(socket, idx: last, follow: true)}
+    {:noreply, navigate(socket, last)}
   end
 
   def handle_event("key", %{"key" => key}, socket) do
@@ -162,6 +169,9 @@ defmodule RevelaWeb.HostLive do
       k when k in ["0", "Backspace", "Delete"] ->
         handle_event("clear", %{}, socket)
 
+      k when k in ["l", "L"] ->
+        handle_event("go_live", %{}, socket)
+
       _ ->
         {:noreply, socket}
     end
@@ -174,13 +184,10 @@ defmodule RevelaWeb.HostLive do
 
   def handle_info({:new_photo, _photo}, socket) do
     socket = load_photos(socket)
-    # se o visualizador esta em modo ao vivo, acompanha a foto mais recente
-    idx =
-      if socket.assigns.follow,
-        do: max(length(socket.assigns.photos) - 1, 0),
-        else: socket.assigns.idx
-
-    {:noreply, assign(socket, idx: idx)}
+    last = max(length(socket.assigns.photos) - 1, 0)
+    # follow == (idx == last): ao vivo acompanha; fora do ultimo fica parado
+    idx = if socket.assigns.follow, do: last, else: socket.assigns.idx
+    {:noreply, navigate(socket, idx)}
   end
 
   def handle_info({:label_changed, _photo_id}, socket) do
@@ -213,6 +220,13 @@ defmodule RevelaWeb.HostLive do
   end
 
   defp current_photo(%{photos: photos, idx: idx}), do: Enum.at(photos, idx)
+
+  # follow e derivado do indice: estar na ultima foto e estar ao vivo
+  defp navigate(socket, idx) do
+    last = max(length(socket.assigns.photos) - 1, 0)
+    idx = idx |> max(0) |> min(last)
+    assign(socket, idx: idx, follow: idx == last)
+  end
 
   defp review_url do
     "http://#{lan_ip()}:#{http_port()}/"
