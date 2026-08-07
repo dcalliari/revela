@@ -187,13 +187,18 @@ defmodule RevelaWeb.HostLive do
       k when k in ["l", "L"] ->
         handle_event("go_live", %{}, socket)
 
-      k when k in ["d", "D"] ->
-        handle_event("demo_fire", %{}, socket)
-
       _ ->
         {:noreply, socket}
     end
   end
+
+  # Page-level only (classification stays on the open viewer). LiveView skips
+  # key events while focus is an editable field.
+  def handle_event("demo_key", %{"key" => key}, socket) when key in ["d", "D"] do
+    handle_event("demo_fire", %{}, socket)
+  end
+
+  def handle_event("demo_key", _params, socket), do: {:noreply, socket}
 
   @impl true
   def handle_info({:capture_status, status}, socket) do
@@ -306,7 +311,7 @@ defmodule RevelaWeb.HostLive do
     ~H"""
     <div
       class="min-h-dvh bg-base-200 p-4 sm:p-6 relative overflow-hidden"
-      phx-window-keyup="key"
+      phx-window-keyup="demo_key"
     >
       <%!-- Marca d'agua repetida no fundo. O corpo e fixo em vh (acompanha so a
            escala vertical, nunca encolhe com a largura) e as colunas tilam a
@@ -447,7 +452,6 @@ defmodule RevelaWeb.HostLive do
         closable={true}
         zoom_id="zoomer-host"
         fs_id="fs-host"
-        window_keys={false}
       />
     </div>
     """
