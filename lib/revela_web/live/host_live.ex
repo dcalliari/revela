@@ -9,6 +9,9 @@ defmodule RevelaWeb.HostLive do
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
   (cores, setas, limpar) e a legenda ficam em `ViewerComponents`.
+
+  O estado do viewer (`photo_id`, `follow`, `open`) e publicado via
+  `Capture.broadcast_host_viewer/1` para a superficie `/tv` (`TvLive`).
   """
   use RevelaWeb, :live_view
 
@@ -32,23 +35,26 @@ defmodule RevelaWeb.HostLive do
     end
 
     url = review_url()
-
     capture = CameraServer.status()
 
-    {:ok,
-     socket
-     |> assign(:url, url)
-     |> assign(:qr, qr_svg(url))
-     |> assign(:capture, capture)
-     |> assign(:disk_warn_pushed, false)
-     |> assign(:reviewers, Presence.list_reviewers())
-     |> assign(:open, false)
-     |> assign(:idx, 0)
-     |> assign(:follow, true)
-     |> assign(:notice, nil)
-     |> assign(:labels, Capture.labels_for_reviewer(@host_id))
-     |> load_photos()
-     |> maybe_warn_disk(capture)}
+    socket =
+      socket
+      |> assign(:url, url)
+      |> assign(:qr, qr_svg(url))
+      |> assign(:capture, capture)
+      |> assign(:disk_warn_pushed, false)
+      |> assign(:reviewers, Presence.list_reviewers())
+      |> assign(:open, false)
+      |> assign(:idx, 0)
+      |> assign(:follow, true)
+      |> assign(:notice, nil)
+      |> assign(:labels, Capture.labels_for_reviewer(@host_id))
+      |> load_photos()
+      |> maybe_warn_disk(capture)
+
+    socket = if connected?(socket), do: broadcast_host_viewer(socket), else: socket
+
+    {:ok, socket}
   end
 
   @impl true
@@ -70,7 +76,7 @@ defmodule RevelaWeb.HostLive do
   end
 
   def handle_event("close", _params, socket) do
-    {:noreply, assign(socket, open: false)}
+    {:noreply, socket |> assign(open: false) |> broadcast_host_viewer()}
   end
 
   # inicia um editorial: cria pasta unica da sessao, aponta a captura pra la
@@ -93,7 +99,8 @@ defmodule RevelaWeb.HostLive do
          |> assign(:follow, true)
          |> assign(:labels, %{})
          |> assign(:notice, "Editorial \"#{name}\" iniciado. Originais em: #{folder}")
-         |> load_photos()}
+         |> load_photos()
+         |> broadcast_host_viewer()}
     end
   end
 
@@ -110,7 +117,8 @@ defmodule RevelaWeb.HostLive do
      |> assign(:follow, true)
      |> assign(:labels, %{})
      |> assign(:notice, "Editorial finalizado. Os originais ficam salvos na pasta.")
-     |> load_photos()}
+     |> load_photos()
+     |> broadcast_host_viewer()}
   end
 
   def handle_event("pick", %{"color" => c}, socket) do
@@ -210,7 +218,8 @@ defmodule RevelaWeb.HostLive do
     {:noreply,
      socket
      |> assign(open: false, idx: 0, follow: true, labels: %{})
-     |> load_photos()}
+     |> load_photos()
+     |> broadcast_host_viewer()}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
@@ -227,13 +236,28 @@ defmodule RevelaWeb.HostLive do
     |> assign(:tallies, Capture.tallies())
   end
 
+  defp broadcast_host_viewer(socket) do
+    photo = current_photo(socket.assigns)
+
+    Capture.broadcast_host_viewer(%{
+      photo_id: photo && photo.id,
+      follow: socket.assigns.follow,
+      open: socket.assigns.open
+    })
+
+    socket
+  end
+
   defp current_photo(%{photos: photos, idx: idx}), do: Enum.at(photos, idx)
 
   # follow e derivado do indice: estar na ultima foto e estar ao vivo
   defp navigate(socket, idx) do
     last = max(length(socket.assigns.photos) - 1, 0)
     idx = idx |> max(0) |> min(last)
-    assign(socket, idx: idx, follow: idx == last)
+
+    socket
+    |> assign(idx: idx, follow: idx == last)
+    |> broadcast_host_viewer()
   end
 
   defp review_url do
@@ -351,6 +375,14 @@ defmodule RevelaWeb.HostLive do
                 <p class="text-xs opacity-60">
                   Mesma rede Wi-Fi. Aponte a camera do celular para o QR.
                 </p>
+                <.link
+                  id="tv-open-link"
+                  navigate={~p"/tv"}
+                  target="_blank"
+                  class="link link-hover text-xs opacity-70"
+                >
+                  Abrir modo apresentação (/tv)
+                </.link>
               </div>
             </div>
 

@@ -225,6 +225,9 @@ banco em vez de em memória. Ver também o item 8.
 
 ### 6. Modo apresentação em janela separada
 
+**Status**: FEITO nesta branch `fm/revela-tv-modo-apresentacao` (PR URL ao
+publicar).
+
 **Observado**: para mostrar as fotos na TV, a tela do notebook foi espelhada via
 HDMI. Enquanto isso o notebook fica preso: não dá para usar o host para outra
 coisa sem que apareça na TV.
@@ -232,16 +235,19 @@ coisa sem que apareça na TV.
 **Ideia original descartada**: entrar no sistema como um revisor chamado "tv".
 Traz identidade e classificação que não fazem sentido para um telão.
 
-**Proposta**: rota nova (ex.: `/tv`) que abre em aba ou janela separada,
-arrastável para o monitor da TV em tela cheia. Só exibe, não classifica, não
-entra no Presence. Segue o ao vivo por padrão e aceita ser controlada pelo host
-via PubSub, de modo que folhear no host mude o que está na TV enquanto o
-notebook continua livre para outras coisas.
-
 **Ponto de decisão**: a TV espelha o que o host está vendo, ou tem navegação
-própria? A primeira é mais simples e cobre o caso relatado.
+própria? A primeira é mais simples e cobre o caso relatado. **Decisão
+aceita (2026-08-07)**: espelhar o Host; sem navegação própria neste ship.
+
+**O que entrou**: rota `/tv` (`TvLive`) display-only; `ViewerComponents.presentation/1`;
+`Capture.broadcast_host_viewer/1` + `host_viewer_state/0` (PubSub +
+`:persistent_term`); link no `/host`; sem classificação e sem Presence.
 
 ### 7. Retorno automático ao vivo por inatividade
+
+**Status**: FEITO **apenas em `/tv`** nesta branch (junto do item 6). Host e
+celulares de revisores **não** têm esse timeout — permanece diferido para o
+Host.
 
 **Ideia levantada**: se a pessoa para de folhear e esquece de voltar ao vivo,
 retornar sozinho à foto mais recente depois de ~10s.
@@ -253,10 +259,9 @@ decisão, e 10s é pouco para olhar uma foto. Onde ele é claramente certo é no
 modo apresentação do item 6, que é só exibição e onde ninguém está decidindo
 nada.
 
-**Proposta**: implementar o timeout **apenas** no modo apresentação. Reavaliar
-para o host depois que 1 e 2 estiverem em uso, e se for adiante, usar janela
-maior (~30s), reiniciada a cada interação e com indicação visível de que vai
-voltar. Nos celulares dos revisores, não aplicar.
+**O que entrou**: em `/tv`, ~30s fora do ao vivo (`:tv_idle_ms`, padrão
+`30_000`), reiniciado a cada interação local (`tv_activity`), com indicação
+visível ("volta ao vivo em Ns"). Não aplicado em `HostLive` / `ReviewLive`.
 
 ### 8. `raw_path` vazio para todas as fotos
 

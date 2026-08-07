@@ -30,3 +30,6 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# Superficie /tv: idle alto nos testes; retorno ao vivo via mensagem explicita
+config :revela, :tv_idle_ms, 60_000
