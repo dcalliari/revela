@@ -24,8 +24,10 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
   camera USB + disco OK, com debounce e latch de stop); monitora espaco livre
   e para a captura entre disparos se o disco cair abaixo do minimo (protege a
   Canon de travar no USB).
-- `Revela.Capture.Ingest` gera o preview (namespaced por editorial) e registra
-  a foto.
+- `Revela.Capture.Ingest` gera o preview (namespaced por editorial), registra
+  a foto e associa o RAW irmao (`.cr2`/`.cr3`): basename exato ou indice
+  gphoto2 N+1 com carimbo proximo; se o RAW chegar depois do JPEG,
+  `attach_raw/1` preenche `raw_path` sem criar foto nova.
 - `Revela.Capture.Export` (+ `mix revela.export_colors`) copia/move arquivos
   classificados para pastas por cor (`vermelho`…`roxo`); ver secao abaixo.
 - `RevelaWeb.ReviewLive` (`/`) tela de revisao mobile, botoes de cor,
@@ -126,7 +128,9 @@ e o auto-arm exige clique (**Vincular câmera**).
 1. **Wi-Fi/NFC = Desativar** (com Wi-Fi ligado a T6 desabilita a porta USB).
 2. **Desligamento automatico = Desativar** (senao ela dorme no meio da sessao).
 3. **Qualidade de imagem = RAW+JPEG** (o preview usa o JPEG, rapido; o RAW fica
-   guardado para edicao). Com RAW puro nao ha preview rapido.
+   em `raw_path` para edicao). Em RAW+JPEG o gphoto2 nomeia JPEG N e RAW N+1
+   (o carimbo pode diferir ~1s); JPEG-only deixa `raw_path` vazio. Com RAW puro
+   nao ha preview rapido.
 4. Cabo USB firme, de preferencia porta direta no chassi, sem hub.
 
 Na tela `/host`, com um editorial ativo e disco OK, o tether arma sozinho
@@ -144,13 +148,19 @@ libere espaco — o tether rearma sozinho quando o espaco voltar.
   `editorial_id` do editorial ativo na captura. Iniciar ou finalizar um
   editorial **nao** apaga fotos nem classificacoes — so troca qual sessao esta
   ativa. Sem editorial ativo, as telas ficam vazias (fotos com `editorial_id`
-  nulo nao entram na UI; nao ha backfill).
+  nulo nao entram na UI; nao ha backfill de `editorial_id` para sessao
+  posterior).
 - Originais (JPEG + RAW) baixam para pastas unicas
   `editorials/yyyy-mm-dd NOME HHMMSS-uid/` (ou `editorials/_sem-editorial/`
-  quando nao ha sessao).
+  quando nao ha sessao). Cada foto guarda `original_path` (JPEG) e, quando
+  houver irmao, `raw_path` (unico no banco: o mesmo RAW nao gruda em duas
+  fotos).
 - Previews web ficam em `priv/static/uploads/<editorial_id>/` (ou
   `_sem-editorial/`) e sao servidos em `/uploads/...`.
 - Estado (fotos + labels) em SQLite (`*.db`), escopado ao editorial atual.
+- Fotos antigas com `raw_path` vazio (mesmo diretorio ainda com os arquivos):
+  `mix revela.backfill_raw_paths` (idempotente; `--dry-run` so resume;
+  ambiguidade e pulada com log).
 
 ## Export por pastas de cor
 
@@ -194,9 +204,9 @@ subir no produto certo.
 
 ## Pendente (proxima fase)
 
-- **Export para o darktable**: escrever sidecars `.xmp` ao lado dos RAWs com
-  `Xmp.darktable.colorlabels`, para as cores aparecerem ao importar no darktable.
-  Como a classificacao e por pessoa, definir a regra de consenso na exportacao
-  (revisor lider, uniao, ou maioria).
+- **Export para o darktable**: escrever sidecars `.xmp` ao lado dos RAWs
+  (`raw_path`) com `Xmp.darktable.colorlabels`, para as cores aparecerem ao
+  importar no darktable. Como a classificacao e por pessoa, definir a regra de
+  consenso na exportacao (revisor lider, uniao, ou maioria).
 - Opcional: espelho de video ao vivo (gphoto2 `--capture-movie` + v4l2loopback).
 - Upload Google Fotos (entrega) / Drive (arquivo) a partir do export por cor.
