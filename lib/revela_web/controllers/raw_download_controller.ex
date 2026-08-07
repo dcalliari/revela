@@ -81,25 +81,98 @@ defmodule RevelaWeb.RawDownloadController do
 
   defp build_zip(files) do
     id = System.unique_integer([:positive])
-    work_dir = Path.join(System.tmp_dir!(), "revela-raw-#{id}")
-    zip_path = Path.join(System.tmp_dir!(), "revela-raw-#{id}.zip")
 
-    try do
-      with :ok <- File.mkdir_p(work_dir),
-           :ok <- stage_files(files, work_dir),
-           {:ok, _} <- create_zip_file(work_dir, zip_path) do
-        {:ok, zip_path}
-      else
-        {:error, _} = err ->
-          _ = File.rm(zip_path)
-          err
+    case staging_paths(files, id) do
+      {:ok, work_dir, zip_path} ->
+        try do
+          with :ok <- stage_files(files, work_dir),
+               {:ok, _} <- create_zip_file(work_dir, zip_path) do
+            {:ok, zip_path}
+          else
+            {:error, _} = err ->
+              _ = File.rm(zip_path)
+              err
 
-        other ->
-          _ = File.rm(zip_path)
-          {:error, other}
+            other ->
+              _ = File.rm(zip_path)
+              {:error, other}
+          end
+        after
+          File.rm_rf(work_dir)
+        end
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  defp staging_paths(files, id) do
+    name = "revela-raw-#{id}"
+
+    Enum.find_value(staging_roots(files), fn root ->
+      work_dir = Path.join(root, name)
+      zip_path = Path.join(root, "#{name}.zip")
+
+      case File.mkdir_p(work_dir) do
+        :ok -> {:ok, work_dir, zip_path}
+        {:error, _} -> nil
       end
-    after
-      File.rm_rf(work_dir)
+    end) || {:error, :no_staging_root}
+  end
+
+  defp staging_roots(files) do
+    raw_pull_dirs =
+      files
+      |> Enum.map(fn %{path: path} ->
+        Path.join(Path.dirname(Path.expand(path)), ".raw-pulls")
+      end)
+      |> Enum.uniq()
+
+    editorials =
+      Application.get_env(:revela, :editorials_dir) ||
+        Path.join(File.cwd!(), "editorials")
+
+    extras =
+      [Path.join(editorials, ".raw-pulls"), "/var/tmp"]
+      |> Enum.reject(&tmpfs?/1)
+
+    raw_pull_dirs ++ extras
+  end
+
+  defp tmpfs?(path) do
+    abs = Path.expand(path)
+
+    case System.cmd("findmnt", ["-n", "-o", "FSTYPE", "-T", abs], stderr_to_stdout: true) do
+      {fstype, 0} -> String.trim(fstype) == "tmpfs"
+      _ -> mount_fstype(abs) == "tmpfs"
+    end
+  end
+
+  defp mount_fstype(abs) do
+    case File.read("/proc/mounts") do
+      {:ok, body} ->
+        body
+        |> String.split("\n", trim: true)
+        |> Enum.reduce({"", 0}, fn line, {best_type, best_len} ->
+          case String.split(line) do
+            [_src, mount, fstype | _] ->
+              mount_abs = Path.expand(mount)
+
+              if (abs == mount_abs or String.starts_with?(abs, mount_abs <> "/")) and
+                   String.length(mount_abs) >= best_len do
+                {fstype, String.length(mount_abs)}
+              else
+                {best_type, best_len}
+              end
+
+            _ ->
+              {best_type, best_len}
+          end
+        end)
+        |> elem(0)
+
+      _ ->
+        ""
     end
   end
 
@@ -131,17 +204,9 @@ defmodule RevelaWeb.RawDownloadController do
       |> File.ls!()
       |> Enum.map(&String.to_charlist/1)
 
-    cwd = File.cwd!()
-
-    try do
-      File.cd!(work_dir)
-
-      case :zip.create(String.to_charlist(zip_path), names) do
-        {:ok, zip} -> {:ok, List.to_string(zip)}
-        other -> {:error, other}
-      end
-    after
-      File.cd!(cwd)
+    case :zip.create(String.to_charlist(zip_path), names, [{:cwd, String.to_charlist(work_dir)}]) do
+      {:ok, zip} -> {:ok, List.to_string(zip)}
+      other -> {:error, other}
     end
   end
 end
