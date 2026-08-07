@@ -78,7 +78,6 @@ defmodule RevelaWeb.ViewerComponents do
           <img
             src={@photo.web_path}
             class="max-h-full max-w-full object-contain will-change-transform"
-            style="transform-origin: center center"
             draggable="false"
           />
         </div>

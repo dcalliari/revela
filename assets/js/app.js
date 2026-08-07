@@ -24,6 +24,14 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/revela"
 import topbar from "../vendor/topbar"
+import {
+  clampScale,
+  touchDistance,
+  touchMidpoint,
+  focalTranslate,
+  shouldDoubleTapReset,
+  photoIdentityFromImg
+} from "./pinch_zoom"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 
@@ -54,31 +62,63 @@ const Hooks = {
   },
 
   // pinch-to-zoom + arrastar na foto (celular). Duplo toque reseta.
+  // Focal zoom uses transform-origin 0 0 + tx/ty (not CSS center origin).
+  // updated() only resets when the img src/identity changes; otherwise re-applies
+  // transform so LiveView patches (label tallies, presence) do not wipe zoom.
   PinchZoom: {
     mounted() {
-      const s = {scale: 1, tx: 0, ty: 0, startDist: 0, startScale: 1, panStart: null, lastTap: 0}
+      const s = {
+        scale: 1,
+        tx: 0,
+        ty: 0,
+        startDist: 0,
+        startScale: 1,
+        startTx: 0,
+        startTy: 0,
+        startMid: null,
+        panStart: null,
+        lastTap: 0,
+        multiTouch: false
+      }
       const img = () => this.el.querySelector("img")
       const apply = () => {
         const im = img()
-        if (im) im.style.transform = `translate(${s.tx}px, ${s.ty}px) scale(${s.scale})`
+        if (!im) return
+        im.style.transformOrigin = "0 0"
+        im.style.transform = `translate(${s.tx}px, ${s.ty}px) scale(${s.scale})`
       }
       const reset = () => { s.scale = 1; s.tx = 0; s.ty = 0; apply() }
-      const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
       this.resetZoom = reset
+      this.applyZoom = apply
+      this._photoId = photoIdentityFromImg(img())
 
       this.el.addEventListener("touchstart", e => {
-        if (e.touches.length === 2) {
-          s.startDist = dist(e.touches) || 1
+        if (e.touches.length >= 2) {
+          s.multiTouch = true
+          s.panStart = null
+          s.startDist = touchDistance(e.touches[0], e.touches[1]) || 1
           s.startScale = s.scale
+          s.startTx = s.tx
+          s.startTy = s.ty
+          s.startMid = touchMidpoint(e.touches[0], e.touches[1])
         } else if (e.touches.length === 1 && s.scale > 1) {
           s.panStart = {x: e.touches[0].clientX - s.tx, y: e.touches[0].clientY - s.ty}
         }
       }, {passive: false})
 
       this.el.addEventListener("touchmove", e => {
-        if (e.touches.length === 2) {
+        if (e.touches.length >= 2) {
           e.preventDefault()
-          s.scale = Math.min(Math.max(s.startScale * dist(e.touches) / s.startDist, 1), 5)
+          const newScale = clampScale(s.startScale * touchDistance(e.touches[0], e.touches[1]) / s.startDist)
+          const mid = touchMidpoint(e.touches[0], e.touches[1])
+          const {tx, ty} = focalTranslate(
+            {scale: s.startScale, tx: s.startTx, ty: s.startTy, mid: s.startMid},
+            mid,
+            newScale
+          )
+          s.scale = newScale
+          s.tx = tx
+          s.ty = ty
           apply()
         } else if (e.touches.length === 1 && s.scale > 1 && s.panStart) {
           e.preventDefault()
@@ -90,13 +130,27 @@ const Hooks = {
 
       this.el.addEventListener("touchend", e => {
         if (s.scale <= 1) reset()
-        const now = Date.now()
-        if (e.touches.length === 0 && now - s.lastTap < 300) reset()
-        s.lastTap = now
+        const decision = shouldDoubleTapReset({
+          multiTouch: s.multiTouch,
+          touchesRemaining: e.touches.length,
+          now: Date.now(),
+          lastTap: s.lastTap
+        })
+        if (decision.clearMulti) s.multiTouch = false
+        s.lastTap = decision.lastTap
+        if (decision.reset) reset()
         s.panStart = null
       })
     },
-    updated() { if (this.resetZoom) this.resetZoom() }
+    updated() {
+      const id = photoIdentityFromImg(this.el.querySelector("img"))
+      if (id !== this._photoId) {
+        this._photoId = id
+        if (this.resetZoom) this.resetZoom()
+      } else if (this.applyZoom) {
+        this.applyZoom()
+      }
+    }
   },
 
   // alterna a tela cheia. Safari no iPhone nao tem Fullscreen API: nesse caso,
