@@ -35,6 +35,7 @@ defmodule RevelaWeb.TvLive do
      |> assign(:idle_tick_ref, nil)
      |> assign(:idle_deadline, nil)
      |> assign(:idle_remaining, nil)
+     |> assign(:idle_gen, 0)
      |> assign(:idle_ms, idle_ms())
      |> apply_host_viewer(host)}
   end
@@ -71,18 +72,26 @@ defmodule RevelaWeb.TvLive do
      |> schedule_idle()}
   end
 
-  def handle_info(:idle_tick, socket) do
-    {:noreply, tick_idle(socket)}
+  def handle_info({:idle_tick, gen}, socket) do
+    if gen == socket.assigns.idle_gen do
+      {:noreply, tick_idle(socket)}
+    else
+      {:noreply, socket}
+    end
   end
 
-  def handle_info(:idle_return_live, socket) do
-    photos = socket.assigns.photos
+  def handle_info({:idle_return_live, gen}, socket) do
+    if gen == socket.assigns.idle_gen do
+      photos = socket.assigns.photos
 
-    {:noreply,
-     socket
-     |> cancel_idle()
-     |> assign(follow: true, photo_id: latest_photo_id(photos), idle_remaining: nil)
-     |> schedule_idle()}
+      {:noreply,
+       socket
+       |> cancel_idle()
+       |> assign(follow: true, photo_id: latest_photo_id(photos), idle_remaining: nil)
+       |> schedule_idle()}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
@@ -105,31 +114,31 @@ defmodule RevelaWeb.TvLive do
 
   defp apply_host_viewer(socket, %{open: false}) do
     photos = socket.assigns.photos
-
-    socket
-    |> cancel_idle()
-    |> assign(follow: true, photo_id: latest_photo_id(photos), idle_remaining: nil)
-    |> schedule_idle()
+    photo_id = latest_photo_id(photos)
+    maybe_apply_mirror(socket, true, photo_id)
   end
 
   defp apply_host_viewer(socket, %{open: true, follow: true} = state) do
     photos = socket.assigns.photos
     photo_id = state.photo_id || latest_photo_id(photos)
-
-    socket
-    |> cancel_idle()
-    |> assign(follow: true, photo_id: photo_id, idle_remaining: nil)
-    |> schedule_idle()
+    maybe_apply_mirror(socket, true, photo_id)
   end
 
   defp apply_host_viewer(socket, %{open: true, follow: false} = state) do
     photos = socket.assigns.photos
     photo_id = state.photo_id || latest_photo_id(photos)
+    maybe_apply_mirror(socket, false, photo_id)
+  end
 
-    socket
-    |> cancel_idle()
-    |> assign(follow: false, photo_id: photo_id)
-    |> schedule_idle()
+  defp maybe_apply_mirror(socket, follow, photo_id) do
+    if socket.assigns[:follow] == follow and socket.assigns[:photo_id] == photo_id do
+      socket
+    else
+      socket
+      |> cancel_idle()
+      |> assign(follow: follow, photo_id: photo_id)
+      |> schedule_idle()
+    end
   end
 
   defp maybe_follow_latest(socket) do
@@ -151,15 +160,24 @@ defmodule RevelaWeb.TvLive do
   end
 
   defp schedule_idle(socket) do
+    gen = socket.assigns.idle_gen + 1
+
     if socket.assigns.follow do
-      assign(socket, idle_ref: nil, idle_tick_ref: nil, idle_deadline: nil, idle_remaining: nil)
+      assign(socket,
+        idle_gen: gen,
+        idle_ref: nil,
+        idle_tick_ref: nil,
+        idle_deadline: nil,
+        idle_remaining: nil
+      )
     else
       now = System.monotonic_time(:millisecond)
       deadline = now + socket.assigns.idle_ms
-      return_ref = Process.send_after(self(), :idle_return_live, socket.assigns.idle_ms)
-      tick_ref = Process.send_after(self(), :idle_tick, @tick_ms)
+      return_ref = Process.send_after(self(), {:idle_return_live, gen}, socket.assigns.idle_ms)
+      tick_ref = Process.send_after(self(), {:idle_tick, gen}, @tick_ms)
 
       assign(socket,
+        idle_gen: gen,
         idle_ref: return_ref,
         idle_tick_ref: tick_ref,
         idle_deadline: deadline,
@@ -173,13 +191,13 @@ defmodule RevelaWeb.TvLive do
       %{follow: true} ->
         assign(socket, idle_tick_ref: nil, idle_remaining: nil)
 
-      %{idle_deadline: deadline} when is_integer(deadline) ->
+      %{idle_deadline: deadline, idle_gen: gen} when is_integer(deadline) ->
         now = System.monotonic_time(:millisecond)
         remaining = remaining_seconds(deadline, now)
 
         tick_ref =
           if remaining > 0 do
-            Process.send_after(self(), :idle_tick, @tick_ms)
+            Process.send_after(self(), {:idle_tick, gen}, @tick_ms)
           end
 
         assign(socket, idle_tick_ref: tick_ref, idle_remaining: remaining)
@@ -200,7 +218,12 @@ defmodule RevelaWeb.TvLive do
       _ -> :ok
     end
 
-    assign(socket, idle_ref: nil, idle_tick_ref: nil, idle_deadline: nil)
+    assign(socket,
+      idle_gen: socket.assigns.idle_gen + 1,
+      idle_ref: nil,
+      idle_tick_ref: nil,
+      idle_deadline: nil
+    )
   end
 
   defp remaining_seconds(deadline, now) do
