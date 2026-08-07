@@ -36,6 +36,50 @@ defmodule RevelaWeb.HostLiveTest do
     assert selected_text(document, "#capture-help") =~ "retomar automaticamente"
   end
 
+  test "explica a parada preventiva por espaco em disco" do
+    document =
+      render_capture_card(%{
+        status: :disk_full,
+        message: "Espaço em disco abaixo do mínimo (~4.7 GB livres). Libere espaço.",
+        camera_present: true
+      })
+
+    assert selected_text(document, "#capture-status") == "espaço cheio"
+    assert selected_text(document, "#capture-help") =~ "Libere espaço"
+    assert selected_text(document, "#capture-action") == "Vincular câmera"
+  end
+
+  test "mostra quantas fotos ainda cabem quando a estimativa esta disponivel" do
+    document =
+      render_capture_card(%{
+        status: :running,
+        message: nil,
+        camera_present: true,
+        estimated_shots_left: 250
+      })
+
+    assert selected_text(document, "#capture-disk-hint") =~ "cabem ~250 fotos"
+  end
+
+  test "nao mostra a dica de espaco quando a estimativa e desconhecida" do
+    document = render_capture_card(%{status: :idle, message: nil, camera_present: false})
+
+    assert selected_count(document, "#capture-disk-hint") == 0
+  end
+
+  test "avisa modo degradado quando o monitoramento de disco esta indisponivel" do
+    document =
+      render_capture_card(%{
+        status: :idle,
+        message: nil,
+        camera_present: true,
+        disk_awareness: :unavailable
+      })
+
+    assert selected_text(document, "#capture-disk-hint") =~ "monitoramento de disco indisponível"
+    assert selected_text(document, "#capture-disk-hint") =~ "Parada preventiva desativada"
+  end
+
   defp render_capture_card(capture) do
     html = render_component(&HostLive.capture_card/1, capture: capture)
     LazyHTML.from_fragment(html)

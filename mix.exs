@@ -7,6 +7,10 @@ defmodule Revela.MixProject do
       version: "0.1.0",
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
+      # :disksup so existe se o pacote os_mon estiver instalado (Arch separa
+      # isso do pacote base do erlang). CameraServer inicia a app sob demanda
+      # e degrada sem crashar quando ausente; ver default_disk_checker/1.
+      elixirc_options: [no_warn_undefined: [{:disksup, :get_disk_info, 1}]],
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
