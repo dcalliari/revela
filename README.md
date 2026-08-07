@@ -15,10 +15,12 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
                                                     |
                      Ingest: preview web (ImageMagick) + SQLite
                                                     |
-        Phoenix PubSub -> push em tempo real -> LiveViews (celulares)
+        Phoenix PubSub -> push em tempo real -> LiveViews (/ , /host, /tv)
 ```
 
-- `Revela.Capture` contexto (editoriais + fotos + labels + agregacao).
+- `Revela.Capture` contexto (editoriais + fotos + labels + agregacao); tambem
+  publica o estado do visualizador do Host (`broadcast_host_viewer/1`) para a
+  superficie `/tv`.
 - `Revela.Capture.CameraServer` supervisiona o gphoto2 e o watcher; restaura
   o editorial ativo do banco no boot; auto-arma o tether (editorial ativo +
   camera USB + disco OK, com debounce e latch de stop); monitora espaco livre
@@ -41,12 +43,17 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
   consenso de cores; grade de fotos com paginacao (24/pagina) e filtro
   multi-select pelas bolinhas de cor (`Capture.list_photos/1` + stream
   LiveView); o viewer imersivo reusa os mesmos atalhos e a lista completa
-  (nao a pagina filtrada). Com `REVELA_DEMO=1`, badge **DEMO** e
-  **Disparar (demo)** / `D` (ver abaixo).
+  (nao a pagina filtrada), e espelha `photo_id` / `follow` / `open` para `/tv`.
+  Com `REVELA_DEMO=1`, badge **DEMO** e **Disparar (demo)** / `D` (ver abaixo).
+- `RevelaWeb.TvLive` (`/tv`) modo apresentacao display-only (TV / segundo
+  monitor): espelha o Host via PubSub, sem classificacao e sem Presence.
+  Fora do ao vivo, apos ~10s de inatividade local volta sozinho ao vivo
+  (contagem "volta ao vivo em Ns"); Host e revisores nao tem esse timeout.
+  Override do prazo: `config :revela, :tv_idle_ms` (padrao `10_000`).
 - `RevelaWeb.ViewerComponents` visualizador compartilhado: botoes de cor e
   limpar sem legenda ou numeros visiveis (so `aria-label`, atalhos abaixo
-  continuam ativos), placeholder para RAW sem preview, e pinch-zoom no
-  celular (hook `PinchZoom`).
+  continuam ativos), placeholder para RAW sem preview, pinch-zoom no celular
+  (hook `PinchZoom`) e `presentation/1` para `/tv`.
 
 As cores no banco usam o mesmo mapeamento do darktable: `0` vermelho,
 `1` amarelo, `2` verde, `3` azul, `4` roxo. No teclado/UI as teclas `1`–`5`
@@ -80,6 +87,8 @@ mix phx.server       # sobe em 0.0.0.0:4000
 ```
 
 - Host/controle (no laptop): http://localhost:4000/host
+- Apresentacao / TV (segunda janela ou monitor): http://localhost:4000/tv
+  (tambem ha o link **Abrir modo apresentação (/tv)** no `/host`).
 - Revisao (celulares na LAN): a URL/QR que aparece na tela do host.
 
 ### Importar do cartão

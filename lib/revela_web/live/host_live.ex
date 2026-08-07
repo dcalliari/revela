@@ -27,6 +27,9 @@ defmodule RevelaWeb.HostLive do
   `ViewerComponents` nao exibe legenda ou numeros visiveis — so `aria-label`
   por botao.
 
+  O estado do viewer (`photo_id`, `follow`, `open`) e publicado via
+  `Capture.broadcast_host_viewer/1` para a superficie `/tv` (`TvLive`).
+
   Com `REVELA_DEMO=1`, o Host mostra badge DEMO e, com a captura armada,
   **Disparar (demo)** (caminho real de ingest via arquivo). A tecla `D`/`d`
   só liga com editorial ativo; antes disso use o botão `#demo-fire`.

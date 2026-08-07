@@ -53,6 +53,18 @@ filters resets to page 1. The immersive viewer still uses the full
 `list_photos/0` list for idx/follow — do not replace grid paging with another
 in-memory `@recent` take. See `test/revela_web/live/host_grid_test.exs`.
 
+## Domain: TV presentation (`/tv`)
+
+`RevelaWeb.TvLive` is a display-only surface that mirrors the Host viewer via
+`Capture.broadcast_host_viewer/1` / `subscribe_host_viewer/0` (last state in
+`:persistent_term` for late joiners). No classification, no Presence, no own
+navigation: when the Host viewer is closed or `follow`, `/tv` stays on the
+latest photo; when the Host browses with `follow: false`, `/tv` shows that
+photo. Idle auto-return (~30s, `Application.get_env(:revela, :tv_idle_ms)`)
+exists **only** on `/tv` — do not add the same timeout to `HostLive` /
+`ReviewLive` without an explicit product decision. `start_editorial` /
+`finish_editorial` reset host-viewer state. UI: `ViewerComponents.presentation/1`.
+
 ## Domain: color-folder export
 
 `Revela.Capture.Export` (+ `mix revela.export_colors`) copies/moves classified

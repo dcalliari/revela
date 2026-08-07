@@ -6,6 +6,9 @@ defmodule Revela.Capture do
   qual sessao esta ativa. Sem editorial ativo, listagens ficam vazias (fotos com
   `editorial_id` nulo nao entram na UI). Cada revisor tem o seu proprio conjunto
   de cores para cada foto (classificacao por pessoa).
+
+  Tambem publica o estado do visualizador do Host (`broadcast_host_viewer/1`)
+  para `TvLive` (`/tv`); start/finish de editorial zera esse estado.
   """
 
   import Ecto.Query, warn: false
