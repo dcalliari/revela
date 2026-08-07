@@ -137,6 +137,8 @@ Falta o primeiro armar.
 
 ### 1. Atalho de teclado para voltar ao vivo
 
+**Status**: EM ANDAMENTO (ship empacotado com itens 2 e 3).
+
 **Observado**: o fotógrafo folheava as fotos e depois precisava achar o botão
 "ir ao vivo" no canto do cabeçalho com o mouse. Esquecia com frequência, e a TV
 ficava parada numa foto antiga enquanto a sessão continuava.
@@ -149,6 +151,8 @@ falta só o mapeamento de tecla em `handle_event("key", ...)`.
 parte do problema.
 
 ### 2. Ao vivo deve ligar sempre que se chega na foto mais recente
+
+**Status**: EM ANDAMENTO (ship empacotado com itens 1 e 3).
 
 **Observado**: hoje o retorno automático ao vivo só acontece quando se
 classifica a penúltima foto. Chegar na última pela seta não religa. Isso
@@ -169,6 +173,8 @@ mas quero ficar parado nela quando chegar a próxima". Pelo relato, esse caso n�
 é desejado.
 
 ### 3. Descoberta dos atalhos que já existem
+
+**Status**: EM ANDAMENTO (ship empacotado com itens 1 e 2).
 
 **Observado**: pedido de atalhos `1`-`5` para as cores, no estilo darktable.
 
