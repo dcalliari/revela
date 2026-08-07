@@ -63,7 +63,7 @@ defmodule RevelaWeb.HostLive do
     {:noreply, assign(socket, open: false)}
   end
 
-  # inicia um editorial: cria a pasta "yyyy-mm-dd NOME", aponta a captura pra la
+  # inicia um editorial: cria pasta unica da sessao, aponta a captura pra la
   # e limpa a tela para o novo conjunto
   def handle_event("start_editorial", %{"name" => name}, socket) do
     case String.trim(name) do
@@ -71,8 +71,9 @@ defmodule RevelaWeb.HostLive do
         {:noreply, socket}
 
       name ->
-        {:ok, %{folder: folder}} = CameraServer.set_editorial(name)
-        Capture.clear_all()
+        {:ok, %{folder: folder}} = CameraServer.reserve_editorial_folder(name)
+        {:ok, _editorial} = Capture.start_editorial(name, folder)
+        {:ok, %{folder: ^folder}} = CameraServer.set_editorial(name, folder)
 
         {:noreply,
          socket
@@ -86,10 +87,10 @@ defmodule RevelaWeb.HostLive do
     end
   end
 
-  # finaliza o editorial atual: para a captura e limpa a tela; originais ficam salvos
+  # finaliza o editorial: para a captura e limpa a tela; originais e labels ficam
   def handle_event("finish_editorial", _params, socket) do
     CameraServer.finish_editorial()
-    Capture.clear_all()
+    Capture.finish_editorial()
 
     {:noreply,
      socket
@@ -306,7 +307,7 @@ defmodule RevelaWeb.HostLive do
                   <span class="font-medium truncate">{@capture.editorial}</span>
                   <button
                     phx-click="finish_editorial"
-                    data-confirm="Finalizar o editorial limpa a tela. Os originais ficam salvos. Continuar?"
+                    data-confirm="Finalizar o editorial limpa a tela de revisao. Os originais e as classificacoes ficam salvos no banco. Continuar?"
                     class="btn btn-outline btn-sm"
                   >
                     Finalizar editorial

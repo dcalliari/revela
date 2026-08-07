@@ -18,13 +18,15 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
         Phoenix PubSub -> push em tempo real -> LiveViews (celulares)
 ```
 
-- `Revela.Capture` contexto (fotos + labels + agregacao).
-- `Revela.Capture.CameraServer` supervisiona o gphoto2 e o watcher.
-- `Revela.Capture.Ingest` gera o preview e registra a foto.
+- `Revela.Capture` contexto (editoriais + fotos + labels + agregacao).
+- `Revela.Capture.CameraServer` supervisiona o gphoto2 e o watcher; restaura
+  o editorial ativo do banco no boot.
+- `Revela.Capture.Ingest` gera o preview (namespaced por editorial) e registra
+  a foto.
 - `RevelaWeb.ReviewLive` (`/`) tela de revisao mobile, botoes de cor,
   voltar, modo ao vivo. Identidade leve por `localStorage`.
 - `RevelaWeb.HostLive` (`/host`) QR + URL da LAN, start/stop da captura,
-  quem esta online e o consenso de cores.
+  iniciar/finalizar editorial, quem esta online e o consenso de cores.
 
 As cores usam o mesmo mapeamento do darktable: `0` vermelho, `1` amarelo,
 `2` verde, `3` azul, `4` roxo.
@@ -58,9 +60,17 @@ aparece nos celulares em segundos.
 
 ## Fluxo de dados
 
-- Originais (JPEG + RAW) baixam para `editorials/yyyy-mm-dd NOME/`.
-- Previews web ficam em `priv/static/uploads/` e sao servidos em `/uploads/...`.
-- Estado (fotos + labels) em SQLite (`*.db`).
+- Um editorial e uma sessao persistente no banco (`editorials`). Fotos levam
+  `editorial_id` do editorial ativo na captura. Iniciar ou finalizar um
+  editorial **nao** apaga fotos nem classificacoes — so troca qual sessao esta
+  ativa. Sem editorial ativo, as telas ficam vazias (fotos com `editorial_id`
+  nulo nao entram na UI; nao ha backfill).
+- Originais (JPEG + RAW) baixam para pastas unicas
+  `editorials/yyyy-mm-dd NOME HHMMSS-uid/` (ou `editorials/_sem-editorial/`
+  quando nao ha sessao).
+- Previews web ficam em `priv/static/uploads/<editorial_id>/` (ou
+  `_sem-editorial/`) e sao servidos em `/uploads/...`.
+- Estado (fotos + labels) em SQLite (`*.db`), escopado ao editorial atual.
 
 ## Pendente (proxima fase)
 

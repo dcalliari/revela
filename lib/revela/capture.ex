@@ -1,13 +1,16 @@
 defmodule Revela.Capture do
   @moduledoc """
-  Contexto de captura: fotos que chegam via captura e as classificacoes
-  (labels de cor) por revisor. Cada revisor tem o seu proprio conjunto de cores
-  para cada foto (classificacao por pessoa).
+  Contexto de captura: editoriais (sessoes de revisao), fotos e classificacoes
+  (labels de cor) por revisor. Fotos e labels pertencem ao editorial ativo no
+  momento da captura; iniciar/finalizar um editorial nao apaga dados — so troca
+  qual sessao esta ativa. Sem editorial ativo, listagens ficam vazias (fotos com
+  `editorial_id` nulo nao entram na UI). Cada revisor tem o seu proprio conjunto
+  de cores para cada foto (classificacao por pessoa).
   """
 
   import Ecto.Query, warn: false
   alias Revela.Repo
-  alias Revela.Capture.{Photo, Label}
+  alias Revela.Capture.{Photo, Label, Editorial}
   alias Phoenix.PubSub
 
   @photos_topic "photos"
@@ -31,22 +34,24 @@ defmodule Revela.Capture do
 
   # ── Fotos ─────────────────────────────────────────────────────────────────
 
-  @doc "Todas as fotos em ordem de captura."
+  @doc "Fotos do editorial atual, em ordem de captura. Vazio se nao ha editorial ativo."
   def list_photos do
-    Repo.all(from p in Photo, order_by: [asc: p.seq])
+    from(p in Photo, as: :photo, where: ^editorial_scope(), order_by: [asc: p.seq])
+    |> Repo.all()
   end
 
   def get_photo!(id), do: Repo.get!(Photo, id)
 
   @doc """
-  Registra uma foto recem baixada. Calcula o proximo `seq` e transmite o evento
-  para todos os LiveViews conectados.
+  Registra uma foto recem baixada, associada ao editorial ativo (se houver).
+  Calcula o proximo `seq` e transmite o evento para todos os LiveViews conectados.
   """
   def create_photo(attrs) do
     seq = (Repo.one(from p in Photo, select: max(p.seq)) || 0) + 1
+    attrs = attrs |> Map.put(:seq, seq) |> Map.put(:editorial_id, current_editorial_id())
 
     %Photo{}
-    |> Photo.changeset(Map.put(attrs, :seq, seq))
+    |> Photo.changeset(attrs)
     |> Repo.insert()
     |> case do
       {:ok, photo} ->
@@ -58,30 +63,83 @@ defmodule Revela.Capture do
     end
   end
 
-  # ── Labels (classificacao por revisor) ──────────────────────────────────────
+  # ── Editoriais ───────────────────────────────────────────────────────────────
 
   @doc """
-  Limpa a producao atual: apaga todas as labels e fotos do banco e os previews
-  web, e avisa os LiveViews conectados para zerarem. Os originais em `captures/`
-  NAO sao tocados aqui (arquive-os antes via CameraServer.archive_captures/0).
+  Inicia um novo editorial. Finaliza o editorial ativo, se houver, sem apagar
+  nenhuma foto ou classificacao: cada editorial permanece no banco, associado
+  as suas proprias fotos e labels, para sempre poder ser consultado depois.
+  Avisa os LiveViews conectados para trocarem a tela para o editorial novo.
   """
-  def clear_all do
-    Repo.delete_all(Label)
-    Repo.delete_all(Photo)
+  def start_editorial(name, folder) do
+    Repo.transaction(fn ->
+      finish_active_editorial()
 
-    uploads = Application.app_dir(:revela, "priv/static/uploads")
+      %Editorial{}
+      |> Editorial.changeset(%{name: name, folder: folder, started_at: DateTime.utc_now()})
+      |> Repo.insert()
+      |> case do
+        {:ok, editorial} -> editorial
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
+    |> case do
+      {:ok, editorial} ->
+        PubSub.broadcast(Revela.PubSub, @photos_topic, :session_reset)
+        {:ok, editorial}
 
-    if File.dir?(uploads) do
-      for f <- File.ls!(uploads), do: File.rm(Path.join(uploads, f))
+      error ->
+        error
     end
+  end
 
+  @doc """
+  Finaliza o editorial ativo (se houver): marca `finished_at`, sem apagar
+  fotos ou classificacoes. Volta a tela para o estado "sem editorial".
+  """
+  def finish_editorial do
+    finish_active_editorial()
     PubSub.broadcast(Revela.PubSub, @photos_topic, :session_reset)
     :ok
   end
 
-  @doc "Mapa %{photo_id => color} com as cores de um revisor especifico."
+  @doc "Editorial ativo (finished_at nulo), ou nil se nao ha um."
+  def current_editorial do
+    Repo.one(from e in Editorial, where: is_nil(e.finished_at), limit: 1)
+  end
+
+  @doc "Id do editorial ativo (finished_at nulo), ou nil se nao ha um."
+  def current_editorial_id do
+    case current_editorial() do
+      %{id: id} -> id
+      nil -> nil
+    end
+  end
+
+  defp finish_active_editorial do
+    from(e in Editorial, where: is_nil(e.finished_at))
+    |> Repo.update_all(set: [finished_at: DateTime.utc_now()])
+  end
+
+  defp editorial_scope do
+    case current_editorial_id() do
+      nil -> dynamic([photo: _p], false)
+      id -> dynamic([photo: p], p.editorial_id == ^id)
+    end
+  end
+
+  # ── Labels (classificacao por revisor) ──────────────────────────────────────
+
+  @doc "Mapa %{photo_id => color} com as cores de um revisor especifico, no editorial atual."
   def labels_for_reviewer(reviewer_id) do
-    from(l in Label, where: l.reviewer_id == ^reviewer_id, select: {l.photo_id, l.color})
+    from(l in Label,
+      join: p in Photo,
+      as: :photo,
+      on: p.id == l.photo_id,
+      where: l.reviewer_id == ^reviewer_id,
+      where: ^editorial_scope(),
+      select: {l.photo_id, l.color}
+    )
     |> Repo.all()
     |> Map.new()
   end
@@ -122,11 +180,16 @@ defmodule Revela.Capture do
   end
 
   @doc """
-  Agregacao para a tela do host: mapa %{photo_id => %{color => count}} com a
-  contagem de cada cor entre todos os revisores.
+  Agregacao para a tela do host no editorial atual: mapa
+  `%{photo_id => %{color => count}}` com a contagem de cada cor entre todos os
+  revisores. Vazio se nao ha editorial ativo.
   """
   def tallies do
     from(l in Label,
+      join: p in Photo,
+      as: :photo,
+      on: p.id == l.photo_id,
+      where: ^editorial_scope(),
       group_by: [l.photo_id, l.color],
       select: {l.photo_id, l.color, count(l.id)}
     )

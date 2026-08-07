@@ -5,6 +5,12 @@ defmodule Revela.Capture.CameraServer do
   para a pasta observada; o watcher detecta o arquivo, espera ele terminar de
   escrever, e chama a ingestao.
 
+  A pasta observada e a do editorial ativo (restaurada do banco no boot) ou o
+  limbo `_sem-editorial` quando nao ha sessao. Trocar de editorial reserva uma
+  pasta unica (`yyyy-mm-dd NOME HHMMSS-uid`) via `reserve_editorial_folder/1`
+  antes de `Capture.start_editorial/2`, e so depois aponta a captura com
+  `set_editorial/2`.
+
   Estado de captura (`status`):
     :idle           -> nao esta capturando
     :running        -> gphoto2 rodando, aguardando disparos
@@ -48,11 +54,21 @@ defmodule Revela.Capture.CameraServer do
   def status(server \\ __MODULE__), do: GenServer.call(server, :status)
 
   @doc """
-  Inicia um editorial: cria a pasta "yyyy-mm-dd NOME" e passa a baixar as fotos
-  para la. Para a captura atual (o usuario reinicia o captura em seguida).
+  Inicia um editorial: aponta a captura para `folder` (ou a pasta reservada /
+  uma pasta unica nova) e passa a baixar as fotos para la. Para a captura
+  atual (o usuario reinicia o captura em seguida).
   Retorna {:ok, %{name: name, folder: folder}}.
   """
-  def set_editorial(name), do: GenServer.call(__MODULE__, {:set_editorial, name})
+  def set_editorial(name, folder \\ nil),
+    do: GenServer.call(__MODULE__, {:set_editorial, name, folder})
+
+  @doc """
+  Cria a pasta unica do editorial e desliga captura/watcher/settles da pasta
+  antiga, sem ainda apontar `captures_dir` para a nova. Use antes de
+  `Capture.start_editorial/2` e passe a pasta retornada a `set_editorial/2`.
+  """
+  def reserve_editorial_folder(name),
+    do: GenServer.call(__MODULE__, {:reserve_editorial_folder, name})
 
   @doc "Finaliza o editorial atual: para a captura e volta ao estado sem editorial. Os originais ficam na pasta."
   def finish_editorial, do: GenServer.call(__MODULE__, :finish_editorial)
@@ -61,7 +77,7 @@ defmodule Revela.Capture.CameraServer do
 
   @impl true
   def init(opts) do
-    # base onde ficam as pastas de cada editorial (yyyy-mm-dd NOME)
+    # base onde ficam as pastas de cada editorial (yyyy-mm-dd NOME HHMMSS-uid)
     editorials_base =
       opts[:editorials_dir] ||
         Application.get_env(:revela, :editorials_dir) ||
@@ -69,15 +85,14 @@ defmodule Revela.Capture.CameraServer do
 
     File.mkdir_p!(editorials_base)
 
-    # captures_dir e a pasta do editorial atual; ate escolher um, usa um limbo
-    captures_dir = Path.join(editorials_base, "_sem-editorial")
-    File.mkdir_p!(captures_dir)
+    {editorial, captures_dir} = restore_active_editorial(editorials_base)
 
     state = %{
       status: :idle,
       message: nil,
       editorials_base: editorials_base,
-      editorial: nil,
+      editorial: editorial,
+      reserved_folder: nil,
       captures_dir: captures_dir,
       port: nil,
       os_pid: nil,
@@ -124,24 +139,32 @@ defmodule Revela.Capture.CameraServer do
     {:reply, public_status(state), state}
   end
 
-  def handle_call({:set_editorial, name}, _from, state) do
-    # para a captura e o watcher da pasta antiga
-    state = state |> kill_port() |> stop_watcher()
-    state = %{state | desired: false, backoff_ms: @initial_backoff}
+  def handle_call({:reserve_editorial_folder, name}, _from, state) do
+    state = detach_capture(state)
+    state = %{state | status: :idle, message: nil}
+    state = schedule_presence_poll(state, 0)
 
-    {{y, m, d}, _} = :calendar.local_time()
-    date = :io_lib.format("~4..0B-~2..0B-~2..0B", [y, m, d]) |> to_string()
-    folder = Path.join(state.editorials_base, "#{date} #{sanitize(name)}")
+    folder = editorial_folder(state.editorials_base, name)
+    File.mkdir_p!(folder)
+    state = %{state | reserved_folder: folder}
+    broadcast(state)
+    {:reply, {:ok, %{name: name, folder: folder}}, state}
+  end
+
+  def handle_call({:set_editorial, name, folder}, _from, state) do
+    state = detach_capture(state)
+
+    folder = resolve_editorial_folder(folder, state, name)
     File.mkdir_p!(folder)
 
     state = %{
       state
       | captures_dir: folder,
         editorial: name,
+        reserved_folder: nil,
         status: :idle,
         message: nil,
-        processed: MapSet.new(),
-        pending: %{}
+        processed: MapSet.new()
     }
 
     state = schedule_presence_poll(state, 0)
@@ -151,20 +174,18 @@ defmodule Revela.Capture.CameraServer do
   end
 
   def handle_call(:finish_editorial, _from, state) do
-    state = state |> kill_port() |> stop_watcher()
+    state = detach_capture(state)
     limbo = Path.join(state.editorials_base, "_sem-editorial")
     File.mkdir_p!(limbo)
 
     state = %{
       state
-      | desired: false,
-        backoff_ms: @initial_backoff,
-        editorial: nil,
+      | editorial: nil,
+        reserved_folder: nil,
         captures_dir: limbo,
         status: :idle,
         message: nil,
-        processed: MapSet.new(),
-        pending: %{}
+        processed: MapSet.new()
     }
 
     state = schedule_presence_poll(state, 0)
@@ -271,22 +292,33 @@ defmodule Revela.Capture.CameraServer do
 
   # arquivo assentou: processa uma unica vez
   def handle_info({:settle, path}, state) do
-    state = %{state | pending: Map.delete(state.pending, path)}
+    case Map.pop(state.pending, path) do
+      {nil, _pending} ->
+        {:noreply, state}
 
-    if MapSet.member?(state.processed, path) do
-      {:noreply, state}
-    else
-      case Ingest.process(path) do
-        {:ok, _photo} ->
-          {:noreply, %{state | processed: MapSet.put(state.processed, path)}}
+      {_ref, pending} ->
+        state = %{state | pending: pending}
 
-        :ignore ->
-          {:noreply, state}
+        cond do
+          MapSet.member?(state.processed, path) ->
+            {:noreply, state}
 
-        {:error, _reason} ->
-          # deixa fora do processed para permitir nova tentativa em evento futuro
-          {:noreply, state}
-      end
+          not under_captures_dir?(path, state.captures_dir) ->
+            {:noreply, state}
+
+          true ->
+            case Ingest.process(path) do
+              {:ok, _photo} ->
+                {:noreply, %{state | processed: MapSet.put(state.processed, path)}}
+
+              :ignore ->
+                {:noreply, state}
+
+              {:error, _reason} ->
+                # deixa fora do processed para permitir nova tentativa em evento futuro
+                {:noreply, state}
+            end
+        end
     end
   end
 
@@ -437,6 +469,14 @@ defmodule Revela.Capture.CameraServer do
     _error -> false
   end
 
+  defp detach_capture(state) do
+    state
+    |> kill_port()
+    |> stop_watcher()
+    |> clear_pending()
+    |> Map.merge(%{desired: false, backoff_ms: @initial_backoff})
+  end
+
   # encerra o watcher da pasta atual (para trocar de editorial/pasta)
   defp stop_watcher(%{watcher_pid: pid} = state) when is_pid(pid) do
     if Process.alive?(pid), do: GenServer.stop(pid, :normal)
@@ -444,6 +484,17 @@ defmodule Revela.Capture.CameraServer do
   end
 
   defp stop_watcher(state), do: state
+
+  defp clear_pending(%{pending: pending} = state) do
+    Enum.each(pending, fn {_path, ref} -> Process.cancel_timer(ref) end)
+    %{state | pending: %{}}
+  end
+
+  defp under_captures_dir?(path, captures_dir) do
+    path = Path.expand(path)
+    dir = Path.expand(captures_dir)
+    String.starts_with?(path, dir <> "/")
+  end
 
   # nome seguro para pasta: remove separadores e caracteres de controle
   defp sanitize(name) do
@@ -455,6 +506,40 @@ defmodule Revela.Capture.CameraServer do
       "" -> "editorial"
       s -> s
     end
+  end
+
+  defp restore_active_editorial(editorials_base) do
+    case Capture.current_editorial() do
+      %{name: name, folder: folder} when is_binary(folder) and folder != "" ->
+        File.mkdir_p!(folder)
+        {name, folder}
+
+      _ ->
+        limbo = Path.join(editorials_base, "_sem-editorial")
+        File.mkdir_p!(limbo)
+        {nil, limbo}
+    end
+  end
+
+  defp resolve_editorial_folder(folder, _state, _name) when is_binary(folder) and folder != "" do
+    folder
+  end
+
+  defp resolve_editorial_folder(_folder, %{reserved_folder: reserved}, _name)
+       when is_binary(reserved) do
+    reserved
+  end
+
+  defp resolve_editorial_folder(_folder, state, name) do
+    editorial_folder(state.editorials_base, name)
+  end
+
+  defp editorial_folder(editorials_base, name) do
+    {{y, m, d}, {h, min, s}} = :calendar.local_time()
+    date = :io_lib.format("~4..0B-~2..0B-~2..0B", [y, m, d]) |> to_string()
+    time = :io_lib.format("~2..0B~2..0B~2..0B", [h, min, s]) |> to_string()
+    uid = System.unique_integer([:positive])
+    Path.join(editorials_base, "#{date} #{sanitize(name)} #{time}-#{uid}")
   end
 
   defp ensure_watcher(%{watcher_pid: pid} = state) when is_pid(pid), do: state

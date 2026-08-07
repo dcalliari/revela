@@ -1,7 +1,8 @@
 defmodule Revela.Capture.Ingest do
   @moduledoc """
   Processa um arquivo recem baixado pelo gphoto2: gera um preview web a partir
-  do JPEG e registra a foto. O RAW (.cr2) irmao, quando existe, e associado para
+  do JPEG (em `uploads/<editorial_id>/` ou `uploads/_sem-editorial/`) e registra
+  a foto no editorial ativo. O RAW (.cr2) irmao, quando existe, e associado para
   edicao posterior (ex: no darktable).
   """
 
@@ -25,13 +26,13 @@ defmodule Revela.Capture.Ingest do
 
   defp do_process(path) do
     stem = path |> Path.basename() |> Path.rootname()
-    web_name = stem <> ".jpg"
-    web_dest = Path.join(uploads_dir(), web_name)
+    {web_rel, web_path} = preview_paths(stem)
+    web_dest = Path.join(uploads_dir(), web_rel)
 
     case make_preview(path, web_dest) do
       :ok ->
         Capture.create_photo(%{
-          web_path: "/uploads/" <> web_name,
+          web_path: web_path,
           original_path: path,
           raw_path: find_raw_sibling(path),
           shot_at: DateTime.utc_now()
@@ -40,6 +41,20 @@ defmodule Revela.Capture.Ingest do
       {:error, reason} ->
         Logger.error("Falha ao gerar preview de #{path}: #{reason}")
         {:error, reason}
+    end
+  end
+
+  @doc false
+  def preview_paths(stem) do
+    scope = preview_scope()
+    web_name = stem <> ".jpg"
+    {Path.join(scope, web_name), "/uploads/#{scope}/#{web_name}"}
+  end
+
+  defp preview_scope do
+    case Capture.current_editorial_id() do
+      nil -> "_sem-editorial"
+      id -> Integer.to_string(id)
     end
   end
 
