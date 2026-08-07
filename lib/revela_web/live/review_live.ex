@@ -114,15 +114,23 @@ defmodule RevelaWeb.ReviewLive do
   end
 
   @impl true
-  def handle_info({:new_photo, photo}, socket) do
-    photos = socket.assigns.photos ++ [photo]
-    idx = if socket.assigns.follow, do: length(photos) - 1, else: socket.assigns.idx
+  def handle_info({:new_photo, _photo}, socket) do
+    photos = Capture.list_photos()
+    idx = if socket.assigns.follow, do: max(length(photos) - 1, 0), else: socket.assigns.idx
     {:noreply, assign(socket, photos: photos, idx: idx)}
   end
 
   def handle_info(:session_reset, socket) do
     if Map.get(socket.assigns, :identified) do
-      {:noreply, assign(socket, photos: [], idx: 0, follow: true, labels: %{})}
+      photos = Capture.list_photos()
+
+      {:noreply,
+       assign(socket,
+         photos: photos,
+         idx: 0,
+         follow: true,
+         labels: Capture.labels_for_reviewer(socket.assigns.reviewer_id)
+       )}
     else
       {:noreply, socket}
     end
