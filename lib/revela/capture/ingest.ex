@@ -174,6 +174,10 @@ defmodule Revela.Capture.Ingest do
   @doc """
   Quando um RAW chega depois do JPEG (ordem tipica na transferencia), tenta
   associá-lo a uma foto do mesmo diretorio ainda sem `raw_path`.
+
+  So casa basename exato ou par gphoto2 com `raw.index == jpeg.index + 1` e
+  carimbo dentro da tolerancia. Com varios candidatos, prefere o mais proximo
+  em tempo e registra ambiguidade (diferente do backfill, que pula).
   """
   def attach_raw(raw_path) when is_binary(raw_path) do
     if raw?(raw_path) and File.exists?(raw_path) do

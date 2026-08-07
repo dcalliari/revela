@@ -260,7 +260,7 @@ voltar. Nos celulares dos revisores, não aplicar.
 
 ### 8. `raw_path` vazio para todas as fotos
 
-**Status**: FEITO em 2026-08-07 (`a79314f`). PR URL a preencher no ship.
+**Status**: FEITO em 2026-08-07 (`6231449`). PR URL a preencher no ship.
 
 **Observado**: ao separar os `.cr2` das fotos marcadas de azul, o campo
 `raw_path` estava vazio nas 2025 fotos do editorial. Os RAWs tiveram que ser
@@ -272,10 +272,11 @@ localizados manualmente, casando índice de sequência e horário do nome.
 o carimbo do nome pode diferir ~1s.
 
 **O que entrou**: match exato + fallback N+1 com tolerância de 2s no carimbo
-(`Ingest.find_raw_sibling/2` / `match_raw_sibling/2`); `attach_raw/1` quando o
-RAW assenta depois do JPEG (`CameraServer`); um RAW só pode ser claimado por
-uma foto (UPDATE condicional + índice único parcial); `mix revela.backfill_raw_paths`
-(`--dry-run`, idempotente, pula ambíguos).
+(`Ingest.find_raw_sibling/2` / `match_raw_sibling/2`; no ingest, ambiguidade
+prefere o mais próximo e loga); `attach_raw/1` quando o RAW assenta depois do
+JPEG (`CameraServer`, mesmo critério N+1); um RAW só pode ser claimado por uma
+foto (UPDATE condicional + índice único parcial); `mix revela.backfill_raw_paths`
+(`--dry-run`, idempotente; ambíguos e falhas de claim são pulados com log).
 
 ### 11. Tela de pós-produção
 

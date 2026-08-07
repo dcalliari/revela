@@ -3,10 +3,12 @@ defmodule Mix.Tasks.Revela.BackfillRawPaths do
 
   @moduledoc """
   Percorre fotos com `raw_path` nulo/vazio e associa o RAW irmao no diretorio
-  de `original_path`, usando a mesma logica de `Revela.Capture.Ingest`.
+  de `original_path`, usando a mesma logica de `Revela.Capture.Ingest`
+  (`on_ambiguity: :skip`).
 
-  Nao sobrescreve `raw_path` ja preenchido. Ambiguidade (varios RAWs plausíveis)
-  e pulada com log.
+  Nao sobrescreve `raw_path` ja preenchido. Ambiguidade e falha de claim
+  (RAW ja tomado por outra foto) sao puladas com log; o resumo inclui
+  `matched`, `ambiguous`, `not_found`, `claim_error` e `skipped_missing_file`.
 
       mix revela.backfill_raw_paths
       mix revela.backfill_raw_paths --dry-run

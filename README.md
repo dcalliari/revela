@@ -25,7 +25,7 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
   no USB).
 - `Revela.Capture.Ingest` gera o preview (namespaced por editorial), registra
   a foto e associa o RAW irmao (`.cr2`/`.cr3`): basename exato ou indice
-  gphoto2 N+1 com carimbo proximo; se o RAW chegar depois do JPEG,
+  gphoto2 N+1 com carimbo ate 2s; se o RAW chegar depois do JPEG,
   `attach_raw/1` preenche `raw_path` sem criar foto nova.
 - `RevelaWeb.ReviewLive` (`/`) tela de revisao mobile, botoes de cor,
   navegacao e modo ao vivo (`follow == (idx == last)`). Identidade leve por
@@ -96,8 +96,8 @@ desligada.
 2. **Desligamento automatico = Desativar** (senao ela dorme no meio da sessao).
 3. **Qualidade de imagem = RAW+JPEG** (o preview usa o JPEG, rapido; o RAW fica
    em `raw_path` para edicao). Em RAW+JPEG o gphoto2 nomeia JPEG N e RAW N+1
-   (o carimbo pode diferir ~1s); JPEG-only deixa `raw_path` vazio. Com RAW puro
-   nao ha preview rapido.
+   (o carimbo pode diferir ~1s; o ingest tolera ate 2s); JPEG-only deixa
+   `raw_path` vazio. Com RAW puro nao ha preview rapido.
 4. Cabo USB firme, de preferencia porta direta no chassi, sem hub.
 
 Na tela `/host`, clique em **Conectar câmera**. Dispare na camera: a foto
