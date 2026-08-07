@@ -173,6 +173,30 @@ describe("shouldDoubleTapReset", () => {
     assert.equal(r.reset, false)
     assert.equal(r.lastTap, 2000)
   })
+
+  it("clears sticky multiTouch on interrupt (touchcancel as multi end)", () => {
+    const cancelled = shouldDoubleTapReset({
+      multiTouch: true,
+      singleFinger: false,
+      touchesRemaining: 0,
+      now: 1000,
+      lastTap: 500
+    })
+    assert.equal(cancelled.reset, false)
+    assert.equal(cancelled.clearMulti, true)
+    assert.equal(cancelled.clearSingle, true)
+    assert.equal(cancelled.lastTap, 0)
+
+    const nextTap = shouldDoubleTapReset({
+      multiTouch: false,
+      singleFinger: true,
+      touchesRemaining: 0,
+      now: 1500,
+      lastTap: cancelled.lastTap
+    })
+    assert.equal(nextTap.reset, false)
+    assert.equal(nextTap.lastTap, 1500)
+  })
 })
 
 describe("photoIdentityFromImg", () => {

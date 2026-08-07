@@ -138,12 +138,12 @@ const Hooks = {
         }
       }, {passive: false})
 
-      this.el.addEventListener("touchend", e => {
+      const finishTouches = (touchesRemaining, {asMultiEnd = false} = {}) => {
         if (s.scale <= 1) reset()
         const decision = shouldDoubleTapReset({
-          multiTouch: s.multiTouch,
-          singleFinger: s.singleFinger,
-          touchesRemaining: e.touches.length,
+          multiTouch: asMultiEnd || s.multiTouch,
+          singleFinger: asMultiEnd ? false : s.singleFinger,
+          touchesRemaining,
           now: Date.now(),
           lastTap: s.lastTap
         })
@@ -152,7 +152,10 @@ const Hooks = {
         s.lastTap = decision.lastTap
         if (decision.reset) reset()
         s.panStart = null
-      })
+      }
+
+      this.el.addEventListener("touchend", e => finishTouches(e.touches.length))
+      this.el.addEventListener("touchcancel", () => finishTouches(0, {asMultiEnd: true}))
     },
     updated() {
       const id = photoIdentityFromImg(this.el.querySelector("img"))
