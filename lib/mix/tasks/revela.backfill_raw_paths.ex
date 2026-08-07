@@ -30,6 +30,7 @@ defmodule Mix.Tasks.Revela.BackfillRawPaths do
     Mix.shell().info(
       "#{prefix}backfill raw_path: matched=#{summary.matched} " <>
         "ambiguous=#{summary.ambiguous} not_found=#{summary.not_found} " <>
+        "claim_error=#{summary.claim_error} " <>
         "skipped_missing_file=#{summary.skipped_missing_file}"
     )
   end

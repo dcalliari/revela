@@ -232,6 +232,7 @@ defmodule Revela.Capture.IngestTest do
                  matched: 1,
                  ambiguous: 1,
                  not_found: 1,
+                 claim_error: 0,
                  skipped_missing_file: 0
                }
       end)
@@ -245,6 +246,7 @@ defmodule Revela.Capture.IngestTest do
                  matched: 1,
                  ambiguous: 1,
                  not_found: 1,
+                 claim_error: 0,
                  skipped_missing_file: 0
                }
       end)
@@ -259,8 +261,42 @@ defmodule Revela.Capture.IngestTest do
              matched: 0,
              ambiguous: 1,
              not_found: 1,
+             claim_error: 0,
              skipped_missing_file: 0
            }
+  end
+
+  test "list_photos_missing_raw com :dir limita ao diretorio", %{dir: dir} do
+    other =
+      Path.join(
+        System.tmp_dir!(),
+        "revela-ingest-other-#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(other)
+    on_exit(fn -> File.rm_rf(other) end)
+
+    jpeg_here = touch!(dir, "20260804-133708-027.jpg")
+    jpeg_other = touch!(other, "20260804-133708-027.jpg")
+
+    {:ok, here} =
+      Capture.create_photo(%{
+        web_path: "/uploads/here.jpg",
+        original_path: jpeg_here,
+        raw_path: nil,
+        shot_at: DateTime.utc_now()
+      })
+
+    {:ok, _elsewhere} =
+      Capture.create_photo(%{
+        web_path: "/uploads/elsewhere.jpg",
+        original_path: jpeg_other,
+        raw_path: nil,
+        shot_at: DateTime.utc_now()
+      })
+
+    ids = Capture.list_photos_missing_raw(dir: dir) |> Enum.map(& &1.id)
+    assert ids == [here.id]
   end
 
   test "update_raw_path nao sobrescreve raw_path existente", %{dir: dir} do
