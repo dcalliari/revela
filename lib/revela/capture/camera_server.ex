@@ -40,7 +40,9 @@ defmodule Revela.Capture.CameraServer do
   Modo demo (`REVELA_DEMO=1` only — runtime sets `:demo` from that env; compile-time
   config cannot enable it): presença sempre verdadeira, nunca spawna gphoto2, e
   `demo_fire/1` grava um JPEG sintético na pasta do editorial (mesmo naming
-  `%Y%m%d-%H%M%S-%03n.jpg`) para o caminho real inotify → ingest. Sem toggle no Host.
+  `%Y%m%d-%H%M%S-%03n.jpg`; `%03n` sobe por vida do processo) para o caminho real
+  inotify → ingest. Se o watcher de arquivos não sobe, agenda settle direto —
+  o ingest continua o mesmo. Sem toggle no Host.
   """
 
   use GenServer
@@ -97,9 +99,11 @@ defmodule Revela.Capture.CameraServer do
   def status(server \\ __MODULE__), do: GenServer.call(server, :status)
 
   @doc """
-  No modo demo, com a captura armada (`status: :running`), grava um JPEG
-  sintético na pasta observada (naming gphoto2). Fora do demo ou desarmada,
-  devolve `{:error, :not_demo}` / `{:error, :not_armed}`.
+  No modo demo, com a captura armada (`status: :running` e `desired: true`),
+  grava um JPEG sintético na pasta observada (naming gphoto2
+  `%Y%m%d-%H%M%S-%03n.jpg`). Com watcher, o inotify leva ao settle; sem
+  watcher, agenda settle direto. Fora do demo ou desarmada, devolve
+  `{:error, :not_demo}` / `{:error, :not_armed}`.
   """
   def demo_fire(server \\ __MODULE__), do: GenServer.call(server, :demo_fire)
 

@@ -394,9 +394,10 @@ o que reforça o valor do item 6.
 
 ## P1: operação / desenvolvimento
 
-### 14. Modo demo sem câmera física
+### 15. Modo demo sem câmera física
 
-**Status**: EM ANDAMENTO (`fm/revela-demo-mode-sem-camera`).
+**Status**: FEITO em 2026-08-07 em `fm/revela-demo-mode-sem-camera`
+(`053e0ed`). PR URL a preencher no merge para `main`.
 
 **Observado**: para validar Host/Review (follow, classificar, editorial) sem
 hardware, era preciso uma Canon + gphoto2; isso atrasa demos e testes manuais.
@@ -405,6 +406,14 @@ hardware, era preciso uma Canon + gphoto2; isso atrasa demos e testes manuais.
 badge DEMO no Host, `camera_present` sempre true, nunca spawna gphoto2, botão
 **Disparar (demo)** / tecla `D` grava JPEG sintético no naming gphoto2 e segue
 o ingest real. Fora de escopo MVP: RAW, burst, plug/unplug, fixtures.
+
+**O que entrou**: `config/runtime.exs` liga `:demo` só via
+`REVELA_DEMO` (`1`/`true`/`yes`); `CameraServer` fakeia presença, arma sem
+gphoto2, e `demo_fire/1` grava `%Y%m%d-%H%M%S-%03n.jpg` (seq por vida do
+processo) com ingest real (inotify ou settle direto se o watcher falhar);
+Host mostra badge + **Disparar (demo)**; tecla `D` só com editorial ativo
+(antes do editorial, usar o botão). Sem o env, comportamento de produção.
+Documentado no README.
 
 ## P2: exploração, ainda sem forma definida
 

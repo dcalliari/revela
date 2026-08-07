@@ -11,7 +11,8 @@ defmodule RevelaWeb.HostLive do
   (cores, setas, limpar) e a legenda ficam em `ViewerComponents`.
 
   Com `REVELA_DEMO=1`, o Host mostra badge DEMO e, com a captura armada,
-  **Disparar (demo)** / tecla `D`/`d` (caminho real de ingest via arquivo).
+  **Disparar (demo)** (caminho real de ingest via arquivo). A tecla `D`/`d`
+  só liga com editorial ativo; antes disso use o botão `#demo-fire`.
   """
   use RevelaWeb, :live_view
 
