@@ -233,6 +233,14 @@ defmodule Revela.Capture do
 
   defp present_raw_path?(path), do: is_binary(path) and path != ""
 
+  @doc """
+  Importa uma pasta de fotos do cartao (JPEG/RAW) para o editorial ativo.
+  Ver `Revela.Capture.CardImport`.
+  """
+  def import_from_folder(source_dir, opts \\ []) do
+    Revela.Capture.CardImport.import_folder(source_dir, opts)
+  end
+
   # ── Editoriais ───────────────────────────────────────────────────────────────
 
   @doc """

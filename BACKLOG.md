@@ -390,8 +390,7 @@ preenchido — não precisa reconstruir o par na mão.
 
 ### 13. Fotos capturadas com a câmera desconectada
 
-**Status**: EM ANDAMENTO (ship import pasta → editorial ativo). Parado numa decisão
-pendente sobre o preenchimento do endereço do PR neste item.
+**Status**: FEITO (import pasta → editorial ativo; PR URL ao shipar).
 
 **Observado**: quando o disco encheu, a saída foi desconectar a câmera e seguir
 fotografando no cartão microSD, para não interromper o editorial. Essas fotos
