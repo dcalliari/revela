@@ -38,6 +38,10 @@ defmodule Revela.DataCase do
   def setup_sandbox(tags) do
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Revela.Repo, shared: not tags[:async])
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+
+    unless tags[:async] do
+      Revela.Capture.reset_host_viewer_state()
+    end
   end
 
   @doc """
