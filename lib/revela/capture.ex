@@ -100,9 +100,17 @@ defmodule Revela.Capture do
     :ok
   end
 
+  @doc "Editorial ativo (finished_at nulo), ou nil se nao ha um."
+  def current_editorial do
+    Repo.one(from e in Editorial, where: is_nil(e.finished_at), limit: 1)
+  end
+
   @doc "Id do editorial ativo (finished_at nulo), ou nil se nao ha um."
   def current_editorial_id do
-    Repo.one(from e in Editorial, where: is_nil(e.finished_at), select: e.id, limit: 1)
+    case current_editorial() do
+      %{id: id} -> id
+      nil -> nil
+    end
   end
 
   defp finish_active_editorial do

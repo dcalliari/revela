@@ -79,15 +79,13 @@ defmodule Revela.Capture.CameraServer do
 
     File.mkdir_p!(editorials_base)
 
-    # captures_dir e a pasta do editorial atual; ate escolher um, usa um limbo
-    captures_dir = Path.join(editorials_base, "_sem-editorial")
-    File.mkdir_p!(captures_dir)
+    {editorial, captures_dir} = restore_active_editorial(editorials_base)
 
     state = %{
       status: :idle,
       message: nil,
       editorials_base: editorials_base,
-      editorial: nil,
+      editorial: editorial,
       reserved_folder: nil,
       captures_dir: captures_dir,
       port: nil,
@@ -501,6 +499,19 @@ defmodule Revela.Capture.CameraServer do
     |> case do
       "" -> "editorial"
       s -> s
+    end
+  end
+
+  defp restore_active_editorial(editorials_base) do
+    case Capture.current_editorial() do
+      %{name: name, folder: folder} when is_binary(folder) and folder != "" ->
+        File.mkdir_p!(folder)
+        {name, folder}
+
+      _ ->
+        limbo = Path.join(editorials_base, "_sem-editorial")
+        File.mkdir_p!(limbo)
+        {nil, limbo}
     end
   end
 

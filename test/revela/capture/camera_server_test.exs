@@ -1,8 +1,51 @@
 defmodule Revela.Capture.CameraServerTest do
-  use ExUnit.Case, async: false
+  use Revela.DataCase, async: false
 
   alias Revela.Capture
   alias Revela.Capture.CameraServer
+
+  test "restaura editorial ativo do banco no boot" do
+    editorials_dir = temporary_editorials_dir()
+    folder = Path.join(editorials_dir, "2026-08-06 Casamento 120000-1")
+    File.mkdir_p!(folder)
+
+    {:ok, editorial} = Capture.start_editorial("Casamento", folder)
+    {:ok, photo} = Capture.create_photo(%{web_path: "/uploads/restore.jpg"})
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        presence_detector: fn -> false end,
+        presence_poll_ms: 60_000
+      })
+
+    wait_for_presence_check(server)
+
+    assert CameraServer.status(server).editorial == "Casamento"
+    assert :sys.get_state(server).captures_dir == folder
+    assert Capture.current_editorial_id() == editorial.id
+    assert Capture.list_photos() == [photo]
+  end
+
+  test "sem editorial ativo inicia no limbo" do
+    editorials_dir = temporary_editorials_dir()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        presence_detector: fn -> false end,
+        presence_poll_ms: 60_000
+      })
+
+    wait_for_presence_check(server)
+
+    assert CameraServer.status(server).editorial == nil
+    assert :sys.get_state(server).captures_dir == Path.join(editorials_dir, "_sem-editorial")
+  end
 
   test "nao arma a captura quando nenhuma camera foi detectada" do
     detector_state = start_supervised!({Agent, fn -> false end})
