@@ -66,4 +66,62 @@ defmodule Revela.CaptureTest do
                |> Repo.insert()
     end
   end
+
+  describe "paginacao e filtro por cor" do
+    setup do
+      {:ok, _editorial} = Capture.start_editorial("Grade", "/tmp/grade")
+
+      photos =
+        for i <- 1..30 do
+          {:ok, photo} = Capture.create_photo(%{web_path: "/uploads/#{i}.jpg"})
+          photo
+        end
+
+      %{photos: photos}
+    end
+
+    test "list_photos pagina com limit/offset e ordem desc", %{photos: photos} do
+      newest = List.last(photos)
+      oldest = hd(photos)
+
+      page1 = Capture.list_photos(order: :desc, limit: 24, offset: 0)
+      assert length(page1) == 24
+      assert hd(page1).id == newest.id
+      refute Enum.any?(page1, &(&1.id == oldest.id))
+
+      page2 = Capture.list_photos(order: :desc, limit: 24, offset: 24)
+      assert length(page2) == 6
+      assert List.last(page2).id == oldest.id
+
+      assert Capture.count_photos() == 30
+      assert Capture.list_photos(order: :desc, limit: 24, offset: 30) == []
+    end
+
+    test "filtro por cor roda no banco e combina com paginacao", %{photos: photos} do
+      [p1, p2, p3 | _] = photos
+
+      {:ok, _} = Capture.set_label(p1.id, "a", "Ana", 0)
+      {:ok, _} = Capture.set_label(p2.id, "a", "Ana", 2)
+      {:ok, _} = Capture.set_label(p3.id, "b", "Bia", 0)
+
+      reds = Capture.list_photos(colors: [0], order: :asc)
+      assert Enum.map(reds, & &1.id) == [p1.id, p3.id]
+      assert Capture.count_photos(colors: [0]) == 2
+
+      multi = Capture.list_photos(colors: [0, 2], order: :asc)
+      assert Enum.map(multi, & &1.id) == [p1.id, p2.id, p3.id]
+      assert Capture.count_photos(colors: [0, 2]) == 3
+
+      assert Capture.list_photos(colors: [4]) == []
+      assert Capture.count_photos(colors: [4]) == 0
+
+      # sem filtro continua listando todas
+      assert Capture.count_photos(colors: []) == 30
+      assert length(Capture.list_photos()) == 30
+
+      paged = Capture.list_photos(colors: [0], order: :desc, limit: 1, offset: 0)
+      assert length(paged) == 1
+      assert hd(paged).id == p3.id
+    end
+  end
 end

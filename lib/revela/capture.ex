@@ -34,13 +34,85 @@ defmodule Revela.Capture do
 
   # ── Fotos ─────────────────────────────────────────────────────────────────
 
-  @doc "Fotos do editorial atual, em ordem de captura. Vazio se nao ha editorial ativo."
-  def list_photos do
-    from(p in Photo, as: :photo, where: ^editorial_scope(), order_by: [asc: p.seq])
+  @doc """
+  Fotos do editorial atual. Vazio se nao ha editorial ativo.
+
+  Opcoes:
+
+    * `:order` — `:asc` (padrao, ordem de captura) ou `:desc` (mais recentes primeiro)
+    * `:limit` / `:offset` — paginacao no banco
+    * `:colors` — lista de cores (0..4); retorna fotos com ao menos um label em
+      qualquer dessas cores. Lista vazia ou omitida = sem filtro de cor.
+  """
+  def list_photos(opts \\ []) when is_list(opts) do
+    opts
+    |> photos_query()
     |> Repo.all()
   end
 
+  @doc """
+  Contagem de fotos do editorial atual, com o mesmo filtro de `:colors` de
+  `list_photos/1`. Usada pela paginacao da grade do host.
+  """
+  def count_photos(opts \\ []) when is_list(opts) do
+    colors = normalize_colors(Keyword.get(opts, :colors))
+
+    from(p in Photo, as: :photo, where: ^editorial_scope(), select: count(p.id))
+    |> apply_color_filter(colors)
+    |> Repo.one()
+  end
+
   def get_photo!(id), do: Repo.get!(Photo, id)
+
+  defp photos_query(opts) do
+    colors = normalize_colors(Keyword.get(opts, :colors))
+    order = Keyword.get(opts, :order, :asc)
+    limit = Keyword.get(opts, :limit)
+    offset = Keyword.get(opts, :offset, 0)
+
+    from(p in Photo, as: :photo, where: ^editorial_scope())
+    |> apply_color_filter(colors)
+    |> order_photos(order)
+    |> maybe_limit(limit)
+    |> maybe_offset(offset)
+  end
+
+  defp order_photos(query, :desc), do: order_by(query, [p], desc: p.seq)
+  defp order_photos(query, _), do: order_by(query, [p], asc: p.seq)
+
+  defp maybe_limit(query, nil), do: query
+  defp maybe_limit(query, limit) when is_integer(limit) and limit >= 0, do: limit(query, ^limit)
+
+  defp maybe_offset(query, offset) when is_integer(offset) and offset > 0,
+    do: offset(query, ^offset)
+
+  defp maybe_offset(query, _), do: query
+
+  defp normalize_colors(nil), do: []
+
+  defp normalize_colors(colors) when is_list(colors) do
+    colors
+    |> Enum.map(fn
+      c when is_integer(c) -> c
+      c when is_binary(c) -> String.to_integer(c)
+    end)
+    |> Enum.filter(&(&1 in 0..4))
+    |> Enum.uniq()
+  end
+
+  defp apply_color_filter(query, []), do: query
+
+  defp apply_color_filter(query, colors) do
+    from(p in query,
+      where:
+        exists(
+          from(l in Label,
+            where: l.photo_id == parent_as(:photo).id and l.color in ^colors,
+            select: 1
+          )
+        )
+    )
+  end
 
   @doc """
   Registra uma foto recem baixada, associada ao editorial ativo (se houver).

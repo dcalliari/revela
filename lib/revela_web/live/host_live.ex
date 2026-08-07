@@ -22,7 +22,8 @@ defmodule RevelaWeb.HostLive do
   alias Revela.Capture.CameraServer
   alias RevelaWeb.{Colors, Presence, ViewerComponents}
 
-  @recent 24
+  # tamanho da pagina da grade; a navegacao do viewer usa a lista completa
+  @page_size 24
 
   # o host classifica com uma identidade fixa, sem pedir nome
   @host_id "host"
@@ -53,6 +54,10 @@ defmodule RevelaWeb.HostLive do
      |> assign(:follow, true)
      |> assign(:notice, nil)
      |> assign(:labels, Capture.labels_for_reviewer(@host_id))
+     |> assign(:page, 0)
+     |> assign(:page_size, @page_size)
+     |> assign(:filter_colors, MapSet.new())
+     |> stream_configure(:grid_photos, dom_id: &"grid-photo-#{&1.id}")
      |> load_photos()
      |> maybe_warn_disk(capture)}
   end
@@ -111,6 +116,8 @@ defmodule RevelaWeb.HostLive do
          |> assign(:idx, 0)
          |> assign(:follow, true)
          |> assign(:labels, %{})
+         |> assign(:page, 0)
+         |> assign(:filter_colors, MapSet.new())
          |> assign(:notice, "Editorial \"#{name}\" iniciado. Originais em: #{folder}")
          |> load_photos()}
     end
@@ -128,8 +135,38 @@ defmodule RevelaWeb.HostLive do
      |> assign(:idx, 0)
      |> assign(:follow, true)
      |> assign(:labels, %{})
+     |> assign(:page, 0)
+     |> assign(:filter_colors, MapSet.new())
      |> assign(:notice, "Editorial finalizado. Os originais ficam salvos na pasta.")
      |> load_photos()}
+  end
+
+  def handle_event("toggle_color_filter", %{"color" => color}, socket) do
+    color = String.to_integer(color)
+
+    filter_colors =
+      if MapSet.member?(socket.assigns.filter_colors, color) do
+        MapSet.delete(socket.assigns.filter_colors, color)
+      else
+        MapSet.put(socket.assigns.filter_colors, color)
+      end
+
+    {:noreply,
+     socket
+     |> assign(:filter_colors, filter_colors)
+     |> assign(:page, 0)
+     |> load_grid()}
+  end
+
+  def handle_event("grid_prev_page", _params, socket) do
+    page = max(socket.assigns.page - 1, 0)
+    {:noreply, socket |> assign(:page, page) |> load_grid()}
+  end
+
+  def handle_event("grid_next_page", _params, socket) do
+    last_page = max(socket.assigns.total_pages - 1, 0)
+    page = min(socket.assigns.page + 1, last_page)
+    {:noreply, socket |> assign(:page, page) |> load_grid()}
   end
 
   def handle_event("pick", %{"color" => c}, socket) do
@@ -232,7 +269,8 @@ defmodule RevelaWeb.HostLive do
   end
 
   def handle_info({:label_changed, _photo_id}, socket) do
-    {:noreply, assign(socket, :tallies, Capture.tallies())}
+    # tallies vivem dentro dos itens do stream; re-stream + filtro pode incluir/excluir
+    {:noreply, load_grid(socket)}
   end
 
   def handle_info(%{event: "presence_diff"}, socket) do
@@ -242,7 +280,14 @@ defmodule RevelaWeb.HostLive do
   def handle_info(:session_reset, socket) do
     {:noreply,
      socket
-     |> assign(open: false, idx: 0, follow: true, labels: %{})
+     |> assign(
+       open: false,
+       idx: 0,
+       follow: true,
+       labels: %{},
+       page: 0,
+       filter_colors: MapSet.new()
+     )
      |> load_photos()}
   end
 
@@ -250,14 +295,36 @@ defmodule RevelaWeb.HostLive do
 
   # ── helpers ──────────────────────────────────────────────────────────────────
 
+  # lista completa para o viewer (follow/atalhos); grade usa pagina filtrada via stream
   defp load_photos(socket) do
     photos = Capture.list_photos()
 
     socket
     |> assign(:photos, photos)
-    |> assign(:total, length(photos))
-    |> assign(:recent, photos |> Enum.reverse() |> Enum.take(@recent))
+    |> load_grid()
+  end
+
+  defp load_grid(socket) do
+    colors = MapSet.to_list(socket.assigns.filter_colors)
+    filter_opts = [colors: colors]
+    total = Capture.count_photos(filter_opts)
+    page_size = socket.assigns.page_size
+    total_pages = max(ceil(total / page_size), 1)
+    page = socket.assigns.page |> max(0) |> min(total_pages - 1)
+    offset = page * page_size
+
+    grid_photos =
+      Capture.list_photos(
+        Keyword.merge(filter_opts, order: :desc, limit: page_size, offset: offset)
+      )
+
+    socket
+    |> assign(:page, page)
+    |> assign(:total, total)
+    |> assign(:total_pages, total_pages)
+    |> assign(:grid_empty?, grid_photos == [])
     |> assign(:tallies, Capture.tallies())
+    |> stream(:grid_photos, grid_photos, reset: true)
   end
 
   defp current_photo(%{photos: photos, idx: idx}), do: Enum.at(photos, idx)
@@ -420,22 +487,52 @@ defmodule RevelaWeb.HostLive do
 
           <div class="lg:col-span-2 card bg-base-100 shadow">
             <div class="card-body gap-4">
-              <div class="flex items-center justify-between">
-                <h2 class="card-title">Fotos ({@total})</h2>
-                <div class="flex gap-2 items-center text-xs opacity-70">
-                  <span :for={c <- Colors.all()} class="flex items-center gap-1">
-                    <span class="h-3 w-3 rounded-full" style={"background-color: #{c.hex}"} />
-                  </span>
+              <div class="flex items-center justify-between gap-3 flex-wrap">
+                <h2 id="host-photos-title" class="card-title">Fotos ({@total})</h2>
+                <div
+                  id="color-filters"
+                  class="flex gap-2 items-center text-xs"
+                  role="group"
+                  aria-label="Filtrar por cor"
+                >
+                  <button
+                    :for={c <- Colors.all()}
+                    type="button"
+                    id={"color-filter-#{c.value}"}
+                    phx-click="toggle_color_filter"
+                    phx-value-color={c.value}
+                    aria-pressed={to_string(MapSet.member?(@filter_colors, c.value))}
+                    title={"Filtrar #{c.name}"}
+                    class={[
+                      "h-4 w-4 rounded-full transition ring-offset-2 ring-offset-base-100",
+                      MapSet.member?(@filter_colors, c.value) && "ring-2 ring-base-content scale-110",
+                      !MapSet.member?(@filter_colors, c.value) && "opacity-70 hover:opacity-100"
+                    ]}
+                    style={"background-color: #{c.hex}"}
+                  />
                 </div>
               </div>
 
-              <div :if={@recent == []} class="text-center opacity-50 py-16">
-                Nenhuma foto ainda.
+              <div
+                :if={@grid_empty?}
+                id="host-grid-empty"
+                class="text-center opacity-50 py-16"
+              >
+                <%= if MapSet.size(@filter_colors) > 0 do %>
+                  Nenhuma foto com essas cores.
+                <% else %>
+                  Nenhuma foto ainda.
+                <% end %>
               </div>
 
-              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              <div
+                id="host-grid"
+                phx-update="stream"
+                class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"
+              >
                 <div
-                  :for={photo <- @recent}
+                  :for={{dom_id, photo} <- @streams.grid_photos}
+                  id={dom_id}
                   class="relative cursor-pointer"
                   phx-click="open"
                   phx-value-id={photo.id}
@@ -451,6 +548,34 @@ defmodule RevelaWeb.HostLive do
                     </span>
                   </div>
                 </div>
+              </div>
+
+              <div
+                :if={@total_pages > 1}
+                id="host-grid-pagination"
+                class="flex items-center justify-between gap-3 pt-1"
+              >
+                <button
+                  id="grid-prev-page"
+                  type="button"
+                  phx-click="grid_prev_page"
+                  disabled={@page <= 0}
+                  class="btn btn-sm btn-outline"
+                >
+                  Anterior
+                </button>
+                <span id="grid-page-label" class="text-xs opacity-70">
+                  Página {@page + 1} de {@total_pages}
+                </span>
+                <button
+                  id="grid-next-page"
+                  type="button"
+                  phx-click="grid_next_page"
+                  disabled={@page >= @total_pages - 1}
+                  class="btn btn-sm btn-outline"
+                >
+                  Próxima
+                </button>
               </div>
             </div>
           </div>

@@ -38,6 +38,16 @@ re-apply transform so LiveView patches (tallies, presence) do not wipe zoom.
 Do not reintroduce center-origin CSS on the viewer `<img>` or unconditional
 `resetZoom()` in `updated()`.
 
+## Domain: host grid
+
+The Host photo grid is paginated (24/page) and filterable by color chips
+(multi-select). Listing/filtering happens in `Capture.list_photos/1` and
+`count_photos/1` (`:order`, `:limit`, `:offset`, `:colors` — empty colors = all);
+the current page is a LiveView stream (`:grid_photos`) in `HostLive`. Changing
+filters resets to page 1. The immersive viewer still uses the full
+`list_photos/0` list for idx/follow — do not replace grid paging with another
+in-memory `@recent` take. See `test/revela_web/live/host_grid_test.exs`.
+
 ## Domain: color-folder export
 
 `Revela.Capture.Export` (+ `mix revela.export_colors`) copies/moves classified

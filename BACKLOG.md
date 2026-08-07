@@ -212,23 +212,13 @@ transform.
 
 ### 5. Paginação e filtro por cor na grade do host
 
-**Status**: EM ANDAMENTO. Implementado em `fm/revela-paginacao-filtro-cor-v2`; parado numa
-decisão pendente: classificar uma foto recria a grade inteira (piscada), a decidir entre
-corrigir para atualizar só a foto alterada ou aceitar e documentar.
+**Status**: FEITO nesta branch (`fm/revela-paginacao-filtro-cor-v2`); URL do PR
+preenchida na entrega no-mistakes.
 
-**Observado**: com ~2000 fotos, a grade do host mostra só as 24 mais recentes.
-Não havia como chegar nas primeiras fotos do editorial. Uma paginação temporária
-foi feita e desfeita na sessão de 2026-08-04, justamente para pensar numa
-organização melhor.
-
-**Estado atual**: `host_live.ex:209` corta em `@recent 24` fixas. As bolinhas de
-cor no cabeçalho (`host_live.ex:353`) são só legenda, não clicáveis.
-
-**Proposta**: paginação de verdade mais filtro por cor clicando nas bolinhas
-(alternar cada cor, combinando com a paginação). Considerar
-[LiveView streams](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#stream/4)
-para não carregar as 2000 fotos na memória do socket a cada render, e filtrar no
-banco em vez de em memória. Ver também o item 8.
+**Entregue**: grade do Host com paginação real (24/página, prev/next) e bolinhas
+de cor como filtro multi-select; consulta e filtro no banco via
+`Capture.list_photos/1` + `count_photos/1`; página da grade em LiveView stream.
+Filtro vazio = todas; mudar filtro volta à página 1.
 
 ## P1: melhorias de fluxo
 
