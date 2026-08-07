@@ -144,6 +144,50 @@ defmodule Revela.Capture.ExportTest do
     assert Revela.Repo.get!(Revela.Capture.Photo, photo.id).raw_path == raw
   end
 
+  test "move cross-device limpa dest se rm da origem falhar" do
+    {:ok, _} =
+      Capture.start_editorial(
+        "Exdev cleanup",
+        Path.join(System.tmp_dir!(), "revela-ed-exdev-#{System.unique_integer([:positive])}")
+      )
+
+    # Source on the worktree disk; dest under /tmp (tmpfs) so rename returns :exdev.
+    src_dir =
+      Path.join(
+        File.cwd!(),
+        "tmp/exdev-src-#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(src_dir)
+    raw = Path.join(src_dir, "exdev.CR2")
+    File.write!(raw, "exdev-bytes")
+    File.chmod!(src_dir, 0o555)
+
+    on_exit(fn ->
+      File.chmod!(src_dir, 0o755)
+      File.rm_rf!(src_dir)
+    end)
+
+    {:ok, photo} =
+      Capture.create_photo(%{
+        web_path: "/uploads/exdev.jpg",
+        raw_path: raw
+      })
+
+    {:ok, _} = Capture.set_label(photo.id, "host", "host", 0)
+
+    dest = Path.join(System.tmp_dir!(), "revela-exdev-#{System.unique_integer([:positive])}")
+    on_exit(fn -> File.rm_rf!(dest) end)
+
+    assert {:ok, result} = Export.export(dest: dest, mode: :move)
+    assert result.exported == []
+    assert [%{photo_id: id, reason: {:transfer_failed, _reason, ^raw, dest_file}}] = result.skipped
+    assert id == photo.id
+    refute File.exists?(dest_file)
+    assert File.read!(raw) == "exdev-bytes"
+    assert Revela.Repo.get!(Revela.Capture.Photo, photo.id).raw_path == raw
+  end
+
   test "recusa move quando a unica fonte e o preview web", %{tmp: tmp} do
     {:ok, editorial} = Capture.start_editorial("Preview move", Path.join(tmp, "ed-pv"))
     uploads = Path.join(Application.app_dir(:revela, "priv/static/uploads"), to_string(editorial.id))

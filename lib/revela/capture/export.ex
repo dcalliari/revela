@@ -334,14 +334,27 @@ defmodule Revela.Capture.Export do
         :ok
 
       {:error, :exdev} ->
-        with :ok <- File.cp(src, dest),
-             :ok <- File.rm(src) do
-          :ok
-        else
-          {:error, reason} -> {:error, reason}
+        move_across_devices(src, dest)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp move_across_devices(src, dest) do
+    case File.cp(src, dest) do
+      :ok ->
+        case File.rm(src) do
+          :ok ->
+            :ok
+
+          {:error, reason} ->
+            _ = File.rm(dest)
+            {:error, reason}
         end
 
       {:error, reason} ->
+        _ = File.rm(dest)
         {:error, reason}
     end
   end
