@@ -24,8 +24,8 @@ defmodule Revela.Capture.Ingest do
   @name_pattern ~r/^(\d{8})-(\d{6})-(\d+)$/
 
   @doc """
-  Processa o JPEG em `path`. Ignora arquivos que nao sejam JPEG (o .cr2 e
-  captado como irmao do JPEG, nao processado direto).
+  Processa o JPEG em `path`. Ignora arquivos que nao sejam JPEG (`.cr2`/`.cr3`
+  entram via `attach_raw/1` como irmao, nao por este caminho).
   """
   def process(path) do
     if jpeg?(path) and File.exists?(path) do

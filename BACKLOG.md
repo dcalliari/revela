@@ -260,22 +260,22 @@ voltar. Nos celulares dos revisores, não aplicar.
 
 ### 8. `raw_path` vazio para todas as fotos
 
-**Status**: EM ANDAMENTO (ship JPEG↔RAW sibling match + backfill).
+**Status**: FEITO em 2026-08-07 (`a79314f`). PR URL a preencher no ship.
 
 **Observado**: ao separar os `.cr2` das fotos marcadas de azul, o campo
 `raw_path` estava vazio nas 2025 fotos do editorial. Os RAWs tiveram que ser
 localizados manualmente, casando índice de sequência e horário do nome.
 
-**Causa**: `find_raw_sibling` (`lib/revela/capture/ingest.ex:79`) procura um RAW
-com o mesmo nome do JPEG. Mas em RAW+JPEG a câmera grava os dois com índices
-sequenciais diferentes: o JPEG sai com índice ímpar e o `.cr2` com o índice
-seguinte (ex.: `20260804-133708-027.jpg` e `20260804-133708-028.cr2`). O carimbo
-de tempo também pode variar em 1s, porque o arquivo maior demora mais para
-transferir.
+**Causa (histórico)**: `find_raw_sibling` só aceitava basename exato
+(`foo.jpg` → `foo.cr2`). Em RAW+JPEG o gphoto2 grava índices adjacentes
+(JPEG N, RAW N+1; ex. `20260804-133708-027.jpg` / `20260804-133708-028.cr2`) e
+o carimbo do nome pode diferir ~1s.
 
-**Impacto**: qualquer funcionalidade que dependa do RAW fica inviável, incluindo
-o export de sidecars `.xmp` para o darktable que já está previsto no README.
-Vale corrigir antes desse export, e fazer um backfill dos registros existentes.
+**O que entrou**: match exato + fallback N+1 com tolerância de 2s no carimbo
+(`Ingest.find_raw_sibling/2` / `match_raw_sibling/2`); `attach_raw/1` quando o
+RAW assenta depois do JPEG (`CameraServer`); um RAW só pode ser claimado por
+uma foto (UPDATE condicional + índice único parcial); `mix revela.backfill_raw_paths`
+(`--dry-run`, idempotente, pula ambíguos).
 
 ### 11. Tela de pós-produção
 
@@ -367,13 +367,11 @@ Fotos provavelmente não é o que se quer.
 selecionar o intervalo dentro do sistema. Hoje a seleção mora na cabeça de quem
 memorizou o nome da primeira e da última foto.
 
-**Nota de implementação**: o casamento entre foto e RAW não é trivial e vale
-guardar o aprendizado. O gphoto2 nomeia com `%Y%m%d-%H%M%S-%03n.%C`, e em
-RAW+JPEG cada disparo gera dois arquivos: o JPEG com índice N e o RAW com N+1.
-O índice reinicia a cada restart do gphoto2, então ele não é único no editorial:
-é preciso casar por índice **mais** proximidade de horário (o RAW pode sair 1s
-depois, porque o arquivo é maior). Resolver o item 8 (`raw_path` vazio) elimina
-essa reconstrução por completo.
+**Nota de implementação**: o casamento JPEG↔RAW (gphoto2
+`%Y%m%d-%H%M%S-%03n`: JPEG N / RAW N+1 + proximidade de horário; o índice
+reinicia a cada restart do gphoto2) ficou no ingest (`find_raw_sibling` /
+`attach_raw`) e no backfill do item 8. Export por cor usa `raw_path` já
+preenchido — não precisa reconstruir o par na mão.
 
 ### 13. Fotos capturadas com a câmera desconectada
 
@@ -406,5 +404,5 @@ cada uma custa em setup no dia da produção, antes de decidir qualquer coisa.
 ---
 
 Ver também a seção "Pendente (proxima fase)" do [README](README.md), que já
-registra o export de sidecars `.xmp` para o darktable (dependente do item 8) e o
-espelho de vídeo ao vivo.
+registra o export de sidecars `.xmp` para o darktable (usa `raw_path` do
+item 8) e o espelho de vídeo ao vivo.
