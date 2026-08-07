@@ -9,6 +9,9 @@ defmodule RevelaWeb.HostLive do
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
   (cores, setas, limpar) e a legenda ficam em `ViewerComponents`.
+
+  O estado do viewer (`photo_id`, `follow`, `open`) e publicado via
+  `Capture.broadcast_host_viewer/1` para a superficie `/tv` (`TvLive`).
   """
   use RevelaWeb, :live_view
 
