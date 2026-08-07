@@ -189,6 +189,8 @@ número pequeno sobre cada bolinha de cor.
 
 ### 4. Zoom instável no celular
 
+**Status**: EM ANDAMENTO (ship PinchZoom: false double-tap, focal point, persist across LiveView).
+
 **Observado**: o pinçar às vezes só dava zoom enquanto o dedo estava na tela, o
 zoom só funcionava no centro da imagem, e o comportamento era inconsistente.
 
@@ -264,6 +266,8 @@ maior (~30s), reiniciada a cada interação e com indicação visível de que va
 voltar. Nos celulares dos revisores, não aplicar.
 
 ### 8. `raw_path` vazio para todas as fotos
+
+**Status**: EM ANDAMENTO (ship JPEG↔RAW sibling match + backfill).
 
 **Observado**: ao separar os `.cr2` das fotos marcadas de azul, o campo
 `raw_path` estava vazio nas 2025 fotos do editorial. Os RAWs tiveram que ser
@@ -379,6 +383,8 @@ depois, porque o arquivo é maior). Resolver o item 8 (`raw_path` vazio) elimina
 essa reconstrução por completo.
 
 ### 13. Fotos capturadas com a câmera desconectada
+
+**Status**: EM ANDAMENTO (ship import pasta → editorial ativo).
 
 **Observado**: quando o disco encheu, a saída foi desconectar a câmera e seguir
 fotografando no cartão microSD, para não interromper o editorial. Essas fotos
