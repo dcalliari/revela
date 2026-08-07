@@ -137,7 +137,10 @@ defmodule Revela.Capture.ExportTest do
              )
 
     assert result.exported == []
-    assert [%{photo_id: id, reason: {:path_update_failed, :simulated_db_failure}}] = result.skipped
+
+    assert [%{photo_id: id, reason: {:path_update_failed, :simulated_db_failure}}] =
+             result.skipped
+
     assert id == photo.id
     assert File.read!(raw) == "rb"
     refute File.exists?(Path.join(dest, "vermelho/rollback.CR2"))
@@ -181,7 +184,10 @@ defmodule Revela.Capture.ExportTest do
 
     assert {:ok, result} = Export.export(dest: dest, mode: :move)
     assert result.exported == []
-    assert [%{photo_id: id, reason: {:transfer_failed, _reason, ^raw, dest_file}}] = result.skipped
+
+    assert [%{photo_id: id, reason: {:transfer_failed, _reason, ^raw, dest_file}}] =
+             result.skipped
+
     assert id == photo.id
     refute File.exists?(dest_file)
     assert File.read!(raw) == "exdev-bytes"
@@ -190,7 +196,10 @@ defmodule Revela.Capture.ExportTest do
 
   test "recusa move quando a unica fonte e o preview web", %{tmp: tmp} do
     {:ok, editorial} = Capture.start_editorial("Preview move", Path.join(tmp, "ed-pv"))
-    uploads = Path.join(Application.app_dir(:revela, "priv/static/uploads"), to_string(editorial.id))
+
+    uploads =
+      Path.join(Application.app_dir(:revela, "priv/static/uploads"), to_string(editorial.id))
+
     File.mkdir_p!(uploads)
     preview = Path.join(uploads, "only.jpg")
     File.write!(preview, "preview-bytes")
@@ -215,7 +224,10 @@ defmodule Revela.Capture.ExportTest do
 
   test "rejeita cores invalidas em vez de filtrar em silencio", %{tmp: tmp} do
     {:ok, _} = Capture.start_editorial("Bad color", Path.join(tmp, "ed-bc"))
-    assert {:error, {:invalid_colors, [5]}} = Export.export(dest: Path.join(tmp, "x"), colors: [5])
+
+    assert {:error, {:invalid_colors, [5]}} =
+             Export.export(dest: Path.join(tmp, "x"), colors: [5])
+
     assert {:error, {:invalid_colors, []}} = Export.export(dest: Path.join(tmp, "x"), colors: [])
   end
 
@@ -286,7 +298,10 @@ defmodule Revela.Capture.ExportTest do
     dest = Path.join(tmp, "out-cc")
     assert {:ok, result} = Export.export(dest: dest)
     assert result.exported == []
-    assert [%{photo_id: id, reason: {:transfer_failed, _reason, ^raw, dest_file}}] = result.skipped
+
+    assert [%{photo_id: id, reason: {:transfer_failed, _reason, ^raw, dest_file}}] =
+             result.skipped
+
     assert id == photo.id
     refute File.exists?(dest_file)
   end

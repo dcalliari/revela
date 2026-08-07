@@ -226,7 +226,18 @@ defmodule Revela.Capture.Export do
 
         case transfer(mode, src, dest) do
           :ok ->
-            finish_transfer(photo, color, folder, mode, kind, src, dest, warning, path_updater, acc)
+            finish_transfer(
+              photo,
+              color,
+              folder,
+              mode,
+              kind,
+              src,
+              dest,
+              warning,
+              path_updater,
+              acc
+            )
 
           {:error, reason} ->
             skip(acc, photo, {:transfer_failed, reason, src, dest})
