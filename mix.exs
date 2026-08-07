@@ -10,7 +10,7 @@ defmodule Revela.MixProject do
       # :disksup so existe se o pacote os_mon estiver instalado (Arch separa
       # isso do pacote base do erlang). CameraServer inicia a app sob demanda
       # e degrada sem crashar quando ausente; ver default_disk_checker/1.
-      elixirc_options: [no_warn_undefined: [{:disksup, :get_disk_data, 0}]],
+      elixirc_options: [no_warn_undefined: [{:disksup, :get_disk_info, 1}]],
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),

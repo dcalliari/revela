@@ -499,8 +499,14 @@ defmodule RevelaWeb.HostLive do
 
   # traduz espaco livre para o que o fotografo entende: quantas fotos ainda
   # cabem, calculado a partir da media real de bytes por disparo do editorial.
+  # Se o monitoramento de disco nao estiver disponivel (:os_mon ausente), avisa.
   defp free_space_hint(%{estimated_shots_left: n}) when is_integer(n),
     do: "Espaço livre: cabem ~#{n} fotos."
+
+  defp free_space_hint(%{disk_awareness: :unavailable}),
+    do:
+      "Aviso: monitoramento de disco indisponível (pacote erlang-os_mon). " <>
+        "Parada preventiva desativada."
 
   defp free_space_hint(_capture), do: nil
 

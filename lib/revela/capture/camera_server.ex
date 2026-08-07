@@ -24,12 +24,15 @@ defmodule Revela.Capture.CameraServer do
   periodicamente enquanto nao estamos capturando. O poll pausa durante :running
   para nao competir pela interface com o proprio gphoto2 do captura.
 
-  Espaco em disco (`free_disk_bytes`, `estimated_shots_left`): o gphoto2 ignora
-  SIGTERM, entao a parada normal manda SIGKILL nele (ver `kill_port/1`). Isso e
-  seguro entre disparos, mas matar o processo no meio de uma transferencia PTP
-  trava a camera de vez (so a bateria recupera). Por isso a parada por disco
-  cheio (`maybe_stop_for_low_disk/1`) so age quando `pending` esta vazio, ou
-  seja, nenhum arquivo esta sendo baixado/assentando no momento.
+  Espaco em disco (`free_disk_bytes`, `estimated_shots_left`, `disk_awareness`):
+  o gphoto2 ignora SIGTERM, entao a parada normal manda SIGKILL nele (ver
+  `kill_port/1`). Isso e seguro entre disparos, mas matar o processo no meio de
+  uma transferencia PTP trava a camera de vez (so a bateria recupera). A parada
+  por disco cheio (`maybe_stop_for_low_disk/1`) so age quando `pending` esta
+  vazio (JPEG e RAW) e a janela de silencio pos-atividade de transferencia
+  passou — cobrindo o intervalo entre o disparo e o primeiro evento inotify, e
+  entre arquivos do mesmo disparo. Se `:os_mon`/`:disksup` estiver ausente,
+  `disk_awareness` fica `:unavailable` e a UI avisa (boot nao falha).
   """
 
   use GenServer
@@ -62,6 +65,11 @@ defmodule Revela.Capture.CameraServer do
   # intervalo do poll de espaco em disco (fora do gatilho por disparo, que roda
   # a cada foto que assenta)
   @disk_poll_ms 15_000
+
+  # janela minima sem atividade de transferencia (stdout do gphoto2, evento de
+  # arquivo ou settle) antes de considerar seguro o SIGKILL por disco cheio.
+  # Cobre o buraco entre o disparo e o primeiro inotify, e entre JPEG/RAW.
+  @transfer_quiet_ms 2_500
 
   # ── API ─────────────────────────────────────────────────────────────────────
 
@@ -131,13 +139,20 @@ defmodule Revela.Capture.CameraServer do
       presence_timer: nil,
       # arquivos aguardando "assentar": %{path => timer_ref}. Nao vazio == ha
       # uma transferencia do gphoto2 em curso; nunca mata o processo nesse estado.
+      # Inclui JPEG e RAW (.cr2/.cr3) so para gating de parada; so JPEG e ingerido.
       pending: %{},
       processed: MapSet.new(),
       disk_checker: Keyword.get(opts, :disk_checker, &default_disk_checker/1),
       min_free_disk_bytes: min_free_disk_bytes(opts),
       disk_poll_ms: Keyword.get(opts, :disk_poll_ms, @disk_poll_ms),
+      transfer_quiet_ms: Keyword.get(opts, :transfer_quiet_ms, @transfer_quiet_ms),
+      last_transfer_at: nil,
+      quiet_disk_check_ref: nil,
       free_disk_bytes: nil,
-      estimated_shots_left: nil
+      estimated_shots_left: nil,
+      # :available quando o disk_checker devolve bytes; :unavailable quando
+      # :os_mon/:disksup falta ou falha (parada preventiva fica desligada).
+      disk_awareness: :unavailable
     }
 
     state = update_disk_status(state)
@@ -300,18 +315,34 @@ defmodule Revela.Capture.CameraServer do
 
   def handle_info({:presence, _check_ref, _present?}, state), do: {:noreply, state}
 
-  # saida de texto do gphoto2 (log de disparos); apenas registra
+  # saida de texto do gphoto2 (log de disparos); marca atividade de transferencia
+  # para a janela quiet — o stdout costuma chegar antes do inotify do arquivo.
   def handle_info({port, {:data, data}}, %{port: port} = state) do
-    data |> String.trim() |> log_gphoto2()
+    data = String.trim(data)
+    log_gphoto2(data)
+
+    state =
+      if data == "" do
+        state
+      else
+        note_transfer_activity(state)
+      end
+
     {:noreply, state}
   end
 
   # evento do watcher de arquivos
   def handle_info({:file_event, watcher, {path, _events}}, %{watcher_pid: watcher} = state) do
-    if candidate?(path) and not MapSet.member?(state.processed, path) do
+    if transfer_candidate?(path) and not MapSet.member?(state.processed, path) do
       if ref = state.pending[path], do: Process.cancel_timer(ref)
       ref = Process.send_after(self(), {:settle, path}, @settle_ms)
-      {:noreply, %{state | pending: Map.put(state.pending, path, ref)}}
+
+      state =
+        state
+        |> note_transfer_activity()
+        |> Map.put(:pending, Map.put(state.pending, path, ref))
+
+      {:noreply, state}
     else
       {:noreply, state}
     end
@@ -321,14 +352,16 @@ defmodule Revela.Capture.CameraServer do
     {:noreply, %{state | watcher_pid: nil}}
   end
 
-  # arquivo assentou: processa uma unica vez
+  # arquivo assentou: processa JPEG uma unica vez; RAW so sai do pending
   def handle_info({:settle, path}, state) do
     case Map.pop(state.pending, path) do
       {nil, _pending} ->
         {:noreply, state}
 
       {_ref, pending} ->
-        state = %{state | pending: pending}
+        state =
+          %{state | pending: pending}
+          |> note_transfer_activity()
 
         state =
           cond do
@@ -339,22 +372,18 @@ defmodule Revela.Capture.CameraServer do
               state
 
             true ->
-              case Ingest.process(path) do
-                {:ok, _photo} ->
-                  %{state | processed: MapSet.put(state.processed, path)}
-
-                :ignore ->
-                  state
-
-                {:error, _reason} ->
-                  # deixa fora do processed para permitir nova tentativa em evento futuro
-                  state
-              end
+              settle_file(path, state)
           end
 
-        # gatilho principal da parada preventiva: roda logo apos uma foto terminar
-        # de chegar, na janela entre disparos onde e seguro encerrar o gphoto2.
-        {:noreply, check_disk_between_shots(state)}
+        # checagem imediata (no-op se quiet ainda aberta) + reagendamento para
+        # quando a janela quiet expirar, cobrindo o buraco JPEG→RAW sem esperar
+        # o poll de 15s.
+        state =
+          state
+          |> check_disk_between_shots()
+          |> maybe_schedule_quiet_disk_check()
+
+        {:noreply, state}
     end
   end
 
@@ -366,6 +395,13 @@ defmodule Revela.Capture.CameraServer do
     Process.send_after(self(), :poll_disk, state.disk_poll_ms)
     {:noreply, state}
   end
+
+  def handle_info({:quiet_disk_check, check_ref}, %{quiet_disk_check_ref: check_ref} = state) do
+    state = %{state | quiet_disk_check_ref: nil}
+    {:noreply, check_disk_between_shots(state)}
+  end
+
+  def handle_info({:quiet_disk_check, _stale_ref}, state), do: {:noreply, state}
 
   def handle_info(_msg, state), do: {:noreply, state}
 
@@ -380,13 +416,38 @@ defmodule Revela.Capture.CameraServer do
   defp do_start(%{status: :running} = state), do: {public_status(state), state}
 
   defp do_start(state) do
-    case System.find_executable("gphoto2") do
-      nil ->
+    state = update_disk_status(state)
+
+    cond do
+      disk_below_minimum?(state) ->
+        message = low_disk_message(state)
+
+        state =
+          %{
+            state
+            | desired: false,
+              status: :disk_full,
+              message: message,
+              backoff_ms: @initial_backoff
+          }
+          |> schedule_presence_poll(0)
+
+        broadcast(state)
+
+        Logger.warning(
+          "Recusa iniciar captura: espaco livre (#{state.free_disk_bytes} bytes) " <>
+            "abaixo do minimo (#{state.min_free_disk_bytes} bytes)"
+        )
+
+        {public_status(state), state}
+
+      is_nil(System.find_executable("gphoto2")) ->
         state = %{state | status: :error, message: "gphoto2 não encontrado no PATH"}
         broadcast(state)
         {public_status(state), state}
 
-      gphoto2 ->
+      true ->
+        gphoto2 = System.find_executable("gphoto2")
         release_gvfs()
         state = ensure_watcher(state)
 
@@ -619,9 +680,43 @@ defmodule Revela.Capture.CameraServer do
     _ -> :ok
   end
 
-  defp candidate?(path) do
+  defp transfer_candidate?(path) do
+    ext = path |> Path.extname() |> String.downcase()
+    ext in [".jpg", ".jpeg", ".cr2", ".cr3"]
+  end
+
+  defp jpeg_path?(path) do
     ext = path |> Path.extname() |> String.downcase()
     ext in [".jpg", ".jpeg"]
+  end
+
+  defp raw_path?(path) do
+    ext = path |> Path.extname() |> String.downcase()
+    ext in [".cr2", ".cr3"]
+  end
+
+  defp settle_file(path, state) do
+    cond do
+      jpeg_path?(path) ->
+        case Ingest.process(path) do
+          {:ok, _photo} ->
+            %{state | processed: MapSet.put(state.processed, path)}
+
+          :ignore ->
+            state
+
+          {:error, _reason} ->
+            # deixa fora do processed para permitir nova tentativa em evento futuro
+            state
+        end
+
+      raw_path?(path) ->
+        # RAW so entra em pending para nao SIGKILL no meio do PTP; nao ingerir.
+        %{state | processed: MapSet.put(state.processed, path)}
+
+      true ->
+        state
+    end
   end
 
   defp log_gphoto2(""), do: :ok
@@ -634,7 +729,8 @@ defmodule Revela.Capture.CameraServer do
       editorial: state.editorial,
       camera_present: state.camera_present,
       free_disk_bytes: state.free_disk_bytes,
-      estimated_shots_left: state.estimated_shots_left
+      estimated_shots_left: state.estimated_shots_left,
+      disk_awareness: state.disk_awareness
     }
   end
 
@@ -658,25 +754,35 @@ defmodule Revela.Capture.CameraServer do
   # so recalcula os numeros; nao decide nem para a captura (usado tambem ao
   # trocar de editorial, onde a captura ja esta parada).
   defp update_disk_status(state) do
-    free_bytes = run_disk_checker(state.disk_checker, state.captures_dir)
-    avg_bytes = avg_bytes_per_shot(state.captures_dir) || @fallback_avg_bytes_per_shot
+    case run_disk_checker(state.disk_checker, state.captures_dir) do
+      free_bytes when is_integer(free_bytes) ->
+        avg_bytes = avg_bytes_per_shot(state.captures_dir) || @fallback_avg_bytes_per_shot
+        estimated_shots = max(div(free_bytes, trunc(avg_bytes)), 0)
 
-    estimated_shots =
-      if is_integer(free_bytes), do: max(div(free_bytes, trunc(avg_bytes)), 0), else: nil
+        %{
+          state
+          | free_disk_bytes: free_bytes,
+            estimated_shots_left: estimated_shots,
+            disk_awareness: :available
+        }
 
-    %{state | free_disk_bytes: free_bytes, estimated_shots_left: estimated_shots}
+      :unavailable ->
+        %{
+          state
+          | free_disk_bytes: nil,
+            estimated_shots_left: nil,
+            disk_awareness: :unavailable
+        }
+    end
   end
 
-  # so para quando: capturando, espaco abaixo do piso, e nenhuma transferencia
-  # em curso (pending vazio). E exatamente essa terceira condicao que evita
-  # matar o gphoto2 no meio de uma transferencia PTP e travar a camera.
-  defp maybe_stop_for_low_disk(
-         %{status: :running, pending: pending, free_disk_bytes: free} = state
-       )
-       when map_size(pending) == 0 do
-    if is_integer(free) and free < state.min_free_disk_bytes do
+  # so para quando: capturando, espaco abaixo do piso, nenhuma transferencia
+  # em curso (pending vazio) e janela quiet sem atividade recente. A quiet
+  # window evita SIGKILL no buraco antes do primeiro inotify / entre JPEG-RAW.
+  defp maybe_stop_for_low_disk(%{status: :running} = state) do
+    if disk_below_minimum?(state) and safe_to_stop_for_disk?(state) do
       Logger.warning(
-        "Espaco livre (#{free} bytes) abaixo do minimo configurado " <>
+        "Espaco livre (#{state.free_disk_bytes} bytes) abaixo do minimo configurado " <>
           "(#{state.min_free_disk_bytes} bytes); parando captura entre disparos"
       )
 
@@ -697,6 +803,44 @@ defmodule Revela.Capture.CameraServer do
   end
 
   defp maybe_stop_for_low_disk(state), do: state
+
+  defp disk_below_minimum?(%{free_disk_bytes: free, min_free_disk_bytes: min})
+       when is_integer(free),
+       do: free < min
+
+  defp disk_below_minimum?(_state), do: false
+
+  defp safe_to_stop_for_disk?(%{pending: pending} = state) when map_size(pending) == 0 do
+    transfer_quiet?(state)
+  end
+
+  defp safe_to_stop_for_disk?(_state), do: false
+
+  defp note_transfer_activity(state) do
+    state = cancel_quiet_disk_check(state)
+    %{state | last_transfer_at: System.monotonic_time(:millisecond)}
+  end
+
+  defp transfer_quiet?(%{last_transfer_at: nil}), do: true
+
+  defp transfer_quiet?(%{last_transfer_at: at, transfer_quiet_ms: quiet_ms}) do
+    System.monotonic_time(:millisecond) - at >= quiet_ms
+  end
+
+  defp maybe_schedule_quiet_disk_check(
+         %{status: :running, pending: pending, quiet_disk_check_ref: nil} = state
+       )
+       when map_size(pending) == 0 do
+    check_ref = make_ref()
+    Process.send_after(self(), {:quiet_disk_check, check_ref}, state.transfer_quiet_ms)
+    %{state | quiet_disk_check_ref: check_ref}
+  end
+
+  defp maybe_schedule_quiet_disk_check(state), do: state
+
+  defp cancel_quiet_disk_check(%{quiet_disk_check_ref: nil} = state), do: state
+
+  defp cancel_quiet_disk_check(state), do: %{state | quiet_disk_check_ref: nil}
 
   defp low_disk_message(state) do
     gb = format_gb(state.free_disk_bytes)
@@ -727,30 +871,43 @@ defmodule Revela.Capture.CameraServer do
   end
 
   defp run_disk_checker(checker, path) do
-    checker.(path)
+    case checker.(path) do
+      free when is_integer(free) and free >= 0 -> free
+      :unavailable -> :unavailable
+      _other -> :unavailable
+    end
   rescue
-    _error -> nil
+    _error -> :unavailable
   catch
-    _kind, _reason -> nil
+    _kind, _reason -> :unavailable
   end
 
-  # media real de bytes por disparo na pasta do editorial atual (RAW + JPEG),
-  # usada para traduzir espaco livre em "cabem ~N fotos". nil quando a pasta
-  # ainda nao tem nenhum arquivo (editorial recem-criado).
+  # media real de bytes por disparo na pasta do editorial atual (soma RAW+JPEG
+  # do mesmo stem), usada para traduzir espaco livre em "cabem ~N fotos".
+  # nil quando a pasta ainda nao tem nenhum arquivo (editorial recem-criado).
   defp avg_bytes_per_shot(dir) do
     case File.ls(dir) do
       {:ok, entries} ->
-        sizes =
+        shot_sizes =
           entries
           |> Enum.reject(&String.starts_with?(&1, "."))
           |> Enum.map(&Path.join(dir, &1))
           |> Enum.filter(&File.regular?/1)
-          |> Enum.map(&file_size/1)
-          |> Enum.reject(&is_nil/1)
+          |> Enum.reduce(%{}, fn path, acc ->
+            case file_size(path) do
+              nil ->
+                acc
 
-        case sizes do
+              size ->
+                stem = path |> Path.basename() |> Path.rootname() |> String.downcase()
+                Map.update(acc, stem, size, &(&1 + size))
+            end
+          end)
+          |> Map.values()
+
+        case shot_sizes do
           [] -> nil
-          _sizes -> Enum.sum(sizes) / length(sizes)
+          sizes -> Enum.sum(sizes) / length(sizes)
         end
 
       {:error, _reason} ->
@@ -765,34 +922,36 @@ defmodule Revela.Capture.CameraServer do
     end
   end
 
-  # espaco livre do mount que contem `path`, em bytes. Usa :disksup (os_mon) em
-  # vez de chamar `df` na mao; inicia a app sob demanda (nao entra em
-  # extra_applications) para nao travar o boot inteiro em ambientes sem a lib
-  # os_mon instalada, ex.: Arch separa isso do pacote base do erlang.
+  # espaco livre do mount que contem `path`, em bytes. Usa :disksup.get_disk_info/1
+  # (leitura ao vivo; get_disk_data/0 e cache de ate ~30 min). Inicia :os_mon sob
+  # demanda; devolve :unavailable se o pacote nao estiver instalado.
   defp default_disk_checker(path) do
-    :ok = ensure_os_mon_started()
-    path = Path.expand(path)
-
-    :disksup.get_disk_data()
-    |> Enum.map(fn {id, kbyte, capacity} -> {to_string(id), kbyte, capacity} end)
-    |> Enum.filter(fn {id, _kbyte, _capacity} -> mount_contains?(id, path) end)
-    |> Enum.max_by(fn {id, _kbyte, _capacity} -> String.length(id) end, fn -> nil end)
-    |> case do
-      nil -> nil
-      {_id, kbyte, capacity} -> trunc(kbyte * 1024 * (100 - capacity) / 100)
+    case ensure_os_mon_started() do
+      :ok -> fetch_live_free_disk_bytes(path)
+      {:error, _reason} -> :unavailable
     end
   end
 
-  defp mount_contains?(mount_id, path) do
-    mount_id = String.trim_trailing(mount_id, "/")
-    mount_id = if mount_id == "", do: "/", else: mount_id
-    path == mount_id or String.starts_with?(path, mount_id <> "/")
+  defp fetch_live_free_disk_bytes(path) do
+    path_chars = path |> Path.expand() |> String.to_charlist()
+
+    case :disksup.get_disk_info(path_chars) do
+      [{_id, 0, 0, 0}] ->
+        :unavailable
+
+      [{_id, _total_kib, avail_kib, _capacity}]
+      when is_integer(avail_kib) and avail_kib >= 0 ->
+        avail_kib * 1024
+
+      _other ->
+        :unavailable
+    end
   end
 
   defp ensure_os_mon_started do
     case Application.ensure_all_started(:os_mon) do
       {:ok, _apps} -> :ok
-      {:error, reason} -> raise "os_mon indisponivel: #{inspect(reason)}"
+      {:error, reason} -> {:error, reason}
     end
   end
 end

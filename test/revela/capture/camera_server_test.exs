@@ -86,8 +86,48 @@ defmodule Revela.Capture.CameraServerTest do
     status = CameraServer.status(server)
 
     assert status.free_disk_bytes == 42_000_000_000
+    assert status.disk_awareness == :available
     assert is_integer(status.estimated_shots_left)
     assert status.estimated_shots_left > 0
+  end
+
+  test "marca disk_awareness como unavailable quando o checker falha" do
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> :unavailable end
+      })
+
+    status = CameraServer.status(server)
+
+    assert status.disk_awareness == :unavailable
+    assert status.free_disk_bytes == nil
+    assert status.estimated_shots_left == nil
+  end
+
+  test "estima bytes por disparo (RAW+JPEG do mesmo stem), nao por arquivo" do
+    editorials_dir = temporary_editorials_dir()
+    captures_dir = Path.join(editorials_dir, "_sem-editorial")
+    File.mkdir_p!(captures_dir)
+    File.write!(Path.join(captures_dir, "shot1.jpg"), :binary.copy(<<0>>, 10))
+    File.write!(Path.join(captures_dir, "shot1.cr2"), :binary.copy(<<0>>, 20))
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 90 end
+      })
+
+    # media por disparo = 30 bytes; 90 livres => ~3 fotos (nao ~6 se fosse por arquivo)
+    assert CameraServer.status(server).estimated_shots_left == 3
   end
 
   test "para a captura sozinha quando o espaco livre cai abaixo do minimo, sem transferencia em curso" do
@@ -107,6 +147,7 @@ defmodule Revela.Capture.CameraServerTest do
         presence_detector: fn -> Agent.get(detector_state, & &1) end,
         presence_poll_ms: 60_000,
         disk_poll_ms: 60_000,
+        transfer_quiet_ms: 50,
         min_free_disk_bytes: 5_000_000_000,
         disk_checker: fn _dir -> Agent.get(disk_state, & &1) end
       })
@@ -130,9 +171,15 @@ defmodule Revela.Capture.CameraServerTest do
     refute_receive {:capture_status, %{status: :disk_full}}, 100
     assert CameraServer.status(server).status == :running
 
+    # RAW em pending tambem bloqueia (mesmo sem JPEG)
+    :sys.replace_state(server, &%{&1 | pending: %{"/tmp/foo.cr2" => make_ref()}})
+    send(server, :poll_disk)
+    refute_receive {:capture_status, %{status: :disk_full}}, 100
+    assert CameraServer.status(server).status == :running
+
     # transferencia concluida (pending vazio de novo): agora sim, entre
     # disparos, e seguro parar
-    :sys.replace_state(server, &%{&1 | pending: %{}})
+    :sys.replace_state(server, &%{&1 | pending: %{}, last_transfer_at: nil})
     send(server, :poll_disk)
 
     assert_receive {:capture_status, %{status: :disk_full, message: message}}
@@ -141,6 +188,66 @@ defmodule Revela.Capture.CameraServerTest do
     final = CameraServer.status(server)
     assert final.status == :disk_full
     assert :sys.get_state(server).port == nil
+  end
+
+  test "nao para por disco enquanto a janela quiet de transferencia ainda esta aberta" do
+    Capture.subscribe_status()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        transfer_quiet_ms: 5_000,
+        min_free_disk_bytes: 5_000_000_000,
+        disk_checker: fn _dir -> 1_000_000_000 end
+      })
+
+    now = System.monotonic_time(:millisecond)
+
+    :sys.replace_state(
+      server,
+      &%{&1 | status: :running, desired: true, pending: %{}, last_transfer_at: now}
+    )
+
+    send(server, :poll_disk)
+    refute_receive {:capture_status, %{status: :disk_full}}, 100
+    assert CameraServer.status(server).status == :running
+
+    :sys.replace_state(server, &%{&1 | last_transfer_at: now - 6_000})
+    send(server, :poll_disk)
+
+    assert_receive {:capture_status, %{status: :disk_full}}
+  end
+
+  test "recusa rearmar a captura enquanto o disco ainda esta abaixo do minimo" do
+    detector_state =
+      start_supervised!(Supervisor.child_spec({Agent, fn -> true end}, id: :rearm_detector))
+
+    Capture.subscribe_status()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> Agent.get(detector_state, & &1) end,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        min_free_disk_bytes: 5_000_000_000,
+        disk_checker: fn _dir -> 1_000_000_000 end
+      })
+
+    wait_for_presence_check(server)
+
+    status = CameraServer.start_capture(server)
+
+    assert status.status == :disk_full
+    assert status.message =~ "Espaço em disco"
+    assert :sys.get_state(server).port == nil
+    assert :sys.get_state(server).desired == false
   end
 
   test "trocar de editorial cancela settles pendentes da pasta anterior" do

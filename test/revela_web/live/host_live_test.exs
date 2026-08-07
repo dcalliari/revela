@@ -67,6 +67,19 @@ defmodule RevelaWeb.HostLiveTest do
     assert selected_count(document, "#capture-disk-hint") == 0
   end
 
+  test "avisa modo degradado quando o monitoramento de disco esta indisponivel" do
+    document =
+      render_capture_card(%{
+        status: :idle,
+        message: nil,
+        camera_present: true,
+        disk_awareness: :unavailable
+      })
+
+    assert selected_text(document, "#capture-disk-hint") =~ "monitoramento de disco indisponível"
+    assert selected_text(document, "#capture-disk-hint") =~ "Parada preventiva desativada"
+  end
+
   defp render_capture_card(capture) do
     html = render_component(&HostLive.capture_card/1, capture: capture)
     LazyHTML.from_fragment(html)
