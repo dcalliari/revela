@@ -21,14 +21,12 @@ defmodule RevelaWeb.ViewerComponents do
   attr :zoom_id, :string, default: "zoomer"
   attr :fs_id, :string, default: "fs-btn"
   attr :closable, :boolean, default: false
-  # Host ja liga phx-window-keyup na pagina; evita disparo duplo de teclas.
-  attr :window_keys, :boolean, default: true
 
   def viewer(assigns) do
     ~H"""
     <div
       class="fixed inset-0 z-50 flex flex-col bg-black text-white select-none touch-manipulation"
-      phx-window-keyup={if(@window_keys, do: "key")}
+      phx-window-keyup="key"
     >
       <header class="flex items-center justify-between px-4 py-2 text-sm bg-neutral-900">
         <span class="font-medium truncate">{@title}</span>

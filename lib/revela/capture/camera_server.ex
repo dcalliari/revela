@@ -37,10 +37,10 @@ defmodule Revela.Capture.CameraServer do
   Piso configuravel via opt `min_free_disk_bytes` ou env
   `TETHER_MIN_FREE_DISK_BYTES` (padrao 5 GiB). Ver README.
 
-  Modo demo (`REVELA_DEMO=1` / `config :revela, :demo, true`): presença sempre
-  verdadeira, nunca spawna gphoto2, e `demo_fire/1` grava um JPEG sintético na
-  pasta do editorial (mesmo naming `%Y%m%d-%H%M%S-%03n.jpg`) para o caminho
-  real inotify → ingest. Sem toggle no Host — só env/config.
+  Modo demo (`REVELA_DEMO=1` only — runtime sets `:demo` from that env; compile-time
+  config cannot enable it): presença sempre verdadeira, nunca spawna gphoto2, e
+  `demo_fire/1` grava um JPEG sintético na pasta do editorial (mesmo naming
+  `%Y%m%d-%H%M%S-%03n.jpg`) para o caminho real inotify → ingest. Sem toggle no Host.
   """
 
   use GenServer
@@ -59,7 +59,7 @@ defmodule Revela.Capture.CameraServer do
   # intervalo do poll de presenca da camera (gphoto2 --auto-detect)
   @presence_poll_ms 3_000
 
-  # JPEG minimo valido (1x1 cinza) — fallback se `magick` nao estiver no PATH
+  # JPEG minimo valido (1x1 cinza) — demo_fire escreve isto (sem bloquear em magick)
   @minimal_jpeg Base.decode64!(
                   "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGfAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAQUCf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQMBAT8Bf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQIBAT8Bf//Z"
                 )
@@ -103,7 +103,7 @@ defmodule Revela.Capture.CameraServer do
   """
   def demo_fire(server \\ __MODULE__), do: GenServer.call(server, :demo_fire)
 
-  @doc "True quando `REVELA_DEMO=1` (ou opt `demo: true` no start)."
+  @doc "True quando `REVELA_DEMO=1` (ou opt `demo: true` no start, ex. testes)."
   def demo?(server \\ __MODULE__), do: GenServer.call(server, :demo?)
 
   @doc """
@@ -205,11 +205,16 @@ defmodule Revela.Capture.CameraServer do
   end
 
   def handle_call(:demo_fire, _from, %{demo: true, status: :running, desired: true} = state) do
-    {path, state} = write_demo_jpeg(state)
     # Com inotify, o watcher entrega :file_event. Sem watcher (CI sem
     # inotify-tools), agenda o settle direto — o ingest continua o mesmo.
-    state = maybe_schedule_demo_settle(state, path)
-    {:reply, {:ok, path}, state}
+    case write_demo_jpeg(state) do
+      {:ok, path, state} ->
+        state = maybe_schedule_demo_settle(state, path)
+        {:reply, {:ok, path}, state}
+
+      {:error, reason, state} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   def handle_call(:demo_fire, _from, state) do
@@ -668,40 +673,18 @@ defmodule Revela.Capture.CameraServer do
 
     filename = stamp <> ".jpg"
     path = Path.join(state.captures_dir, filename)
-    write_synthetic_jpeg!(path, seq)
-    {path, %{state | demo_seq: seq}}
+    state = %{state | demo_seq: seq}
+
+    case write_synthetic_jpeg(path) do
+      :ok -> {:ok, path, state}
+      {:error, reason} -> {:error, reason, state}
+    end
   end
 
-  defp write_synthetic_jpeg!(path, seq) do
-    File.mkdir_p!(Path.dirname(path))
-
-    case System.find_executable("magick") do
-      magick when is_binary(magick) ->
-        case System.cmd(
-               magick,
-               [
-                 "-size",
-                 "800x600",
-                 "xc:#2a3a4a",
-                 "-fill",
-                 "white",
-                 "-gravity",
-                 "center",
-                 "-pointsize",
-                 "64",
-                 "-annotate",
-                 "0",
-                 "DEMO #{seq}",
-                 path
-               ],
-               stderr_to_stdout: true
-             ) do
-          {_out, 0} -> :ok
-          _other -> File.write!(path, @minimal_jpeg)
-        end
-
-      nil ->
-        File.write!(path, @minimal_jpeg)
+  defp write_synthetic_jpeg(path) do
+    with :ok <- File.mkdir_p(Path.dirname(path)),
+         :ok <- File.write(path, @minimal_jpeg) do
+      :ok
     end
   end
 

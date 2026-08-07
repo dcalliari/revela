@@ -92,8 +92,8 @@ presente, **nunca** spawna `gphoto2` (mesmo com uma Canon no USB), e com a
 captura armada o botao **Disparar (demo)** / tecla `D` grava um JPEG
 sintetico na pasta do editorial (naming `%Y%m%d-%H%M%S-%03n.jpg`). O restante
 e o caminho real (inotify → ingest → PubSub). Sem o env, o comportamento e o
-de producao. Nao ha toggle no Host — so env/config (`REVELA_DEMO=1` /
-`true` / `yes`).
+de producao. Nao ha toggle no Host — so o env `REVELA_DEMO=1` /
+`true` / `yes` (compile-time `config :revela, :demo` nao ativa o modo).
 
 Em Arch Linux, instale `erlang-os_mon` (ou use um Erlang via mise que ja
 traga `os_mon`). Sem isso o app sobe normalmente, mas o `/host` avisa

@@ -401,7 +401,7 @@ o que reforça o valor do item 6.
 **Observado**: para validar Host/Review (follow, classificar, editorial) sem
 hardware, era preciso uma Canon + gphoto2; isso atrasa demos e testes manuais.
 
-**Proposta (contrato aceito 2026-08-07)**: `REVELA_DEMO=1` (env/config only) —
+**Proposta (contrato aceito 2026-08-07)**: `REVELA_DEMO=1` (env only) —
 badge DEMO no Host, `camera_present` sempre true, nunca spawna gphoto2, botão
 **Disparar (demo)** / tecla `D` grava JPEG sintético no naming gphoto2 e segue
 o ingest real. Fora de escopo MVP: RAW, burst, plug/unplug, fixtures.

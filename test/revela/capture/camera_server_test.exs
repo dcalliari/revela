@@ -638,6 +638,34 @@ defmodule Revela.Capture.CameraServerTest do
     assert File.ls!(captures_dir) == []
   end
 
+  test "demo_fire devolve erro de escrita sem derrubar o GenServer" do
+    editorials_dir = temporary_editorials_dir()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        demo: true,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 42_000_000_000 end
+      })
+
+    wait_for_presence_check(server)
+    assert CameraServer.start_capture(server).status == :running
+
+    captures_dir = :sys.get_state(server).captures_dir
+    File.chmod!(captures_dir, 0o500)
+
+    try do
+      assert {:error, :eacces} = CameraServer.demo_fire(server)
+      assert Process.alive?(server)
+    after
+      File.chmod!(captures_dir, 0o755)
+    end
+  end
+
   defp wait_for_presence_check(server) do
     case :sys.get_state(server).presence_check_ref do
       nil -> :ok

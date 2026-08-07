@@ -21,7 +21,8 @@ if System.get_env("PHX_SERVER") do
 end
 
 # Demo/test mode: fake camera presence + synthetic JPEG fire (no gphoto2).
-# Only env/config — never a Host toggle. Values: 1, true, yes (case-insensitive).
+# Armed only by REVELA_DEMO (1/true/yes). Runtime always sets :demo from the env
+# (false when unset) — compile-time config cannot enable it. Never a Host toggle.
 demo_mode? =
   case System.get_env("REVELA_DEMO") do
     nil -> false
