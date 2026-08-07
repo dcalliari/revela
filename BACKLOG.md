@@ -277,6 +277,12 @@ Vale corrigir antes desse export, e fazer um backfill dos registros existentes.
 
 ### 11. Tela de pós-produção
 
+**Status**: FEITO — `/post` (grade completa, filtro, intervalo contíguo,
+link JPG tokenizado `/share/:token`, download RAW da seleção, desfazer fixo +
+Ctrl/Cmd+Z + histórico de sessão). Drive/Fotos ficam stubados em
+`Revela.Delivery` até haver OAuth. RAW usa `raw_path` quando preenchido
+(item 8).
+
 **Observado**: terminado o editorial, a equipe quis rever e classificar as fotos
 com calma pelo host. A tela do host é feita para acompanhar a captura ao vivo,
 não para isso: mostra só as 24 mais recentes. Foi preciso improvisar uma
@@ -345,6 +351,11 @@ histórico visível da sessão.
 
 ### 12. Organização por cor e entrega no Google
 
+**Status**: PARCIAL — o item 11 já cobre seleção por intervalo, URL local de
+JPG para a marca (`/share/:token`) e pull de RAW da seleção (`/raws/:token`).
+Restam pastas por cor em disco e OAuth Google Fotos/Drive (stubs em
+`Revela.Delivery.GoogleFotos` / `GoogleDrive`).
+
 **Observado**: a organização das fotos por cor foi feita à mão, fora da
 aplicação, cruzando as classificações recuperadas com os arquivos RAW em disco.
 Depois, a entrega para a modelo passou por um álbum do Google Fotos, montado
@@ -361,9 +372,8 @@ ou se são dois fluxos distintos: entrega para a cliente (Fotos, imagens
 visualizáveis) e backup/arquivo (Drive, RAW). Enviar RAW de 24 MB para o Google
 Fotos provavelmente não é o que se quer.
 
-**Depende do item 11**: só faz sentido exportar depois de existir uma forma de
-selecionar o intervalo dentro do sistema. Hoje a seleção mora na cabeça de quem
-memorizou o nome da primeira e da última foto.
+**Depende do item 11**: a seleção por intervalo e o URL/RAW locais já existem
+em `/post`; falta a exportação Google / pastas por cor.
 
 **Nota de implementação**: o casamento entre foto e RAW não é trivial e vale
 guardar o aprendizado. O gphoto2 nomeia com `%Y%m%d-%H%M%S-%03n.%C`, e em

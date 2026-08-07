@@ -27,6 +27,17 @@ Keyboard shortcuts (`1`–`5`, `0`/Backspace/Delete, arrows, `L`) and the footer
 legend live in those LiveViews + `ViewerComponents` (see README). Do not reintroduce
 a special-case that only sets follow on pick of the penultimate photo.
 
+## Domain: post-production
+
+`PostLive` (`/post`) is the calm review surface for a full editorial (active or
+finished) — not Host’s live strip of 24. Contiguous range selection (click +
+shift-click) is the unit of work; brand JPG delivery is a tokenized local URL
+(`/share/:token` via `Revela.Delivery` / `BrandShare`); photographer RAW pull
+uses `raw_path` only (`/raws/:token`) and errors clearly when missing. Undo must
+stay discoverable: fixed control + Ctrl/Cmd+Z + visible session history (never
+toast-only). Prefer extending this LiveView over stuffing post workflows into
+Host capture. See README and `BACKLOG` §11.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues

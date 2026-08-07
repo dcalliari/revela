@@ -10,7 +10,7 @@ defmodule Revela.Capture do
 
   import Ecto.Query, warn: false
   alias Revela.Repo
-  alias Revela.Capture.{Photo, Label, Editorial}
+  alias Revela.Capture.{Photo, Label, Editorial, BrandShare}
   alias Phoenix.PubSub
 
   @photos_topic "photos"
@@ -41,6 +41,28 @@ defmodule Revela.Capture do
   end
 
   def get_photo!(id), do: Repo.get!(Photo, id)
+
+  @doc "Fotos pelos ids, preservando a ordem pedida."
+  def get_photos(ids) when is_list(ids) do
+    photos = from(p in Photo, where: p.id in ^ids) |> Repo.all()
+    by_id = Map.new(photos, &{&1.id, &1})
+    Enum.flat_map(ids, fn id -> List.wrap(Map.get(by_id, id)) end)
+  end
+
+  @doc "Fotos do editorial cujo id esta em `ids`, em ordem de `seq`."
+  def get_photos_in_editorial(editorial_id, ids) when is_list(ids) do
+    from(p in Photo,
+      where: p.editorial_id == ^editorial_id and p.id in ^ids,
+      order_by: [asc: p.seq]
+    )
+    |> Repo.all()
+  end
+
+  @doc "Fotos de um editorial especifico (ativo ou finalizado), em ordem de captura."
+  def list_photos_for_editorial(editorial_id) when is_integer(editorial_id) do
+    from(p in Photo, where: p.editorial_id == ^editorial_id, order_by: [asc: p.seq])
+    |> Repo.all()
+  end
 
   @doc """
   Registra uma foto recem baixada, associada ao editorial ativo (se houver).
@@ -114,6 +136,63 @@ defmodule Revela.Capture do
       %{id: id} -> id
       nil -> nil
     end
+  end
+
+  @doc "Editorial por id, ou nil."
+  def get_editorial(id) when is_integer(id), do: Repo.get(Editorial, id)
+  def get_editorial(_), do: nil
+
+  @doc "Todos os editoriais, mais recentes primeiro (ativos e finalizados)."
+  def list_editorials do
+    from(e in Editorial, order_by: [desc: e.started_at])
+    |> Repo.all()
+  end
+
+  @doc "Mapa %{photo_id => color} de um revisor num editorial (ativo ou nao)."
+  def labels_for_reviewer_in_editorial(reviewer_id, editorial_id) do
+    from(l in Label,
+      join: p in Photo,
+      on: p.id == l.photo_id,
+      where: l.reviewer_id == ^reviewer_id and p.editorial_id == ^editorial_id,
+      select: {l.photo_id, l.color}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc "Agregacao de cores para um editorial especifico."
+  def tallies_for_editorial(editorial_id) do
+    from(l in Label,
+      join: p in Photo,
+      on: p.id == l.photo_id,
+      where: p.editorial_id == ^editorial_id,
+      group_by: [l.photo_id, l.color],
+      select: {l.photo_id, l.color, count(l.id)}
+    )
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn {photo_id, color, count}, acc ->
+      Map.update(acc, photo_id, %{color => count}, &Map.put(&1, color, count))
+    end)
+  end
+
+  # ── Brand shares (URL de previews para a marca) ─────────────────────────────
+
+  def create_brand_share(attrs) do
+    %BrandShare{}
+    |> BrandShare.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def get_brand_share_by_token(token) when is_binary(token) do
+    Repo.get_by(BrandShare, token: token)
+  end
+
+  def list_brand_shares_for_editorial(editorial_id) do
+    from(s in BrandShare,
+      where: s.editorial_id == ^editorial_id,
+      order_by: [desc: s.inserted_at]
+    )
+    |> Repo.all()
   end
 
   defp finish_active_editorial do

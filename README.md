@@ -31,6 +31,12 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
 - `RevelaWeb.HostLive` (`/host`) QR + URL da LAN, start/stop da captura,
   iniciar/finalizar editorial, estimativa de fotos restantes no disco, quem
   esta online e o consenso de cores; o viewer imersivo reusa os mesmos atalhos.
+- `RevelaWeb.PostLive` (`/post`) pos-producao: grade completa do editorial,
+  filtro por cor, selecao de intervalo (clique + shift), classificacao na
+  selecao, link JPG tokenizado para a marca (`/share/:token`), download ZIP
+  de RAW da selecao (`/raws/:token`, exige `raw_path`), desfazer fixo +
+  Ctrl/Cmd+Z + historico de sessao. Google Fotos/Drive: stubs em
+  `Revela.Delivery` (proximo passo, sem bloquear o URL local).
 - `RevelaWeb.ViewerComponents` visualizador compartilhado: legenda de atalhos
   no rodape e numeros `1`–`5` / `0` nas bolinhas.
 
@@ -62,6 +68,7 @@ mix phx.server       # sobe em 0.0.0.0:4000
 ```
 
 - Host/controle (no laptop): http://localhost:4000/host
+- Pos-producao: http://localhost:4000/post
 - Revisao (celulares na LAN): a URL/QR que aparece na tela do host.
 
 Se o IP da LAN detectado estiver errado (varias interfaces), fixe manualmente:
