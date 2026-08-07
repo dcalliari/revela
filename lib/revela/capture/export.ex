@@ -8,7 +8,9 @@ defmodule Revela.Capture.Export do
   registrando aviso em ambos. Padrao: copiar (`:copy`); `:move` tambem e
   suportado para RAW/JPEG — preview web nunca e movido (quebraria a UI). Apos
   um `:move` bem-sucedido, `raw_path` / `original_path` no banco passam a
-  apontar para o destino.
+  apontar para o destino. Se a atualizacao do banco falhar apos o move, o
+  arquivo e devolvido a origem; so se o rollback tambem falhar o destino e
+  contado como exportado com aviso.
 
   Entrada tipica via `mix revela.export_colors` ou chamada direta daqui (a tela
   de pos-producao, item 11, pode reutilizar esta API sem bloquear este export).
@@ -55,6 +57,7 @@ defmodule Revela.Capture.Export do
     reviewer_id = Keyword.get(opts, :reviewer_id, "host")
     colors = Keyword.get(opts, :colors)
     photo_ids = Keyword.get(opts, :photo_ids)
+    path_updater = Keyword.get(opts, :path_updater, &default_path_updater/3)
 
     with :ok <- validate_mode(mode),
          {:ok, editorial_id} <- resolve_editorial_id(Keyword.get(opts, :editorial_id)),
@@ -68,7 +71,7 @@ defmodule Revela.Capture.Export do
         |> prepend_skips(id_skips)
         |> then(fn acc ->
           Enum.reduce(photos, acc, fn photo, a ->
-            export_one(photo, labels, color_filter, dest, mode, a)
+            export_one(photo, labels, color_filter, dest, mode, path_updater, a)
           end)
         end)
         |> finalize_result()
@@ -184,21 +187,21 @@ defmodule Revela.Capture.Export do
     |> Map.new()
   end
 
-  defp export_one(photo, labels, color_filter, dest_root, mode, acc) do
+  defp export_one(photo, labels, color_filter, dest_root, mode, path_updater, acc) do
     case Map.get(labels, photo.id) do
       nil ->
         skip(acc, photo, :unlabeled)
 
       color ->
         if MapSet.member?(color_filter, color) do
-          place(photo, color, dest_root, mode, acc)
+          place(photo, color, dest_root, mode, path_updater, acc)
         else
           skip(acc, photo, {:color_filtered, color})
         end
     end
   end
 
-  defp place(photo, color, dest_root, mode, acc) do
+  defp place(photo, color, dest_root, mode, path_updater, acc) do
     folder = folder_name(color)
     dest_dir = Path.join(dest_root, folder)
 
@@ -212,24 +215,7 @@ defmodule Revela.Capture.Export do
 
         case transfer(mode, src, dest) do
           :ok ->
-            case maybe_update_path_after_move(mode, photo, kind, dest) do
-              :ok ->
-                entry = %{
-                  photo_id: photo.id,
-                  color: color,
-                  folder: folder,
-                  source: src,
-                  dest: dest,
-                  mode: mode
-                }
-
-                acc
-                |> Map.update!(:exported, &[entry | &1])
-                |> maybe_warn(photo, warning)
-
-              {:error, reason} ->
-                skip(acc, photo, {:path_update_failed, reason, dest})
-            end
+            finish_transfer(photo, color, folder, mode, kind, src, dest, warning, path_updater, acc)
 
           {:error, reason} ->
             skip(acc, photo, {:transfer_failed, reason, src, dest})
@@ -237,6 +223,52 @@ defmodule Revela.Capture.Export do
 
       {:error, reason} ->
         skip(acc, photo, reason)
+    end
+  end
+
+  defp finish_transfer(photo, color, folder, mode, kind, src, dest, warning, path_updater, acc) do
+    case maybe_update_path_after_move(mode, photo, kind, dest, path_updater) do
+      :ok ->
+        entry = %{
+          photo_id: photo.id,
+          color: color,
+          folder: folder,
+          source: src,
+          dest: dest,
+          mode: mode
+        }
+
+        acc
+        |> Map.update!(:exported, &[entry | &1])
+        |> maybe_warn(photo, warning)
+
+      {:error, reason} ->
+        case rollback_move(src, dest) do
+          :ok ->
+            skip(acc, photo, {:path_update_failed, reason})
+
+          {:error, rollback_reason} ->
+            msg =
+              "foto #{photo.id}: move para #{dest} ok, mas falhou atualizar path no banco " <>
+                "(#{inspect(reason)}) e rollback para #{src} falhou (#{inspect(rollback_reason)}); " <>
+                "arquivo ficou em #{dest}"
+
+            Logger.warning(msg)
+
+            entry = %{
+              photo_id: photo.id,
+              color: color,
+              folder: folder,
+              source: src,
+              dest: dest,
+              mode: mode
+            }
+
+            acc
+            |> Map.update!(:exported, &[entry | &1])
+            |> Map.update!(:warnings, &[%{photo_id: photo.id, message: msg} | &1])
+            |> maybe_warn(photo, warning)
+        end
     end
   end
 
@@ -314,20 +346,29 @@ defmodule Revela.Capture.Export do
     end
   end
 
-  defp maybe_update_path_after_move(:copy, _photo, _kind, _dest), do: :ok
+  defp maybe_update_path_after_move(:copy, _photo, _kind, _dest, _path_updater), do: :ok
 
-  defp maybe_update_path_after_move(:move, photo, :raw, dest) do
+  defp maybe_update_path_after_move(:move, photo, kind, dest, path_updater)
+       when kind in [:raw, :original] do
+    path_updater.(photo, kind, dest)
+  end
+
+  defp default_path_updater(photo, :raw, dest) do
     case photo |> Photo.changeset(%{raw_path: dest}) |> Repo.update() do
       {:ok, _} -> :ok
       {:error, changeset} -> {:error, changeset}
     end
   end
 
-  defp maybe_update_path_after_move(:move, photo, :original, dest) do
+  defp default_path_updater(photo, :original, dest) do
     case photo |> Photo.changeset(%{original_path: dest}) |> Repo.update() do
       {:ok, _} -> :ok
       {:error, changeset} -> {:error, changeset}
     end
+  end
+
+  defp rollback_move(src, dest) do
+    transfer(:move, dest, src)
   end
 
   defp maybe_warn(acc, _photo, nil), do: acc

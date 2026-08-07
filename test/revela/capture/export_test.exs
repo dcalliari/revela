@@ -114,6 +114,36 @@ defmodule Revela.Capture.ExportTest do
     assert Revela.Repo.get!(Revela.Capture.Photo, photo.id).raw_path == moved
   end
 
+  test "falha ao atualizar path apos move devolve arquivo a origem", %{tmp: tmp} do
+    {:ok, _} = Capture.start_editorial("Move rollback", Path.join(tmp, "ed-rb"))
+    raw = Path.join(tmp, "rollback.CR2")
+    File.write!(raw, "rb")
+
+    {:ok, photo} =
+      Capture.create_photo(%{
+        web_path: "/uploads/rollback.jpg",
+        raw_path: raw
+      })
+
+    {:ok, _} = Capture.set_label(photo.id, "host", "host", 0)
+
+    dest = Path.join(tmp, "out-rb")
+
+    assert {:ok, result} =
+             Export.export(
+               dest: dest,
+               mode: :move,
+               path_updater: fn _photo, _kind, _dest -> {:error, :simulated_db_failure} end
+             )
+
+    assert result.exported == []
+    assert [%{photo_id: id, reason: {:path_update_failed, :simulated_db_failure}}] = result.skipped
+    assert id == photo.id
+    assert File.read!(raw) == "rb"
+    refute File.exists?(Path.join(dest, "vermelho/rollback.CR2"))
+    assert Revela.Repo.get!(Revela.Capture.Photo, photo.id).raw_path == raw
+  end
+
   test "recusa move quando a unica fonte e o preview web", %{tmp: tmp} do
     {:ok, editorial} = Capture.start_editorial("Preview move", Path.join(tmp, "ed-pv"))
     uploads = Path.join(Application.app_dir(:revela, "priv/static/uploads"), to_string(editorial.id))
