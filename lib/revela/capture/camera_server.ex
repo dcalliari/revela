@@ -350,12 +350,14 @@ defmodule Revela.Capture.CameraServer do
   def handle_info(:reconnect, state), do: {:noreply, state}
 
   def handle_info({:auto_arm, debounce_ref}, %{presence_debounce_ref: debounce_ref} = state) do
+    previous = public_status(state)
     state = %{state | presence_debounce_ref: nil}
 
     if auto_arm_ready?(state) do
       {_reply, state} = do_start(%{state | desired: true, armed_automatically: true})
       {:noreply, state}
     else
+      broadcast_if_changed(previous, state)
       {:noreply, state}
     end
   end
@@ -479,7 +481,9 @@ defmodule Revela.Capture.CameraServer do
   # em curso (ver maybe_stop_for_low_disk/1).
   def handle_info(:poll_disk, state) do
     state = check_disk_between_shots(state)
+    previous = public_status(state)
     state = maybe_schedule_auto_arm(state)
+    broadcast_if_changed(previous, state)
     Process.send_after(self(), :poll_disk, state.disk_poll_ms)
     {:noreply, state}
   end
