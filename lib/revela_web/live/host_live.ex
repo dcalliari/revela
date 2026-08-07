@@ -66,8 +66,17 @@ defmodule RevelaWeb.HostLive do
   end
 
   def handle_event("demo_fire", _params, socket) do
-    _ = CameraServer.demo_fire()
-    {:noreply, socket}
+    case CameraServer.demo_fire() do
+      {:ok, _path} ->
+        {:noreply, socket}
+
+      {:error, reason} when reason in [:not_armed, :not_demo] ->
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply,
+         assign(socket, :notice, "Falha ao gravar JPEG de demo (#{inspect(reason)}).")}
+    end
   end
 
   # ── visualizador em tela cheia (host classifica como "host") ─────────────────
@@ -192,10 +201,15 @@ defmodule RevelaWeb.HostLive do
     end
   end
 
-  # Page-level only (classification stays on the open viewer). LiveView skips
-  # key events while focus is an editable field.
+  # Page-level D only (classification stays on the open viewer). Bound only when
+  # @capture.demo with phx-key="d"; window keyups still fire while an editable
+  # is focused, so do not assume LiveView skips them.
   def handle_event("demo_key", %{"key" => key}, socket) when key in ["d", "D"] do
-    handle_event("demo_fire", %{}, socket)
+    if Map.get(socket.assigns.capture, :demo) == true do
+      handle_event("demo_fire", %{}, socket)
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("demo_key", _params, socket), do: {:noreply, socket}
@@ -311,7 +325,8 @@ defmodule RevelaWeb.HostLive do
     ~H"""
     <div
       class="min-h-dvh bg-base-200 p-4 sm:p-6 relative overflow-hidden"
-      phx-window-keyup="demo_key"
+      phx-window-keyup={Map.get(@capture, :demo) == true && "demo_key"}
+      phx-key={Map.get(@capture, :demo) == true && "d"}
     >
       <%!-- Marca d'agua repetida no fundo. O corpo e fixo em vh (acompanha so a
            escala vertical, nunca encolhe com a largura) e as colunas tilam a
