@@ -162,27 +162,29 @@ defmodule RevelaWeb.TvLive do
   defp schedule_idle(socket) do
     gen = socket.assigns.idle_gen + 1
 
-    if socket.assigns.follow do
-      assign(socket,
-        idle_gen: gen,
-        idle_ref: nil,
-        idle_tick_ref: nil,
-        idle_deadline: nil,
-        idle_remaining: nil
-      )
-    else
-      now = System.monotonic_time(:millisecond)
-      deadline = now + socket.assigns.idle_ms
-      return_ref = Process.send_after(self(), {:idle_return_live, gen}, socket.assigns.idle_ms)
-      tick_ref = Process.send_after(self(), {:idle_tick, gen}, @tick_ms)
+    cond do
+      not connected?(socket) or socket.assigns.follow ->
+        assign(socket,
+          idle_gen: gen,
+          idle_ref: nil,
+          idle_tick_ref: nil,
+          idle_deadline: nil,
+          idle_remaining: nil
+        )
 
-      assign(socket,
-        idle_gen: gen,
-        idle_ref: return_ref,
-        idle_tick_ref: tick_ref,
-        idle_deadline: deadline,
-        idle_remaining: remaining_seconds(deadline, now)
-      )
+      true ->
+        now = System.monotonic_time(:millisecond)
+        deadline = now + socket.assigns.idle_ms
+        return_ref = Process.send_after(self(), {:idle_return_live, gen}, socket.assigns.idle_ms)
+        tick_ref = Process.send_after(self(), {:idle_tick, gen}, @tick_ms)
+
+        assign(socket,
+          idle_gen: gen,
+          idle_ref: return_ref,
+          idle_tick_ref: tick_ref,
+          idle_deadline: deadline,
+          idle_remaining: remaining_seconds(deadline, now)
+        )
     end
   end
 
