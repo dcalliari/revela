@@ -25,6 +25,8 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
   no USB).
 - `Revela.Capture.Ingest` gera o preview (namespaced por editorial) e registra
   a foto.
+- `Revela.Capture.Export` (+ `mix revela.export_colors`) copia/move arquivos
+  classificados para pastas por cor (`vermelho`…`roxo`); ver secao abaixo.
 - `RevelaWeb.ReviewLive` (`/`) tela de revisao mobile, botoes de cor,
   navegacao e modo ao vivo (`follow == (idx == last)`). Identidade leve por
   `localStorage`.
@@ -116,6 +118,46 @@ de uma transferencia PTP): libere espaco e vincule de novo.
   `_sem-editorial/`) e sao servidos em `/uploads/...`.
 - Estado (fotos + labels) em SQLite (`*.db`), escopado ao editorial atual.
 
+## Export por pastas de cor
+
+Organiza os arquivos classificados em pastas `vermelho` / `amarelo` / `verde` /
+`azul` / `roxo` (mesmo vocabulario do darktable). Usa as labels de **um**
+revisor (padrao `host`). Preferencia: RAW (`raw_path`); se vazio ou ausente em
+disco, copia o JPEG da camera e registra aviso (e cai no preview web se o JPEG
+tambem faltar). Fotos sem label desse revisor sao ignoradas.
+
+```bash
+# editorial ativo, labels do host, copia para DEST
+mix revela.export_colors --dest /caminho/saida
+
+# editorial ja finalizado, so verde e azul, ids explicitos
+mix revela.export_colors --dest /caminho/saida \
+  --editorial 3 --color verde,azul --ids 10,11,12
+
+# outro revisor; mover em vez de copiar
+mix revela.export_colors --dest /caminho/saida \
+  --reviewer cliente --mode move
+```
+
+Em `--mode move`, RAW/JPEG movidos atualizam `raw_path` / `original_path` no
+banco; o preview web **nunca** e movido (quebraria a UI — fica como skip
+`:preview_move_refused`).
+
+A API reutilizavel e `Revela.Capture.Export.export/1` (a tela de pos-producao
+pode chama-la sobre um intervalo selecionado quando existir).
+
+### Google Drive vs Google Fotos (fase 2)
+
+Sao fluxos distintos — este release para na pasta local:
+
+| Destino | Uso real ate agora | Conteudo tipico |
+|---|---|---|
+| **Google Fotos** | Album para a cliente/modelo ver | JPEG/preview visualizavel (nao RAW de 24 MB) |
+| **Google Drive** | Arquivo/backup bruto | RAW + estrutura de pastas por cor |
+
+Upload automatico fica para depois; o export local ja deixa a pasta pronta para
+subir no produto certo.
+
 ## Pendente (proxima fase)
 
 - **Export para o darktable**: escrever sidecars `.xmp` ao lado dos RAWs com
@@ -123,3 +165,4 @@ de uma transferencia PTP): libere espaco e vincule de novo.
   Como a classificacao e por pessoa, definir a regra de consenso na exportacao
   (revisor lider, uniao, ou maioria).
 - Opcional: espelho de video ao vivo (gphoto2 `--capture-movie` + v4l2loopback).
+- Upload Google Fotos (entrega) / Drive (arquivo) a partir do export por cor.

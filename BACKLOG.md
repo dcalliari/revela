@@ -273,9 +273,10 @@ seguinte (ex.: `20260804-133708-027.jpg` e `20260804-133708-028.cr2`). O carimbo
 de tempo também pode variar em 1s, porque o arquivo maior demora mais para
 transferir.
 
-**Impacto**: qualquer funcionalidade que dependa do RAW fica inviável, incluindo
-o export de sidecars `.xmp` para o darktable que já está previsto no README.
-Vale corrigir antes desse export, e fazer um backfill dos registros existentes.
+**Impacto**: o export de sidecars `.xmp` para o darktable (README) precisa do
+RAW de verdade. O export por pastas de cor (item 12) já cai para JPEG/preview
+com aviso quando `raw_path` falta, mas o resultado deixa de ser o arquivo de
+edição. Vale corrigir o sibling match e fazer backfill dos registros existentes.
 
 ### 11. Tela de pós-produção
 
@@ -292,6 +293,9 @@ dentro da tela de captura.
 
 **Relacionado**: depende do item 10. Não faz sentido investir numa tela de
 revisão pós-editorial enquanto finalizar o editorial apaga o resultado dela.
+Quando a seleção por intervalo existir, a ação de organizar por cor deve
+chamar `Revela.Capture.Export.export/1` (já usado por `mix revela.export_colors`;
+item 12) em vez de reimplementar cópia/movimento de arquivos.
 
 #### O índice de contato validou a ideia na prática
 
@@ -347,25 +351,25 @@ histórico visível da sessão.
 
 ### 12. Organização por cor e entrega no Google
 
+**Status**: FEITO (export local por pastas de cor). Follow-up: upload Google
+Fotos (entrega) / Drive (arquivo) — ver README.
+
 **Observado**: a organização das fotos por cor foi feita à mão, fora da
 aplicação, cruzando as classificações recuperadas com os arquivos RAW em disco.
 Depois, a entrega para a modelo passou por um álbum do Google Fotos, montado
 também à mão a partir de um intervalo de arquivos localizado pelo índice.
 
-**Proposta**: exportar a organização a partir do próprio sistema, movendo ou
-copiando os RAWs para pastas por cor. Adiante, integração direta com o Google
-para eliminar a etapa manual de upload.
+**Feito**: `Revela.Capture.Export` + `mix revela.export_colors` copiam (padrão)
+ou movem arquivos para pastas `vermelho` / `amarelo` / `verde` / `azul` /
+`roxo`, com filtro por cor e/ou photo ids, editorial ativo ou `--editorial`.
+Prefere `raw_path`; se vazio/ausente, exporta JPEG/preview com aviso. A seleção
+por intervalo (item 11) não bloqueia: o mix/`Export.export/1` já aceita ids
+explícitos e pode ser ligado à UI de pós-produção quando ela existir.
 
-**Atenção ao destino**: Drive e Fotos são produtos diferentes, com APIs e
-semânticas diferentes, e o uso real até agora foi o **Fotos** (álbum para a
-modelo ver), não o Drive (arquivo bruto). Vale decidir qual dos dois é o alvo,
-ou se são dois fluxos distintos: entrega para a cliente (Fotos, imagens
-visualizáveis) e backup/arquivo (Drive, RAW). Enviar RAW de 24 MB para o Google
-Fotos provavelmente não é o que se quer.
-
-**Depende do item 11**: só faz sentido exportar depois de existir uma forma de
-selecionar o intervalo dentro do sistema. Hoje a seleção mora na cabeça de quem
-memorizou o nome da primeira e da última foto.
+**Atenção ao destino (fase 2)**: Drive e Fotos são produtos diferentes. Uso real
+até agora foi **Fotos** (álbum para a modelo). Dois fluxos: entrega (Fotos,
+JPEG/preview) vs arquivo (Drive, RAW). Enviar RAW de 24 MB para o Fotos
+provavelmente não é o que se quer.
 
 **Nota de implementação**: o casamento entre foto e RAW não é trivial e vale
 guardar o aprendizado. O gphoto2 nomeia com `%Y%m%d-%H%M%S-%03n.%C`, e em
@@ -406,5 +410,6 @@ cada uma custa em setup no dia da produção, antes de decidir qualquer coisa.
 ---
 
 Ver também a seção "Pendente (proxima fase)" do [README](README.md), que já
-registra o export de sidecars `.xmp` para o darktable (dependente do item 8) e o
-espelho de vídeo ao vivo.
+registra o export de sidecars `.xmp` para o darktable (dependente do item 8), o
+espelho de vídeo ao vivo, e o upload Google Fotos/Drive a partir do export por
+cor (follow-up do item 12).
