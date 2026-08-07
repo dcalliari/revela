@@ -69,6 +69,46 @@ defmodule Revela.Capture.CameraServerTest do
     assert :sys.get_state(server).processed == MapSet.new()
   end
 
+  test "reservar pasta do editorial desliga captura e cancela settles antes do start_editorial" do
+    editorials_dir = temporary_editorials_dir()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        presence_detector: fn -> false end,
+        presence_poll_ms: 60_000
+      })
+
+    wait_for_presence_check(server)
+
+    old_dir = Path.join(editorials_dir, "_sem-editorial")
+    old_path = Path.join(old_dir, "pending.jpg")
+    File.write!(old_path, "not-a-real-jpeg")
+
+    ref = Process.send_after(server, {:settle, old_path}, 60_000)
+
+    :sys.replace_state(server, fn state ->
+      %{state | pending: Map.put(state.pending, old_path, ref), desired: true}
+    end)
+
+    assert {:ok, %{folder: folder}} =
+             GenServer.call(server, {:reserve_editorial_folder, "Casamento"})
+
+    assert File.dir?(folder)
+    state = :sys.get_state(server)
+    assert state.pending == %{}
+    assert state.desired == false
+    assert state.captures_dir == old_dir
+    assert Process.read_timer(ref) == false
+
+    send(server, {:settle, old_path})
+    _ = :sys.get_state(server)
+
+    assert :sys.get_state(server).processed == MapSet.new()
+  end
+
   test "settle fora da captures_dir atual e ignorado" do
     editorials_dir = temporary_editorials_dir()
 

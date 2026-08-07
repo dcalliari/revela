@@ -55,7 +55,8 @@ defmodule Revela.Capture.CameraServer do
   def set_editorial(name), do: GenServer.call(__MODULE__, {:set_editorial, name})
 
   @doc """
-  Cria a pasta do editorial sem apontar a captura para ela. Use antes de
+  Cria a pasta do editorial e desliga captura/watcher/settles da pasta antiga,
+  sem ainda apontar `captures_dir` para a nova. Use antes de
   `Capture.start_editorial/2` e chame `set_editorial/1` em seguida.
   """
   def reserve_editorial_folder(name),
@@ -132,15 +133,18 @@ defmodule Revela.Capture.CameraServer do
   end
 
   def handle_call({:reserve_editorial_folder, name}, _from, state) do
+    state = detach_capture(state)
+    state = %{state | status: :idle, message: nil}
+    state = schedule_presence_poll(state, 0)
+
     folder = editorial_folder(state.editorials_base, name)
     File.mkdir_p!(folder)
+    broadcast(state)
     {:reply, {:ok, %{name: name, folder: folder}}, state}
   end
 
   def handle_call({:set_editorial, name}, _from, state) do
-    # para a captura e o watcher da pasta antiga
-    state = state |> kill_port() |> stop_watcher() |> clear_pending()
-    state = %{state | desired: false, backoff_ms: @initial_backoff}
+    state = detach_capture(state)
 
     folder = editorial_folder(state.editorials_base, name)
     File.mkdir_p!(folder)
@@ -161,15 +165,13 @@ defmodule Revela.Capture.CameraServer do
   end
 
   def handle_call(:finish_editorial, _from, state) do
-    state = state |> kill_port() |> stop_watcher() |> clear_pending()
+    state = detach_capture(state)
     limbo = Path.join(state.editorials_base, "_sem-editorial")
     File.mkdir_p!(limbo)
 
     state = %{
       state
-      | desired: false,
-        backoff_ms: @initial_backoff,
-        editorial: nil,
+      | editorial: nil,
         captures_dir: limbo,
         status: :idle,
         message: nil,
@@ -455,6 +457,14 @@ defmodule Revela.Capture.CameraServer do
     end
   rescue
     _error -> false
+  end
+
+  defp detach_capture(state) do
+    state
+    |> kill_port()
+    |> stop_watcher()
+    |> clear_pending()
+    |> Map.merge(%{desired: false, backoff_ms: @initial_backoff})
   end
 
   # encerra o watcher da pasta atual (para trocar de editorial/pasta)
