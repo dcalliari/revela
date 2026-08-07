@@ -184,6 +184,7 @@ defmodule Revela.Capture.CameraServerTest do
 
     assert_receive {:capture_status, %{status: :disk_full, message: message}}
     assert message =~ "Espaço em disco"
+    assert message =~ "rearma automaticamente"
 
     final = CameraServer.status(server)
     assert final.status == :disk_full
@@ -872,6 +873,7 @@ defmodule Revela.Capture.CameraServerTest do
 
     state = :sys.get_state(server)
     assert state.desired == false
+    assert state.watcher_pid == nil
     assert is_integer(state.auto_arm_cooldown_until)
     refute CameraServer.status(server).auto_arm_pending
 
@@ -892,6 +894,48 @@ defmodule Revela.Capture.CameraServerTest do
     refute CameraServer.status(server).auto_arm_pending
     refute_receive {:capture_status, %{status: :running}}, 80
     assert CameraServer.status(server).status == :error
+  end
+
+  test "falha de spawn encerra o folder watcher se ele ja estava ativo" do
+    Capture.subscribe_status()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> true end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 20,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10_000_000_000 end,
+        spawn_failure_cooldown_ms: 60_000,
+        tether_spawner: fn _state -> {:error, "Falha ao iniciar captura tethered"} end
+      })
+
+    wait_for_presence_check(server)
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Casamento", nil})
+    assert_receive {:capture_status, %{status: :error}}, 500
+
+    {:ok, fake_watcher} = Agent.start_link(fn -> :ok end)
+    watcher_ref = Process.monitor(fake_watcher)
+
+    :sys.replace_state(server, fn state ->
+      %{
+        state
+        | watcher_pid: fake_watcher,
+          status: :idle,
+          message: nil,
+          desired: false,
+          auto_arm_cooldown_until: nil
+      }
+    end)
+
+    status = CameraServer.start_capture(server)
+    assert status.status == :error
+    assert :sys.get_state(server).watcher_pid == nil
+
+    assert_receive {:DOWN, ^watcher_ref, :process, ^fake_watcher, _reason}, 500
   end
 
   test "start_capture explicito limpa o cooldown de falha de spawn" do
@@ -949,6 +993,45 @@ defmodule Revela.Capture.CameraServerTest do
     status = CameraServer.status(server)
     assert status.status == :running
     assert status.ingest_awareness == :unavailable
+  end
+
+  test "parada do watcher transmite ingest_awareness unavailable enquanto running" do
+    Capture.subscribe_status()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> true end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 20,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10_000_000_000 end,
+        tether_spawner: fn _state -> {:ok, nil, nil} end
+      })
+
+    wait_for_presence_check(server)
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Casamento", nil})
+    assert_receive {:capture_status, %{status: :running}}, 500
+
+    {:ok, fake_watcher} = Agent.start_link(fn -> :ok end)
+
+    :sys.replace_state(server, fn state ->
+      %{state | watcher_pid: fake_watcher}
+    end)
+
+    assert CameraServer.status(server).ingest_awareness == :available
+
+    flush_capture_status()
+    send(server, {:file_event, fake_watcher, :stop})
+    _ = :sys.get_state(server)
+
+    assert_receive {:capture_status,
+                    %{status: :running, ingest_awareness: :unavailable}}
+
+    assert :sys.get_state(server).watcher_pid == nil
+    if Process.alive?(fake_watcher), do: Agent.stop(fake_watcher)
   end
 
   defp wait_for_presence_check(server) do

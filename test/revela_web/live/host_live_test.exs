@@ -139,12 +139,14 @@ defmodule RevelaWeb.HostLiveTest do
     document =
       render_capture_card(%{
         status: :disk_full,
-        message: "Espaço em disco abaixo do mínimo (~4.7 GB livres). Libere espaço.",
+        message:
+          "Espaço em disco abaixo do mínimo (~4.7 GB livres). Libere espaço — " <>
+            "o tether rearma automaticamente quando o espaço voltar.",
         camera_present: true
       })
 
     assert selected_text(document, "#capture-status") == "espaço cheio"
-    assert selected_text(document, "#capture-help") =~ "Libere espaço"
+    assert selected_text(document, "#capture-help") =~ "rearma automaticamente"
     assert selected_text(document, "#capture-action") == "Vincular câmera"
   end
 
@@ -172,11 +174,13 @@ defmodule RevelaWeb.HostLiveTest do
         status: :idle,
         message: nil,
         camera_present: true,
+        editorial: "Casamento",
         disk_awareness: :unavailable
       })
 
-    assert selected_text(document, "#capture-disk-hint") =~ "monitoramento de disco indisponível"
-    assert selected_text(document, "#capture-disk-hint") =~ "Parada preventiva desativada"
+    assert selected_text(document, "#capture-help") =~ "monitoramento de disco indisponível"
+    assert selected_text(document, "#capture-help") =~ "Vincule manualmente"
+    assert selected_count(document, "#capture-disk-hint") == 0
   end
 
   defp render_capture_card(capture) do

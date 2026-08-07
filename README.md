@@ -97,8 +97,8 @@ retomar). Sem editorial ou com monitoramento de disco indisponivel, use
 **Vincular câmera**. Dispare na camera: a foto aparece nos celulares em
 segundos. O host mostra quanto espaco livre ainda cabe em fotos
 (`cabem ~N fotos`, media real do editorial). Se o disco cair abaixo do piso,
-a captura para entre disparos (nunca no meio de uma transferencia PTP):
-libere espaco e vincule de novo.
+a captura para entre disparos (nunca no meio de uma transferencia PTP);
+libere espaco — o tether rearma sozinho quando o espaco voltar.
 
 ## Fluxo de dados
 

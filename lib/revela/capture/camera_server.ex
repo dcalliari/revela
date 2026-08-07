@@ -440,7 +440,10 @@ defmodule Revela.Capture.CameraServer do
   end
 
   def handle_info({:file_event, watcher, :stop}, %{watcher_pid: watcher} = state) do
-    {:noreply, %{state | watcher_pid: nil}}
+    previous = public_status(state)
+    state = %{state | watcher_pid: nil}
+    broadcast_if_changed(previous, state)
+    {:noreply, state}
   end
 
   # arquivo assentou: processa JPEG uma unica vez; RAW so sai do pending
@@ -571,6 +574,7 @@ defmodule Revela.Capture.CameraServer do
                   auto_arm_cooldown_until: now + state.spawn_failure_cooldown_ms,
                   backoff_ms: @initial_backoff
               }
+              |> stop_watcher()
               |> cancel_auto_arm_debounce()
               |> schedule_presence_poll(0)
 
@@ -1068,7 +1072,8 @@ defmodule Revela.Capture.CameraServer do
         else: ""
 
     "Espaço em disco abaixo do mínimo (~#{gb} GB livres#{shots_hint}). " <>
-      "Captura parada entre disparos para proteger a câmera; libere espaço e vincule novamente."
+      "Captura parada entre disparos para proteger a câmera; libere espaço — " <>
+      "o tether rearma automaticamente quando o espaço voltar."
   end
 
   defp format_gb(bytes) when is_integer(bytes), do: Float.round(bytes / 1_073_741_824, 1)
