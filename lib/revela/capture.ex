@@ -84,15 +84,36 @@ defmodule Revela.Capture do
 
   @doc """
   Preenche `raw_path` de uma foto que ainda nao tem RAW associado.
-  Nao sobrescreve um `raw_path` ja preenchido.
+  Nao sobrescreve um `raw_path` ja preenchido. Usa UPDATE condicional e o indice
+  unico parcial em `raw_path` nao-vazio para impedir o mesmo RAW em duas fotos.
   """
   def update_raw_path(%Photo{} = photo, raw_path) when is_binary(raw_path) and raw_path != "" do
     if present_raw_path?(photo.raw_path) do
       {:ok, photo}
     else
-      photo
-      |> Photo.changeset(%{raw_path: raw_path})
-      |> Repo.update()
+      claim_raw_path(photo, raw_path)
+    end
+  end
+
+  defp claim_raw_path(%Photo{} = photo, raw_path) do
+    now = DateTime.utc_now(:microsecond)
+
+    query =
+      from(p in Photo,
+        where: p.id == ^photo.id and (is_nil(p.raw_path) or p.raw_path == "")
+      )
+
+    try do
+      case Repo.update_all(query, set: [raw_path: raw_path, updated_at: now]) do
+        {1, _} ->
+          {:ok, %{photo | raw_path: raw_path, updated_at: now}}
+
+        {0, _} ->
+          {:ok, get_photo!(photo.id)}
+      end
+    rescue
+      e in [Ecto.ConstraintError, Exqlite.Error] ->
+        {:error, e}
     end
   end
 

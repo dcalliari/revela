@@ -64,6 +64,14 @@ defmodule Revela.Capture.IngestTest do
     assert Ingest.find_raw_sibling(jpeg) == raw
   end
 
+  test "rejeita RAW com indice N-1 no JPEG→RAW", %{dir: dir} do
+    jpeg = touch!(dir, "20260804-133708-027.jpg")
+    touch!(dir, "20260804-133708-026.cr2")
+
+    assert Ingest.find_raw_sibling(jpeg) == nil
+    assert Ingest.match_raw_sibling(jpeg) == :not_found
+  end
+
   test "aceita skew de timestamp de 1s no nome", %{dir: dir} do
     jpeg = touch!(dir, "20260804-133708-027.jpg")
     raw = touch!(dir, "20260804-133709-028.cr2")
@@ -98,7 +106,7 @@ defmodule Revela.Capture.IngestTest do
   test "ambiguidade no ingest prefere o mais proximo e loga", %{dir: dir} do
     jpeg = touch!(dir, "20260804-133708-027.jpg")
     closer = touch!(dir, "20260804-133708-028.cr2")
-    touch!(dir, "20260804-133709-026.cr2")
+    touch!(dir, "20260804-133709-028.cr3")
 
     log =
       capture_log(fn ->
@@ -111,7 +119,7 @@ defmodule Revela.Capture.IngestTest do
   test "ambiguidade no backfill e skip", %{dir: dir} do
     jpeg = touch!(dir, "20260804-133708-027.jpg")
     touch!(dir, "20260804-133708-028.cr2")
-    touch!(dir, "20260804-133709-026.cr2")
+    touch!(dir, "20260804-133709-028.cr3")
 
     assert Ingest.match_raw_sibling(jpeg, on_ambiguity: :skip) == :ambiguous
   end
@@ -164,7 +172,7 @@ defmodule Revela.Capture.IngestTest do
 
     jpeg_amb = touch!(dir, "20260804-140000-010.jpg")
     touch!(dir, "20260804-140000-011.cr2")
-    touch!(dir, "20260804-140001-009.cr2")
+    touch!(dir, "20260804-140001-011.cr3")
 
     jpeg_miss = touch!(dir, "20260804-150000-001.jpg")
 
@@ -250,6 +258,31 @@ defmodule Revela.Capture.IngestTest do
 
     assert {:ok, same} = Capture.update_raw_path(photo, touch!(dir, "20260804-133708-028.cr2"))
     assert same.raw_path == "/keep/me.cr2"
+  end
+
+  test "update_raw_path rejeita mesmo RAW em duas fotos", %{dir: dir} do
+    raw = touch!(dir, "20260804-133708-028.cr2")
+
+    {:ok, first} =
+      Capture.create_photo(%{
+        web_path: "/uploads/a.jpg",
+        original_path: touch!(dir, "20260804-133708-027.jpg"),
+        raw_path: nil,
+        shot_at: DateTime.utc_now()
+      })
+
+    {:ok, second} =
+      Capture.create_photo(%{
+        web_path: "/uploads/b.jpg",
+        original_path: touch!(dir, "20260804-133709-029.jpg"),
+        raw_path: nil,
+        shot_at: DateTime.utc_now()
+      })
+
+    assert {:ok, updated} = Capture.update_raw_path(first, raw)
+    assert updated.raw_path == raw
+    assert {:error, _} = Capture.update_raw_path(second, raw)
+    assert Capture.get_photo!(second.id).raw_path in [nil, ""]
   end
 
   defp touch!(dir, name) do

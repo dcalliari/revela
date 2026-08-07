@@ -105,12 +105,12 @@ defmodule Revela.Capture.Ingest do
   Localiza o RAW irmao de um JPEG no mesmo diretorio.
 
   1. Match exato de basename (`foo.jpg` → `foo.cr2` / `.cr3`, case-insensitive).
-  2. Fallback: RAW com indice adjacente (±1) e carimbo de nome dentro de
+  2. Fallback: RAW com indice `jpeg.index + 1` e carimbo de nome dentro de
      `#{@timestamp_tolerance_seconds}`s (padrao gphoto2 `%Y%m%d-%H%M%S-%03n`).
 
   Nomes fora do padrao nao casam no fallback (sem crash). RAWs ja associados a
-  outra foto sao ignorados. Com varios candidatos, prefere o mais proximo
-  (indice, depois tempo) e registra ambiguidade.
+  outra foto sao ignorados. Com varios candidatos (ex. `.cr2` e `.cr3`), prefere
+  o mais proximo em tempo e registra ambiguidade.
   """
   def find_raw_sibling(jpeg_path, opts \\ []) when is_binary(jpeg_path) do
     taken = Keyword.get_lazy(opts, :taken, &Capture.claimed_raw_paths/0)
@@ -237,11 +237,23 @@ defmodule Revela.Capture.Ingest do
       true ->
         case match_raw_sibling(jpeg, taken: taken, on_ambiguity: :skip) do
           {:ok, raw_path} ->
-            unless dry_run? do
-              {:ok, _} = Capture.update_raw_path(photo, raw_path)
-            end
+            cond do
+              dry_run? ->
+                {Map.update!(summary, :matched, &(&1 + 1)), MapSet.put(taken, raw_path)}
 
-            {Map.update!(summary, :matched, &(&1 + 1)), MapSet.put(taken, raw_path)}
+              true ->
+                case Capture.update_raw_path(photo, raw_path) do
+                  {:ok, _} ->
+                    {Map.update!(summary, :matched, &(&1 + 1)), MapSet.put(taken, raw_path)}
+
+                  {:error, reason} ->
+                    Logger.warning(
+                      "backfill raw_path: falha ao gravar photo=#{photo.id} raw=#{raw_path}: #{inspect(reason)}"
+                    )
+
+                    {Map.update!(summary, :not_found, &(&1 + 1)), MapSet.put(taken, raw_path)}
+                end
+            end
 
           :ambiguous ->
             Logger.warning(
@@ -276,7 +288,7 @@ defmodule Revela.Capture.Ingest do
          raws when raws != [] <- list_raw_metas(Path.dirname(jpeg_path), taken) do
       candidates =
         raws
-        |> Enum.filter(&adjacent_sibling?(jpeg_meta, &1))
+        |> Enum.filter(&jpeg_to_raw_sibling?(jpeg_meta, &1))
         |> Enum.sort_by(&score_pair(jpeg_meta, &1))
 
       case {candidates, on_ambiguity} do
@@ -323,9 +335,18 @@ defmodule Revela.Capture.Ingest do
     end
   end
 
+  # JPEG→RAW: so o par documentado gphoto2 (JPEG N, RAW N+1).
+  defp jpeg_to_raw_sibling?(jpeg, raw) do
+    raw.index == jpeg.index + 1 and within_timestamp_tolerance?(jpeg, raw)
+  end
+
+  # RAW→JPEG (attach): ±1 para ranking quando varios JPEGs no diretorio.
   defp adjacent_sibling?(jpeg, raw) do
-    abs(raw.index - jpeg.index) == 1 and
-      abs(DateTime.diff(raw.datetime, jpeg.datetime, :second)) <= @timestamp_tolerance_seconds
+    abs(raw.index - jpeg.index) == 1 and within_timestamp_tolerance?(jpeg, raw)
+  end
+
+  defp within_timestamp_tolerance?(jpeg, raw) do
+    abs(DateTime.diff(raw.datetime, jpeg.datetime, :second)) <= @timestamp_tolerance_seconds
   end
 
   # menor score = melhor: distancia de indice, depois tempo, depois prefere RAW apos JPEG
