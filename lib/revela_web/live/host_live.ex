@@ -9,6 +9,9 @@ defmodule RevelaWeb.HostLive do
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
   (cores, setas, limpar) e a legenda ficam em `ViewerComponents`.
+
+  Com `REVELA_DEMO=1`, o Host mostra badge DEMO e, com a captura armada,
+  **Disparar (demo)** / tecla `D`/`d` (caminho real de ingest via arquivo).
   """
   use RevelaWeb, :live_view
 
@@ -58,6 +61,11 @@ defmodule RevelaWeb.HostLive do
 
   def handle_event("stop", _params, socket) do
     {:noreply, assign(socket, :capture, CameraServer.stop_capture())}
+  end
+
+  def handle_event("demo_fire", _params, socket) do
+    _ = CameraServer.demo_fire()
+    {:noreply, socket}
   end
 
   # ── visualizador em tela cheia (host classifica como "host") ─────────────────
@@ -177,6 +185,9 @@ defmodule RevelaWeb.HostLive do
       k when k in ["l", "L"] ->
         handle_event("go_live", %{}, socket)
 
+      k when k in ["d", "D"] ->
+        handle_event("demo_fire", %{}, socket)
+
       _ ->
         {:noreply, socket}
     end
@@ -291,7 +302,10 @@ defmodule RevelaWeb.HostLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-dvh bg-base-200 p-4 sm:p-6 relative overflow-hidden">
+    <div
+      class="min-h-dvh bg-base-200 p-4 sm:p-6 relative overflow-hidden"
+      phx-window-keyup="key"
+    >
       <%!-- Marca d'agua repetida no fundo. O corpo e fixo em vh (acompanha so a
            escala vertical, nunca encolhe com a largura) e as colunas tilam a
            largura exata via auto-fill: entram e saem colunas inteiras conforme
@@ -307,6 +321,18 @@ defmodule RevelaWeb.HostLive do
       </div>
 
       <div class="max-w-5xl mx-auto relative">
+        <div
+          :if={Map.get(@capture, :demo) == true}
+          id="demo-badge"
+          class="mb-4 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/15 px-3 py-2 text-sm font-semibold tracking-wide text-warning"
+          role="status"
+        >
+          <span class="badge badge-warning badge-sm font-bold">DEMO</span>
+          <span class="font-normal opacity-80">
+            Modo demo (`REVELA_DEMO`) — sem câmera física; `D` dispara JPEG sintético.
+          </span>
+        </div>
+
         <div class="grid gap-6 lg:grid-cols-3">
           <div class="lg:col-span-1 flex flex-col gap-4">
             <div :if={@notice} class="alert alert-info text-xs py-2 break-all">{@notice}</div>
@@ -419,6 +445,7 @@ defmodule RevelaWeb.HostLive do
         closable={true}
         zoom_id="zoomer-host"
         fs_id="fs-host"
+        window_keys={false}
       />
     </div>
     """
@@ -430,6 +457,9 @@ defmodule RevelaWeb.HostLive do
     {action_label, action_event, action_disabled?, action_class} =
       capture_action(assigns.capture)
 
+    demo_armed? =
+      Map.get(assigns.capture, :demo) == true and assigns.capture.status == :running
+
     assigns =
       assign(assigns,
         action_label: action_label,
@@ -438,7 +468,8 @@ defmodule RevelaWeb.HostLive do
         action_class: action_class,
         help: capture_help(assigns.capture),
         help_class: capture_help_class(assigns.capture),
-        disk_hint: free_space_hint(assigns.capture)
+        disk_hint: free_space_hint(assigns.capture),
+        demo_armed?: demo_armed?
       )
 
     ~H"""
@@ -460,6 +491,16 @@ defmodule RevelaWeb.HostLive do
           ]}
         >
           {@action_label}
+        </button>
+
+        <button
+          :if={@demo_armed?}
+          id="demo-fire"
+          type="button"
+          phx-click="demo_fire"
+          class="btn btn-secondary btn-sm w-full"
+        >
+          Disparar (demo)
         </button>
 
         <p
@@ -489,6 +530,9 @@ defmodule RevelaWeb.HostLive do
 
   defp capture_action(_capture),
     do: {"Conecte a câmera", nil, true, "btn-primary"}
+
+  defp capture_help(%{status: :running, demo: true}),
+    do: "Demo armada. Dispare com o botão ou a tecla D."
 
   defp capture_help(%{status: :running}),
     do: "Câmera vinculada. Aguardando disparos."
