@@ -54,6 +54,13 @@ defmodule Revela.Capture.CameraServer do
   """
   def set_editorial(name), do: GenServer.call(__MODULE__, {:set_editorial, name})
 
+  @doc """
+  Cria a pasta do editorial sem apontar a captura para ela. Use antes de
+  `Capture.start_editorial/2` e chame `set_editorial/1` em seguida.
+  """
+  def reserve_editorial_folder(name),
+    do: GenServer.call(__MODULE__, {:reserve_editorial_folder, name})
+
   @doc "Finaliza o editorial atual: para a captura e volta ao estado sem editorial. Os originais ficam na pasta."
   def finish_editorial, do: GenServer.call(__MODULE__, :finish_editorial)
 
@@ -124,14 +131,18 @@ defmodule Revela.Capture.CameraServer do
     {:reply, public_status(state), state}
   end
 
+  def handle_call({:reserve_editorial_folder, name}, _from, state) do
+    folder = editorial_folder(state.editorials_base, name)
+    File.mkdir_p!(folder)
+    {:reply, {:ok, %{name: name, folder: folder}}, state}
+  end
+
   def handle_call({:set_editorial, name}, _from, state) do
     # para a captura e o watcher da pasta antiga
-    state = state |> kill_port() |> stop_watcher()
+    state = state |> kill_port() |> stop_watcher() |> clear_pending()
     state = %{state | desired: false, backoff_ms: @initial_backoff}
 
-    {{y, m, d}, _} = :calendar.local_time()
-    date = :io_lib.format("~4..0B-~2..0B-~2..0B", [y, m, d]) |> to_string()
-    folder = Path.join(state.editorials_base, "#{date} #{sanitize(name)}")
+    folder = editorial_folder(state.editorials_base, name)
     File.mkdir_p!(folder)
 
     state = %{
@@ -140,8 +151,7 @@ defmodule Revela.Capture.CameraServer do
         editorial: name,
         status: :idle,
         message: nil,
-        processed: MapSet.new(),
-        pending: %{}
+        processed: MapSet.new()
     }
 
     state = schedule_presence_poll(state, 0)
@@ -151,7 +161,7 @@ defmodule Revela.Capture.CameraServer do
   end
 
   def handle_call(:finish_editorial, _from, state) do
-    state = state |> kill_port() |> stop_watcher()
+    state = state |> kill_port() |> stop_watcher() |> clear_pending()
     limbo = Path.join(state.editorials_base, "_sem-editorial")
     File.mkdir_p!(limbo)
 
@@ -163,8 +173,7 @@ defmodule Revela.Capture.CameraServer do
         captures_dir: limbo,
         status: :idle,
         message: nil,
-        processed: MapSet.new(),
-        pending: %{}
+        processed: MapSet.new()
     }
 
     state = schedule_presence_poll(state, 0)
@@ -271,22 +280,33 @@ defmodule Revela.Capture.CameraServer do
 
   # arquivo assentou: processa uma unica vez
   def handle_info({:settle, path}, state) do
-    state = %{state | pending: Map.delete(state.pending, path)}
+    case Map.pop(state.pending, path) do
+      {nil, _pending} ->
+        {:noreply, state}
 
-    if MapSet.member?(state.processed, path) do
-      {:noreply, state}
-    else
-      case Ingest.process(path) do
-        {:ok, _photo} ->
-          {:noreply, %{state | processed: MapSet.put(state.processed, path)}}
+      {_ref, pending} ->
+        state = %{state | pending: pending}
 
-        :ignore ->
-          {:noreply, state}
+        cond do
+          MapSet.member?(state.processed, path) ->
+            {:noreply, state}
 
-        {:error, _reason} ->
-          # deixa fora do processed para permitir nova tentativa em evento futuro
-          {:noreply, state}
-      end
+          not under_captures_dir?(path, state.captures_dir) ->
+            {:noreply, state}
+
+          true ->
+            case Ingest.process(path) do
+              {:ok, _photo} ->
+                {:noreply, %{state | processed: MapSet.put(state.processed, path)}}
+
+              :ignore ->
+                {:noreply, state}
+
+              {:error, _reason} ->
+                # deixa fora do processed para permitir nova tentativa em evento futuro
+                {:noreply, state}
+            end
+        end
     end
   end
 
@@ -445,6 +465,17 @@ defmodule Revela.Capture.CameraServer do
 
   defp stop_watcher(state), do: state
 
+  defp clear_pending(%{pending: pending} = state) do
+    Enum.each(pending, fn {_path, ref} -> Process.cancel_timer(ref) end)
+    %{state | pending: %{}}
+  end
+
+  defp under_captures_dir?(path, captures_dir) do
+    path = Path.expand(path)
+    dir = Path.expand(captures_dir)
+    String.starts_with?(path, dir <> "/")
+  end
+
   # nome seguro para pasta: remove separadores e caracteres de controle
   defp sanitize(name) do
     name
@@ -455,6 +486,12 @@ defmodule Revela.Capture.CameraServer do
       "" -> "editorial"
       s -> s
     end
+  end
+
+  defp editorial_folder(editorials_base, name) do
+    {{y, m, d}, _} = :calendar.local_time()
+    date = :io_lib.format("~4..0B-~2..0B-~2..0B", [y, m, d]) |> to_string()
+    Path.join(editorials_base, "#{date} #{sanitize(name)}")
   end
 
   defp ensure_watcher(%{watcher_pid: pid} = state) when is_pid(pid), do: state

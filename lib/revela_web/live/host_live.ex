@@ -71,8 +71,9 @@ defmodule RevelaWeb.HostLive do
         {:noreply, socket}
 
       name ->
-        {:ok, %{folder: folder}} = CameraServer.set_editorial(name)
+        {:ok, %{folder: folder}} = CameraServer.reserve_editorial_folder(name)
         {:ok, _editorial} = Capture.start_editorial(name, folder)
+        {:ok, %{folder: ^folder}} = CameraServer.set_editorial(name)
 
         {:noreply,
          socket
