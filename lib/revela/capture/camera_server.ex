@@ -1060,16 +1060,16 @@ defmodule Revela.Capture.CameraServer do
         # como foto. Se o JPEG ja foi ingerido (ordem tipica), associa o raw_path.
         case Ingest.attach_raw(path) do
           {:ok, _photo} ->
-            :ok
+            %{state | processed: MapSet.put(state.processed, path)}
 
           :ignore ->
-            :ok
+            %{state | processed: MapSet.put(state.processed, path)}
 
           {:error, reason} ->
             Logger.warning("Falha ao associar RAW #{path}: #{inspect(reason)}")
+            # deixa fora do processed para permitir nova tentativa em evento futuro
+            state
         end
-
-        %{state | processed: MapSet.put(state.processed, path)}
 
       true ->
         state
