@@ -38,6 +38,14 @@ re-apply transform so LiveView patches (tallies, presence) do not wipe zoom.
 Do not reintroduce center-origin CSS on the viewer `<img>` or unconditional
 `resetZoom()` in `updated()`.
 
+## Domain: color-folder export
+
+`Revela.Capture.Export` (+ `mix revela.export_colors`) copies/moves classified
+files into `vermelho`/`amarelo`/`verde`/`azul`/`roxo` using one reviewer's
+labels (default `host`). Prefers `raw_path`, then JPEG, then web preview (with
+warnings). Google Fotos vs Drive upload is phase-2 — see README. Post-prod UI
+(item 11) should call `Export.export/1` rather than reimplementing file ops.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues

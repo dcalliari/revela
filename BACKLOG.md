@@ -347,25 +347,25 @@ histórico visível da sessão.
 
 ### 12. Organização por cor e entrega no Google
 
+**Status**: FEITO (export local por pastas de cor). Follow-up: upload Google
+Fotos (entrega) / Drive (arquivo) — ver README.
+
 **Observado**: a organização das fotos por cor foi feita à mão, fora da
 aplicação, cruzando as classificações recuperadas com os arquivos RAW em disco.
 Depois, a entrega para a modelo passou por um álbum do Google Fotos, montado
 também à mão a partir de um intervalo de arquivos localizado pelo índice.
 
-**Proposta**: exportar a organização a partir do próprio sistema, movendo ou
-copiando os RAWs para pastas por cor. Adiante, integração direta com o Google
-para eliminar a etapa manual de upload.
+**Feito**: `Revela.Capture.Export` + `mix revela.export_colors` copiam (padrão)
+ou movem arquivos para pastas `vermelho` / `amarelo` / `verde` / `azul` /
+`roxo`, com filtro por cor e/ou photo ids, editorial ativo ou `--editorial`.
+Prefere `raw_path`; se vazio/ausente, exporta JPEG/preview com aviso. A seleção
+por intervalo (item 11) não bloqueia: o mix/`Export.export/1` já aceita ids
+explícitos e pode ser ligado à UI de pós-produção quando ela existir.
 
-**Atenção ao destino**: Drive e Fotos são produtos diferentes, com APIs e
-semânticas diferentes, e o uso real até agora foi o **Fotos** (álbum para a
-modelo ver), não o Drive (arquivo bruto). Vale decidir qual dos dois é o alvo,
-ou se são dois fluxos distintos: entrega para a cliente (Fotos, imagens
-visualizáveis) e backup/arquivo (Drive, RAW). Enviar RAW de 24 MB para o Google
-Fotos provavelmente não é o que se quer.
-
-**Depende do item 11**: só faz sentido exportar depois de existir uma forma de
-selecionar o intervalo dentro do sistema. Hoje a seleção mora na cabeça de quem
-memorizou o nome da primeira e da última foto.
+**Atenção ao destino (fase 2)**: Drive e Fotos são produtos diferentes. Uso real
+até agora foi **Fotos** (álbum para a modelo). Dois fluxos: entrega (Fotos,
+JPEG/preview) vs arquivo (Drive, RAW). Enviar RAW de 24 MB para o Fotos
+provavelmente não é o que se quer.
 
 **Nota de implementação**: o casamento entre foto e RAW não é trivial e vale
 guardar o aprendizado. O gphoto2 nomeia com `%Y%m%d-%H%M%S-%03n.%C`, e em
