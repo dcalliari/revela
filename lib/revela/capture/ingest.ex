@@ -201,7 +201,7 @@ defmodule Revela.Capture.Ingest do
       true ->
         with {:ok, jpeg_meta} <- parse_capture_path(jpeg_path),
              {:ok, raw_meta} <- parse_capture_path(raw_path) do
-          adjacent_sibling?(jpeg_meta, raw_meta)
+          jpeg_to_raw_sibling?(jpeg_meta, raw_meta)
         else
           _ -> false
         end
@@ -335,27 +335,19 @@ defmodule Revela.Capture.Ingest do
     end
   end
 
-  # JPEG→RAW: so o par documentado gphoto2 (JPEG N, RAW N+1).
+  # Par documentado gphoto2: JPEG N com RAW N+1 (ingest e attach).
   defp jpeg_to_raw_sibling?(jpeg, raw) do
     raw.index == jpeg.index + 1 and within_timestamp_tolerance?(jpeg, raw)
-  end
-
-  # RAW→JPEG (attach): ±1 para ranking quando varios JPEGs no diretorio.
-  defp adjacent_sibling?(jpeg, raw) do
-    abs(raw.index - jpeg.index) == 1 and within_timestamp_tolerance?(jpeg, raw)
   end
 
   defp within_timestamp_tolerance?(jpeg, raw) do
     abs(DateTime.diff(raw.datetime, jpeg.datetime, :second)) <= @timestamp_tolerance_seconds
   end
 
-  # menor score = melhor: distancia de indice, depois tempo, depois prefere RAW apos JPEG
+  # menor score = melhor: distancia de tempo (indice ja filtrado a N+1)
   defp score_pair(jpeg, raw) do
-    index_dist = abs(raw.index - jpeg.index)
     time_dist = abs(DateTime.diff(raw.datetime, jpeg.datetime, :second))
-    # 0 se RAW index > JPEG (caso tipico N / N+1), 1 caso contrario
-    direction = if raw.index > jpeg.index, do: 0, else: 1
-    {index_dist, time_dist, direction}
+    {time_dist, raw.path}
   end
 
   defp rank_photos_for_raw(photos, raw_path) do
