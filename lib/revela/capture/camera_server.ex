@@ -24,6 +24,13 @@ defmodule Revela.Capture.CameraServer do
   periodicamente enquanto nao estamos capturando. O poll pausa durante :running
   para nao competir pela interface com o proprio gphoto2 do captura.
 
+  Auto-arm: com editorial ativo, camera presente, disco OK (`disk_awareness`
+  `:available` e acima do piso) e sem latch de stop do operador, a captura arma
+  sozinha apos um debounce curto na borda USB (evita thrash do gphoto2). Sem
+  editorial (limbo `_sem-editorial`) ou com `disk_awareness: :unavailable`, nao
+  arma — exige clique. `stop_capture` gruda (`operator_stopped`); so
+  `start_capture` libera o latch. Reconexao apos queda com `desired` permanece.
+
   Espaco em disco (`free_disk_bytes`, `estimated_shots_left`, `disk_awareness`):
   o gphoto2 ignora SIGTERM, entao a parada normal manda SIGKILL nele (ver
   `kill_port/1`). Isso e seguro entre disparos, mas matar o processo no meio de
@@ -53,6 +60,9 @@ defmodule Revela.Capture.CameraServer do
 
   # intervalo do poll de presenca da camera (gphoto2 --auto-detect)
   @presence_poll_ms 3_000
+
+  # debounce na borda USB presente→auto-arm (flaps curtos nao disparam gphoto2)
+  @presence_debounce_ms 1_500
 
   # piso de espaco livre em disco: abaixo disso a captura para sozinha, entre
   # disparos (nunca durante uma transferencia em curso). Motivacao: em
@@ -132,13 +142,21 @@ defmodule Revela.Capture.CameraServer do
       watcher_pid: nil,
       # o usuario quer capturar? controla a reconexao automatica
       desired: false,
+      # stop explicito do operador: impede auto-arm ate start_capture
+      operator_stopped: false,
+      # true quando o tether subiu via auto-arm (UI honestidade)
+      armed_automatically: false,
       backoff_ms: @initial_backoff,
       # ha uma camera respondendo no USB agora? (ver poll de presenca)
       camera_present: false,
       presence_detector: Keyword.get(opts, :presence_detector, &detect_camera_present?/0),
       presence_poll_ms: Keyword.get(opts, :presence_poll_ms, @presence_poll_ms),
+      presence_debounce_ms: Keyword.get(opts, :presence_debounce_ms, @presence_debounce_ms),
       presence_check_ref: nil,
       presence_timer: nil,
+      presence_debounce_ref: nil,
+      # opcional em testes: fn state -> {:ok, port, os_pid} | {:error, message}
+      tether_spawner: Keyword.get(opts, :tether_spawner, &default_tether_spawner/1),
       # arquivos aguardando "assentar": %{path => timer_ref}. Nao vazio == ha
       # uma transferencia do gphoto2 em curso; nunca mata o processo nesse estado.
       # Inclui JPEG e RAW (.cr2/.cr3) so para gating de parada; so JPEG e ingerido.
@@ -170,26 +188,55 @@ defmodule Revela.Capture.CameraServer do
 
   # sem camera detectada, mantem a captura parada e nao arma reconexao
   def handle_call(:start_capture, _from, %{camera_present: false} = state) do
-    state = %{state | desired: false, status: :idle, message: nil}
+    state = %{
+      state
+      | desired: false,
+        operator_stopped: false,
+        armed_automatically: false,
+        status: :idle,
+        message: nil
+    }
+
+    state = cancel_auto_arm_debounce(state)
     broadcast(state)
     {:reply, public_status(state), state}
   end
 
   def handle_call(:start_capture, _from, state) do
-    {_reply, state} = do_start(%{state | desired: true})
+    state =
+      cancel_auto_arm_debounce(%{
+        state
+        | desired: true,
+          operator_stopped: false,
+          armed_automatically: false
+      })
+
+    {_reply, state} = do_start(state)
     {:reply, public_status(state), state}
   end
 
   def handle_call(:stop_capture, _from, state) do
-    state = kill_port(%{state | desired: false, backoff_ms: @initial_backoff})
-    state = state |> Map.merge(%{status: :idle, message: nil}) |> schedule_presence_poll(0)
+    state =
+      state
+      |> cancel_auto_arm_debounce()
+      |> kill_port()
+      |> Map.merge(%{
+        desired: false,
+        operator_stopped: true,
+        armed_automatically: false,
+        status: :idle,
+        message: nil,
+        backoff_ms: @initial_backoff
+      })
+      |> schedule_presence_poll(0)
+
     broadcast(state)
     {:reply, public_status(state), state}
   end
 
   def handle_call({:reserve_editorial_folder, name}, _from, state) do
     state = detach_capture(state)
-    state = %{state | status: :idle, message: nil}
+    state = %{state | status: :idle, message: nil, armed_automatically: false}
     state = schedule_presence_poll(state, 0)
 
     folder = editorial_folder(state.editorials_base, name)
@@ -212,10 +259,16 @@ defmodule Revela.Capture.CameraServer do
         reserved_folder: nil,
         status: :idle,
         message: nil,
+        armed_automatically: false,
         processed: MapSet.new()
     }
 
-    state = state |> update_disk_status() |> schedule_presence_poll(0)
+    state =
+      state
+      |> update_disk_status()
+      |> schedule_presence_poll(0)
+      |> maybe_schedule_auto_arm()
+
     broadcast(state)
     Logger.info("Editorial iniciado: #{name} (#{folder})")
     {:reply, {:ok, %{name: name, folder: folder}}, state}
@@ -233,10 +286,16 @@ defmodule Revela.Capture.CameraServer do
         captures_dir: limbo,
         status: :idle,
         message: nil,
+        armed_automatically: false,
         processed: MapSet.new()
     }
 
-    state = state |> update_disk_status() |> schedule_presence_poll(0)
+    state =
+      state
+      |> cancel_auto_arm_debounce()
+      |> update_disk_status()
+      |> schedule_presence_poll(0)
+
     broadcast(state)
     Logger.info("Editorial finalizado")
     {:reply, public_status(state), state}
@@ -276,6 +335,19 @@ defmodule Revela.Capture.CameraServer do
   end
 
   def handle_info(:reconnect, state), do: {:noreply, state}
+
+  def handle_info({:auto_arm, debounce_ref}, %{presence_debounce_ref: debounce_ref} = state) do
+    state = %{state | presence_debounce_ref: nil}
+
+    if auto_arm_ready?(state) do
+      {_reply, state} = do_start(%{state | desired: true, armed_automatically: true})
+      {:noreply, state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({:auto_arm, _stale_ref}, state), do: {:noreply, state}
 
   # o auto-detect roda fora do GenServer porque pode levar alguns segundos
   def handle_info(:poll_presence, %{status: :running} = state) do
@@ -394,6 +466,7 @@ defmodule Revela.Capture.CameraServer do
   # em curso (ver maybe_stop_for_low_disk/1).
   def handle_info(:poll_disk, state) do
     state = check_disk_between_shots(state)
+    state = maybe_schedule_auto_arm(state)
     Process.send_after(self(), :poll_disk, state.disk_poll_ms)
     {:noreply, state}
   end
@@ -428,6 +501,7 @@ defmodule Revela.Capture.CameraServer do
           %{
             state
             | desired: false,
+              armed_automatically: false,
               status: :disk_full,
               message: message,
               backoff_ms: @initial_backoff
@@ -443,15 +517,57 @@ defmodule Revela.Capture.CameraServer do
 
         {public_status(state), state}
 
-      is_nil(System.find_executable("gphoto2")) ->
-        state = %{state | status: :error, message: "gphoto2 não encontrado no PATH"}
-        broadcast(state)
-        {public_status(state), state}
-
       true ->
-        gphoto2 = System.find_executable("gphoto2")
-        release_gvfs()
         state = ensure_watcher(state)
+
+        case run_tether_spawner(state) do
+          {:ok, port, os_pid} ->
+            state = %{
+              state
+              | port: port,
+                os_pid: os_pid,
+                status: :running,
+                message: nil,
+                backoff_ms: @initial_backoff
+            }
+
+            state = cancel_presence_poll(state)
+            broadcast(state)
+
+            Logger.info(
+              "Captura iniciado (gphoto2 pid #{inspect(os_pid)}) em #{state.captures_dir}" <>
+                if(state.armed_automatically, do: " [auto-arm]", else: "")
+            )
+
+            {public_status(state), state}
+
+          {:error, message} ->
+            state = %{state | status: :error, message: message, armed_automatically: false}
+            broadcast(state)
+            {public_status(state), state}
+        end
+    end
+  end
+
+  defp run_tether_spawner(state) do
+    case state.tether_spawner.(state) do
+      {:ok, port, os_pid} -> {:ok, port, os_pid}
+      {:error, message} when is_binary(message) -> {:error, message}
+      _other -> {:error, "Falha ao iniciar captura tethered"}
+    end
+  rescue
+    _error -> {:error, "Falha ao iniciar captura tethered"}
+  catch
+    _kind, _reason -> {:error, "Falha ao iniciar captura tethered"}
+  end
+
+  defp default_tether_spawner(state) do
+    case System.find_executable("gphoto2") do
+      nil ->
+        {:error, "gphoto2 não encontrado no PATH"}
+
+      gphoto2 ->
+        release_gvfs()
 
         port =
           Port.open(
@@ -471,24 +587,13 @@ defmodule Revela.Capture.CameraServer do
           )
 
         os_pid = port |> Port.info(:os_pid) |> elem(1)
-
-        state = %{
-          state
-          | port: port,
-            os_pid: os_pid,
-            status: :running,
-            message: nil,
-            backoff_ms: @initial_backoff
-        }
-
-        state = cancel_presence_poll(state)
-        broadcast(state)
-        Logger.info("Captura iniciado (gphoto2 pid #{os_pid}) em #{state.captures_dir}")
-        {public_status(state), state}
+        {:ok, port, os_pid}
     end
   end
 
   defp transition_after_presence_check(%{camera_present: false, desired: true} = state) do
+    state = cancel_auto_arm_debounce(state)
+
     %{
       state
       | status: :waiting_camera,
@@ -504,6 +609,7 @@ defmodule Revela.Capture.CameraServer do
            status: :waiting_camera
          } = state
        ) do
+    state = cancel_auto_arm_debounce(state)
     {_reply, state} = do_start(%{state | status: :idle, message: nil})
     state
   end
@@ -515,6 +621,7 @@ defmodule Revela.Capture.CameraServer do
            status: :reconnecting
          } = state
        ) do
+    state = cancel_auto_arm_debounce(state)
     Process.send_after(self(), :reconnect, state.backoff_ms)
     delay_seconds = div(state.backoff_ms, 1_000)
 
@@ -525,7 +632,45 @@ defmodule Revela.Capture.CameraServer do
     }
   end
 
-  defp transition_after_presence_check(state), do: state
+  defp transition_after_presence_check(%{camera_present: false} = state) do
+    cancel_auto_arm_debounce(state)
+  end
+
+  defp transition_after_presence_check(state), do: maybe_schedule_auto_arm(state)
+
+  defp auto_arm_ready?(state) do
+    not state.operator_stopped and
+      is_binary(state.editorial) and
+      state.camera_present and
+      not state.desired and
+      state.status not in [:running, :reconnecting, :waiting_camera] and
+      state.disk_awareness == :available and
+      not disk_below_minimum?(state)
+  end
+
+  defp maybe_schedule_auto_arm(state) do
+    if auto_arm_ready?(state) do
+      schedule_auto_arm_debounce(state)
+    else
+      cancel_auto_arm_debounce(state)
+    end
+  end
+
+  defp schedule_auto_arm_debounce(%{presence_debounce_ref: ref} = state) when is_reference(ref),
+    do: state
+
+  defp schedule_auto_arm_debounce(state) do
+    debounce_ref = make_ref()
+    Process.send_after(self(), {:auto_arm, debounce_ref}, state.presence_debounce_ms)
+    %{state | presence_debounce_ref: debounce_ref}
+  end
+
+  defp cancel_auto_arm_debounce(%{presence_debounce_ref: nil} = state), do: state
+
+  defp cancel_auto_arm_debounce(%{presence_debounce_ref: _ref} = state) do
+    # timers are cancelled by ignoring stale refs in handle_info; clear the latch
+    %{state | presence_debounce_ref: nil}
+  end
 
   defp schedule_presence_poll_unless_running(%{status: :running} = state),
     do: cancel_presence_poll(state)
@@ -579,6 +724,7 @@ defmodule Revela.Capture.CameraServer do
 
   defp detach_capture(state) do
     state
+    |> cancel_auto_arm_debounce()
     |> kill_port()
     |> stop_watcher()
     |> clear_pending()
@@ -653,9 +799,22 @@ defmodule Revela.Capture.CameraServer do
   defp ensure_watcher(%{watcher_pid: pid} = state) when is_pid(pid), do: state
 
   defp ensure_watcher(state) do
-    {:ok, pid} = FileSystem.start_link(dirs: [state.captures_dir])
-    FileSystem.subscribe(pid)
-    %{state | watcher_pid: pid}
+    case FileSystem.start_link(dirs: [state.captures_dir]) do
+      {:ok, pid} ->
+        FileSystem.subscribe(pid)
+        %{state | watcher_pid: pid}
+
+      :ignore ->
+        Logger.warning(
+          "file_system watcher indisponivel (inotify); tether sobe sem ingestao por pasta"
+        )
+
+        state
+
+      {:error, reason} ->
+        Logger.warning("file_system watcher falhou: #{inspect(reason)}")
+        state
+    end
   end
 
   defp kill_port(%{port: nil} = state), do: state
@@ -730,6 +889,9 @@ defmodule Revela.Capture.CameraServer do
       message: state.message,
       editorial: state.editorial,
       camera_present: state.camera_present,
+      operator_stopped: state.operator_stopped,
+      armed_automatically: state.armed_automatically,
+      auto_arm_pending: is_reference(state.presence_debounce_ref),
       free_disk_bytes: state.free_disk_bytes,
       estimated_shots_left: state.estimated_shots_left,
       disk_awareness: state.disk_awareness

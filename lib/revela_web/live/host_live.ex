@@ -484,11 +484,20 @@ defmodule RevelaWeb.HostLive do
   defp capture_action(%{status: status}) when status in [:reconnecting, :waiting_camera],
     do: {"Cancelar reconexão", "stop", false, "btn-outline"}
 
+  defp capture_action(%{auto_arm_pending: true}),
+    do: {"Armando tether…", nil, true, "btn-primary"}
+
+  defp capture_action(%{operator_stopped: true, camera_present: true}),
+    do: {"Retomar captura", "start", false, "btn-primary"}
+
   defp capture_action(%{camera_present: true}),
     do: {"Vincular câmera", "start", false, "btn-primary"}
 
   defp capture_action(_capture),
     do: {"Conecte a câmera", nil, true, "btn-primary"}
+
+  defp capture_help(%{status: :running, armed_automatically: true}),
+    do: "Câmera vinculada automaticamente. Aguardando disparos."
 
   defp capture_help(%{status: :running}),
     do: "Câmera vinculada. Aguardando disparos."
@@ -505,8 +514,20 @@ defmodule RevelaWeb.HostLive do
   defp capture_help(%{status: :disk_full, message: message}) when is_binary(message),
     do: message
 
+  defp capture_help(%{auto_arm_pending: true}),
+    do: "Câmera detectada; armando tether automaticamente…"
+
+  defp capture_help(%{operator_stopped: true, camera_present: true}),
+    do: "Captura pausada. Clique para retomar o tether."
+
+  defp capture_help(%{camera_present: true, editorial: nil}),
+    do: "Câmera detectada. Inicie um editorial para armar o tether automaticamente."
+
+  defp capture_help(%{camera_present: true, disk_awareness: :unavailable}),
+    do: "Câmera detectada. Vincule manualmente — monitoramento de disco indisponível."
+
   defp capture_help(%{camera_present: true}),
-    do: "Câmera detectada via USB e pronta para vincular."
+    do: "Câmera detectada; o tether arma automaticamente quando o disco estiver OK."
 
   defp capture_help(_capture),
     do: "Ligue a câmera e conecte o cabo USB."
@@ -553,6 +574,7 @@ defmodule RevelaWeb.HostLive do
         %{status: :waiting_camera} -> {"desconectada", "badge-warning"}
         %{status: :error} -> {"erro", "badge-error"}
         %{status: :disk_full} -> {"espaço cheio", "badge-error"}
+        %{auto_arm_pending: true} -> {"armando", "badge-info"}
         %{camera_present: true} -> {"detectada", "badge-info"}
         _capture -> {"desconectada", "badge-ghost"}
       end

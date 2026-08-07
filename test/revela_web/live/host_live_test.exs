@@ -23,6 +23,73 @@ defmodule RevelaWeb.HostLiveTest do
     assert selected_text(document, "#capture-status") == "detectada"
   end
 
+  test "mostra armando quando o auto-arm esta pendente" do
+    document =
+      render_capture_card(%{
+        status: :idle,
+        message: nil,
+        camera_present: true,
+        auto_arm_pending: true,
+        editorial: "Casamento"
+      })
+
+    assert selected_count(document, "#capture-action[disabled]") == 1
+    assert selected_text(document, "#capture-action") == "Armando tether…"
+    assert selected_text(document, "#capture-status") == "armando"
+    assert selected_text(document, "#capture-help") =~ "armando tether automaticamente"
+  end
+
+  test "mostra retomar apos stop explicito do operador" do
+    document =
+      render_capture_card(%{
+        status: :idle,
+        message: nil,
+        camera_present: true,
+        operator_stopped: true,
+        editorial: "Casamento"
+      })
+
+    assert selected_text(document, "#capture-action") == "Retomar captura"
+    assert selected_text(document, "#capture-help") =~ "Captura pausada"
+  end
+
+  test "explica auto-arm quando ha editorial e camera" do
+    document =
+      render_capture_card(%{
+        status: :idle,
+        message: nil,
+        camera_present: true,
+        editorial: "Casamento",
+        disk_awareness: :available
+      })
+
+    assert selected_text(document, "#capture-help") =~ "arma automaticamente"
+  end
+
+  test "pede editorial antes de auto-armar no limbo" do
+    document =
+      render_capture_card(%{
+        status: :idle,
+        message: nil,
+        camera_present: true,
+        editorial: nil
+      })
+
+    assert selected_text(document, "#capture-help") =~ "Inicie um editorial"
+  end
+
+  test "explica vinculacao automatica quando armou sozinho" do
+    document =
+      render_capture_card(%{
+        status: :running,
+        message: nil,
+        camera_present: true,
+        armed_automatically: true
+      })
+
+    assert selected_text(document, "#capture-help") =~ "vinculada automaticamente"
+  end
+
   test "explica a retomada automatica depois de uma desconexao" do
     document =
       render_capture_card(%{

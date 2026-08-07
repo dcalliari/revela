@@ -91,11 +91,14 @@ desligada.
    guardado para edicao). Com RAW puro nao ha preview rapido.
 4. Cabo USB firme, de preferencia porta direta no chassi, sem hub.
 
-Na tela `/host`, clique em **Conectar câmera**. Dispare na camera: a foto
-aparece nos celulares em segundos. O host mostra quanto espaco livre
-ainda cabe em fotos (`cabem ~N fotos`, media real do editorial). Se o
-disco cair abaixo do piso, a captura para entre disparos (nunca no meio
-de uma transferencia PTP): libere espaco e vincule de novo.
+Na tela `/host`, com um editorial ativo e disco OK, o tether arma sozinho
+quando a camera aparece no USB (debounce curto; stop explicito gruda ate
+retomar). Sem editorial ou com monitoramento de disco indisponivel, use
+**Vincular câmera**. Dispare na camera: a foto aparece nos celulares em
+segundos. O host mostra quanto espaco livre ainda cabe em fotos
+(`cabem ~N fotos`, media real do editorial). Se o disco cair abaixo do piso,
+a captura para entre disparos (nunca no meio de uma transferencia PTP):
+libere espaco e vincule de novo.
 
 ## Fluxo de dados
 

@@ -540,10 +540,244 @@ defmodule Revela.Capture.CameraServerTest do
     refute MapSet.member?(:sys.get_state(server).processed, foreign)
   end
 
+  test "auto-arma apos debounce com editorial ativo, camera e disco OK" do
+    Capture.subscribe_status()
+    detector_state = start_supervised!({Agent, fn -> false end})
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> Agent.get(detector_state, & &1) end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 30,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10_000_000_000 end,
+        tether_spawner: fn _state -> {:ok, nil, nil} end
+      })
+
+    wait_for_presence_check(server)
+
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Casamento", nil})
+    assert CameraServer.status(server).status == :idle
+    refute CameraServer.status(server).auto_arm_pending
+
+    Agent.update(detector_state, fn _ -> true end)
+    send(server, :poll_presence)
+    wait_for_presence_check(server)
+
+    assert CameraServer.status(server).auto_arm_pending
+    assert_receive {:capture_status, %{auto_arm_pending: true, camera_present: true}}
+
+    assert_receive {:capture_status, %{status: :running, armed_automatically: true}}, 500
+    assert CameraServer.status(server).status == :running
+    assert :sys.get_state(server).desired == true
+    assert :sys.get_state(server).operator_stopped == false
+  end
+
+  test "nao auto-arma no limbo sem editorial ativo" do
+    Capture.subscribe_status()
+    detector_state = start_supervised!({Agent, fn -> true end})
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> Agent.get(detector_state, & &1) end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 20,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10_000_000_000 end,
+        tether_spawner: fn _state -> {:ok, nil, nil} end
+      })
+
+    wait_for_presence_check(server)
+
+    assert CameraServer.status(server).editorial == nil
+    assert CameraServer.status(server).camera_present
+    refute CameraServer.status(server).auto_arm_pending
+    refute_receive {:capture_status, %{status: :running}}, 80
+    assert CameraServer.status(server).status == :idle
+    assert :sys.get_state(server).desired == false
+  end
+
+  test "nao auto-arma quando disk_awareness e unavailable" do
+    Capture.subscribe_status()
+    detector_state = start_supervised!({Agent, fn -> true end})
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> Agent.get(detector_state, & &1) end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 20,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> :unavailable end,
+        tether_spawner: fn _state -> {:ok, nil, nil} end
+      })
+
+    wait_for_presence_check(server)
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Casamento", nil})
+
+    send(server, :poll_presence)
+    wait_for_presence_check(server)
+
+    assert CameraServer.status(server).disk_awareness == :unavailable
+    assert CameraServer.status(server).camera_present
+    refute CameraServer.status(server).auto_arm_pending
+    refute_receive {:capture_status, %{status: :running}}, 80
+    assert :sys.get_state(server).desired == false
+  end
+
+  test "nao auto-arma quando o disco esta abaixo do minimo" do
+    Capture.subscribe_status()
+    detector_state = start_supervised!({Agent, fn -> true end})
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> Agent.get(detector_state, & &1) end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 20,
+        disk_poll_ms: 60_000,
+        min_free_disk_bytes: 5_000_000_000,
+        disk_checker: fn _dir -> 1_000_000_000 end,
+        tether_spawner: fn _state -> {:ok, nil, nil} end
+      })
+
+    wait_for_presence_check(server)
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Casamento", nil})
+
+    send(server, :poll_presence)
+    wait_for_presence_check(server)
+
+    refute CameraServer.status(server).auto_arm_pending
+    refute_receive {:capture_status, %{status: :running}}, 80
+    assert :sys.get_state(server).desired == false
+  end
+
+  test "stop explicito gruda: nao rearma enquanto a camera continua presente" do
+    Capture.subscribe_status()
+    detector_state = start_supervised!({Agent, fn -> true end})
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> Agent.get(detector_state, & &1) end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 20,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10_000_000_000 end,
+        tether_spawner: fn _state -> {:ok, nil, nil} end
+      })
+
+    wait_for_presence_check(server)
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Casamento", nil})
+
+    send(server, :poll_presence)
+    wait_for_presence_check(server)
+    assert_receive {:capture_status, %{status: :running, armed_automatically: true}}, 500
+
+    stopped = CameraServer.stop_capture(server)
+    assert stopped.status == :idle
+    assert stopped.operator_stopped == true
+    assert :sys.get_state(server).desired == false
+
+    # esvazia broadcasts anteriores para o refute abaixo so ver novos eventos
+    flush_capture_status()
+
+    send(server, :poll_presence)
+    wait_for_presence_check(server)
+
+    refute CameraServer.status(server).auto_arm_pending
+    refute_receive {:capture_status, %{status: :running}}, 80
+    assert CameraServer.status(server).operator_stopped
+    assert CameraServer.status(server).status == :idle
+
+    resumed = CameraServer.start_capture(server)
+    assert resumed.status == :running
+    assert resumed.operator_stopped == false
+    assert resumed.armed_automatically == false
+  end
+
+  test "debounce cancela auto-arm se a camera some antes do prazo" do
+    Capture.subscribe_status()
+    detector_state = start_supervised!({Agent, fn -> false end})
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> Agent.get(detector_state, & &1) end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 200,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10_000_000_000 end,
+        tether_spawner: fn _state -> {:ok, nil, nil} end
+      })
+
+    wait_for_presence_check(server)
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Casamento", nil})
+
+    Agent.update(detector_state, fn _ -> true end)
+    send(server, :poll_presence)
+    wait_for_presence_check(server)
+    assert CameraServer.status(server).auto_arm_pending
+
+    Agent.update(detector_state, fn _ -> false end)
+    send(server, :poll_presence)
+    wait_for_presence_check(server)
+
+    refute CameraServer.status(server).auto_arm_pending
+    refute_receive {:capture_status, %{status: :running}}, 300
+    assert CameraServer.status(server).status == :idle
+  end
+
+  test "set_editorial agenda auto-arm quando a camera ja esta presente" do
+    Capture.subscribe_status()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> true end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 20,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10_000_000_000 end,
+        tether_spawner: fn _state -> {:ok, nil, nil} end
+      })
+
+    wait_for_presence_check(server)
+    assert CameraServer.status(server).camera_present
+
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Ensaio", nil})
+    assert CameraServer.status(server).auto_arm_pending
+    assert_receive {:capture_status, %{status: :running, armed_automatically: true}}, 500
+  end
+
   defp wait_for_presence_check(server) do
     case :sys.get_state(server).presence_check_ref do
       nil -> :ok
       _check_ref -> wait_for_presence_check(server)
+    end
+  end
+
+  defp flush_capture_status do
+    receive do
+      {:capture_status, _status} -> flush_capture_status()
+    after
+      0 -> :ok
     end
   end
 
