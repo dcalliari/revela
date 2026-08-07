@@ -1,5 +1,5 @@
 defmodule Revela.CaptureTest do
-  use Revela.DataCase, async: true
+  use Revela.DataCase, async: false
 
   alias Revela.Capture
 
@@ -122,6 +122,22 @@ defmodule Revela.CaptureTest do
       paged = Capture.list_photos(colors: [0], order: :desc, limit: 1, offset: 0)
       assert length(paged) == 1
       assert hd(paged).id == p3.id
+    end
+  end
+
+  describe "broadcast_host_viewer" do
+    test "nao retransmite quando photo_id/follow/open nao mudam" do
+      Capture.reset_host_viewer_state()
+      Capture.subscribe_host_viewer()
+
+      Capture.broadcast_host_viewer(%{photo_id: 7, follow: false, open: true})
+      assert_receive {:host_viewer, %{photo_id: 7, follow: false, open: true}}
+
+      Capture.broadcast_host_viewer(%{photo_id: 7, follow: false, open: true})
+      refute_receive {:host_viewer, _}, 50
+
+      Capture.broadcast_host_viewer(%{photo_id: 8, follow: false, open: true})
+      assert_receive {:host_viewer, %{photo_id: 8, follow: false, open: true}}
     end
   end
 end
