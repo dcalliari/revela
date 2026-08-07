@@ -4,6 +4,7 @@ defmodule RevelaWeb.PostLiveTest do
   import Phoenix.LiveViewTest
 
   alias Revela.Capture
+  alias RevelaWeb.Colors
 
   setup do
     {:ok, editorial} = Capture.start_editorial("Pos", "/tmp/pos-#{System.unique_integer()}")
@@ -105,5 +106,23 @@ defmodule RevelaWeb.PostLiveTest do
 
     render_keydown(view, "keydown", %{"key" => "z", "ctrlKey" => true, "metaKey" => false})
     assert Capture.labels_for_reviewer_in_editorial("host", editorial.id) == %{}
+  end
+
+  test "seleciona picks da marca e mostra votos na grade", %{
+    conn: conn,
+    editorial: editorial,
+    a: a,
+    b: b
+  } do
+    Capture.set_label(a.id, "brand-tok", "marca", 2)
+    Capture.set_label(b.id, "host", "host", 0)
+
+    {:ok, view, html} = live(conn, ~p"/post/#{editorial.id}")
+
+    assert has_element?(view, "#select-brand-picks")
+    assert html =~ Colors.hex(2)
+
+    view |> element("#select-brand-picks") |> render_click()
+    assert view |> element("#selection-count") |> render() =~ "1"
   end
 end

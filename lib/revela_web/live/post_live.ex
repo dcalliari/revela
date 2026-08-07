@@ -184,7 +184,7 @@ defmodule RevelaWeb.PostLive do
            label: share_label(socket.assigns)
          ) do
       {:ok, _share, path} ->
-        url = absolute_url(socket, path)
+        url = RevelaWeb.Lan.absolute_url(path)
 
         {:noreply,
          socket
@@ -201,6 +201,38 @@ defmodule RevelaWeb.PostLive do
       {:error, reason} ->
         {:noreply,
          assign(socket, share_error: "Falha ao criar link: #{inspect(reason)}", share_url: nil)}
+    end
+  end
+
+  def handle_event("select_brand_picks", _params, socket) do
+    case socket.assigns.editorial do
+      nil ->
+        {:noreply, socket}
+
+      editorial ->
+        ids = Capture.brand_labeled_photo_ids(editorial.id)
+        tallies = Capture.tallies_for_editorial(editorial.id)
+
+        if ids == [] do
+          {:noreply,
+           socket
+           |> assign(:tallies, tallies)
+           |> assign(:selected_ids, MapSet.new())
+           |> assign(:anchor_id, nil)
+           |> assign(
+             :raw_error,
+             "A marca ainda nao marcou fotos neste editorial."
+           )
+           |> assign(:raw_href, nil)}
+        else
+          {:noreply,
+           socket
+           |> assign(:tallies, tallies)
+           |> assign(:selected_ids, MapSet.new(ids))
+           |> assign(:anchor_id, List.first(ids))
+           |> assign(:raw_error, nil)
+           |> assign(:raw_href, nil)}
+        end
     end
   end
 
@@ -352,50 +384,6 @@ defmodule RevelaWeb.PostLive do
         |> assign(:tallies, Capture.tallies_for_editorial(socket.assigns.editorial.id))
     end
   end
-
-  defp absolute_url(_socket, path) do
-    "http://#{lan_ip()}:#{http_port()}#{path}"
-  end
-
-  defp http_port do
-    :revela
-    |> Application.get_env(RevelaWeb.Endpoint, [])
-    |> get_in([:http, :port]) || 4000
-  end
-
-  defp lan_ip do
-    System.get_env("TETHER_LAN_IP") || detect_lan_ip() || "localhost"
-  end
-
-  defp detect_lan_ip do
-    {:ok, ifs} = :inet.getifaddrs()
-
-    ifs
-    |> Enum.reject(fn {name, _opts} -> skip_iface?(to_string(name)) end)
-    |> Enum.flat_map(fn {_name, opts} -> Keyword.get_values(opts, :addr) end)
-    |> Enum.filter(&usable_ipv4?/1)
-    |> Enum.sort_by(&ipv4_rank/1)
-    |> List.first()
-    |> case do
-      {a, b, c, d} -> "#{a}.#{b}.#{c}.#{d}"
-      _ -> nil
-    end
-  end
-
-  defp skip_iface?(name) do
-    String.starts_with?(name, ~w(lo docker br- veth virbr tailscale tun wg zt))
-  end
-
-  defp usable_ipv4?({127, _, _, _}), do: false
-  defp usable_ipv4?({169, 254, _, _}), do: false
-  defp usable_ipv4?({100, b, _, _}) when b in 64..127, do: false
-  defp usable_ipv4?({a, _, _, _}) when a in 1..223, do: true
-  defp usable_ipv4?(_), do: false
-
-  defp ipv4_rank({192, 168, _, _}), do: 0
-  defp ipv4_rank({10, _, _, _}), do: 1
-  defp ipv4_rank({172, b, _, _}) when b in 16..31, do: 2
-  defp ipv4_rank(_), do: 3
 
   @impl true
   def render(assigns) do
@@ -559,6 +547,14 @@ defmodule RevelaWeb.PostLive do
                   </button>
                   <button
                     type="button"
+                    id="select-brand-picks"
+                    phx-click="select_brand_picks"
+                    class="btn btn-outline btn-sm"
+                  >
+                    Selecionar picks da marca
+                  </button>
+                  <button
+                    type="button"
                     id="prepare-raw"
                     phx-click="prepare_raw"
                     class="btn btn-outline btn-sm"
@@ -618,11 +614,20 @@ defmodule RevelaWeb.PostLive do
                       class="w-full aspect-[3/2] object-cover pointer-events-none"
                       draggable="false"
                     />
-                    <span
-                      :if={Map.get(@labels, photo.id)}
-                      class="absolute bottom-1 left-1 h-2.5 w-2.5 rounded-full ring-1 ring-white/80"
-                      style={"background-color: #{Colors.hex(Map.get(@labels, photo.id))}"}
-                    />
+                    <div class="absolute bottom-1 left-1 right-1 flex gap-0.5 flex-wrap pointer-events-none">
+                      <span
+                        :if={Map.get(@labels, photo.id)}
+                        class="h-2.5 w-2.5 rounded-full ring-1 ring-white/80 shrink-0"
+                        style={"background-color: #{Colors.hex(Map.get(@labels, photo.id))}"}
+                      />
+                      <span
+                        :for={{color, count} <- Map.get(@tallies, photo.id, %{}) |> Enum.sort()}
+                        class="text-[9px] font-bold text-white rounded px-0.5 leading-3"
+                        style={"background-color: #{Colors.hex(color)}"}
+                      >
+                        {count}
+                      </span>
+                    </div>
                     <span class="absolute top-0.5 right-0.5 text-[9px] px-1 rounded bg-black/50 text-white tabular-nums">
                       {photo.seq}
                     </span>
