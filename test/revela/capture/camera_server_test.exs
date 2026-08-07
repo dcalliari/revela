@@ -57,7 +57,7 @@ defmodule Revela.Capture.CameraServerTest do
       %{state | pending: Map.put(state.pending, old_path, ref)}
     end)
 
-    assert {:ok, %{folder: folder}} = GenServer.call(server, {:set_editorial, "Casamento"})
+    assert {:ok, %{folder: folder}} = GenServer.call(server, {:set_editorial, "Casamento", nil})
     assert File.dir?(folder)
     assert :sys.get_state(server).pending == %{}
     assert Process.read_timer(ref) == false
@@ -101,12 +101,44 @@ defmodule Revela.Capture.CameraServerTest do
     assert state.pending == %{}
     assert state.desired == false
     assert state.captures_dir == old_dir
+    assert state.reserved_folder == folder
     assert Process.read_timer(ref) == false
 
     send(server, {:settle, old_path})
     _ = :sys.get_state(server)
 
     assert :sys.get_state(server).processed == MapSet.new()
+  end
+
+  test "set_editorial reusa a pasta reservada e nao colide com mesmo nome" do
+    editorials_dir = temporary_editorials_dir()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        presence_detector: fn -> false end,
+        presence_poll_ms: 60_000
+      })
+
+    wait_for_presence_check(server)
+
+    assert {:ok, %{folder: folder}} =
+             GenServer.call(server, {:reserve_editorial_folder, "Casamento"})
+
+    assert {:ok, %{folder: ^folder}} =
+             GenServer.call(server, {:set_editorial, "Casamento", folder})
+
+    assert :sys.get_state(server).captures_dir == folder
+    assert :sys.get_state(server).reserved_folder == nil
+
+    assert {:ok, %{folder: folder2}} =
+             GenServer.call(server, {:reserve_editorial_folder, "Casamento"})
+
+    refute folder == folder2
+    assert File.dir?(folder)
+    assert File.dir?(folder2)
   end
 
   test "settle fora da captures_dir atual e ignorado" do
@@ -123,7 +155,7 @@ defmodule Revela.Capture.CameraServerTest do
 
     wait_for_presence_check(server)
 
-    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Novo"})
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Novo", nil})
 
     foreign =
       Path.join(System.tmp_dir!(), "revela-foreign-#{System.unique_integer([:positive])}.jpg")

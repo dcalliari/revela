@@ -63,7 +63,7 @@ defmodule RevelaWeb.HostLive do
     {:noreply, assign(socket, open: false)}
   end
 
-  # inicia um editorial: cria a pasta "yyyy-mm-dd NOME", aponta a captura pra la
+  # inicia um editorial: cria pasta unica da sessao, aponta a captura pra la
   # e limpa a tela para o novo conjunto
   def handle_event("start_editorial", %{"name" => name}, socket) do
     case String.trim(name) do
@@ -73,7 +73,7 @@ defmodule RevelaWeb.HostLive do
       name ->
         {:ok, %{folder: folder}} = CameraServer.reserve_editorial_folder(name)
         {:ok, _editorial} = Capture.start_editorial(name, folder)
-        {:ok, %{folder: ^folder}} = CameraServer.set_editorial(name)
+        {:ok, %{folder: ^folder}} = CameraServer.set_editorial(name, folder)
 
         {:noreply,
          socket
