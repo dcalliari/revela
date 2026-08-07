@@ -87,6 +87,23 @@ piso em testes (bytes):
 TETHER_MIN_FREE_DISK_BYTES=1073741824 mix phx.server
 ```
 
+### Modo demo (sem camera fisica)
+
+Para exercitar o fluxo completo (vincular → disparar → ingest → preview →
+classificar) sem Canon/gphoto2:
+
+```bash
+REVELA_DEMO=1 mix phx.server
+```
+
+Com o env ligado: o Host mostra badge **DEMO**, a camera aparece sempre
+presente, **nunca** spawna `gphoto2` (mesmo com uma Canon no USB), e com a
+captura armada o botao **Disparar (demo)** / tecla `D` grava um JPEG
+sintetico na pasta do editorial (naming `%Y%m%d-%H%M%S-%03n.jpg`). O restante
+e o caminho real (inotify → ingest → PubSub). Sem o env, o comportamento e o
+de producao. Nao ha toggle no Host — so env/config (`REVELA_DEMO=1` /
+`true` / `yes`).
+
 Em Arch Linux, instale `erlang-os_mon` (ou use um Erlang via mise que ja
 traga `os_mon`). Sem isso o app sobe normalmente, mas o `/host` avisa
 **monitoramento de disco indisponivel**, a parada preventiva fica desligada

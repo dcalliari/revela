@@ -168,7 +168,7 @@ defmodule RevelaWeb.HostLiveTest do
     assert selected_count(document, "#capture-disk-hint") == 0
   end
 
-  test "avisa modo degradado quando o monitoramento de disco esta indisponivel" do
+  test "modo degradado de disco nao polui a captura card (aviso so no DevTools)" do
     document =
       render_capture_card(%{
         status: :idle,
@@ -181,6 +181,32 @@ defmodule RevelaWeb.HostLiveTest do
     assert selected_text(document, "#capture-help") =~ "monitoramento de disco indisponível"
     assert selected_text(document, "#capture-help") =~ "Vincule manualmente"
     assert selected_count(document, "#capture-disk-hint") == 0
+  end
+
+  test "demo armada mostra botao Disparar (demo)" do
+    document =
+      render_capture_card(%{
+        status: :running,
+        message: nil,
+        camera_present: true,
+        demo: true
+      })
+
+    assert selected_count(document, "#demo-fire") == 1
+    assert selected_text(document, "#demo-fire") == "Disparar (demo)"
+    assert selected_text(document, "#capture-help") =~ "tecla D"
+  end
+
+  test "sem demo nao mostra botao Disparar" do
+    document =
+      render_capture_card(%{
+        status: :running,
+        message: nil,
+        camera_present: true,
+        demo: false
+      })
+
+    assert selected_count(document, "#demo-fire") == 0
   end
 
   defp render_capture_card(capture) do

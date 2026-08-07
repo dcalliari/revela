@@ -403,6 +403,20 @@ captura tethered cair no meio da produção.
 como alternativa para ter o feed, mas a experiência é bem inferior à do Revela,
 o que reforça o valor do item 6.
 
+## P1: operação / desenvolvimento
+
+### 14. Modo demo sem câmera física
+
+**Status**: EM ANDAMENTO (`fm/revela-demo-mode-sem-camera`).
+
+**Observado**: para validar Host/Review (follow, classificar, editorial) sem
+hardware, era preciso uma Canon + gphoto2; isso atrasa demos e testes manuais.
+
+**Proposta (contrato aceito 2026-08-07)**: `REVELA_DEMO=1` (env/config only) —
+badge DEMO no Host, `camera_present` sempre true, nunca spawna gphoto2, botão
+**Disparar (demo)** / tecla `D` grava JPEG sintético no naming gphoto2 e segue
+o ingest real. Fora de escopo MVP: RAW, burst, plug/unplug, fixtures.
+
 ## P2: exploração, ainda sem forma definida
 
 ### 9. Operar sem depender de LAN/WiFi
