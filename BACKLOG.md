@@ -230,6 +230,10 @@ banco em vez de em memória. Ver também o item 8.
 
 ### 6. Modo apresentação em janela separada
 
+**Status**: FEITO nesta branch `fm/revela-tv-modo-apresentacao` (PR URL ao
+publicar). Rota `/tv` display-only espelha o visualizador do Host via PubSub
+(`Capture.broadcast_host_viewer/1`); sem classificação e sem Presence.
+
 **Observado**: para mostrar as fotos na TV, a tela do notebook foi espelhada via
 HDMI. Enquanto isso o notebook fica preso: não dá para usar o host para outra
 coisa sem que apareça na TV.
@@ -244,9 +248,15 @@ via PubSub, de modo que folhear no host mude o que está na TV enquanto o
 notebook continua livre para outras coisas.
 
 **Ponto de decisão**: a TV espelha o que o host está vendo, ou tem navegação
-própria? A primeira é mais simples e cobre o caso relatado.
+própria? A primeira é mais simples e cobre o caso relatado. **Decisão
+aceita (2026-08-07)**: espelhar o Host; sem navegação própria neste ship.
 
 ### 7. Retorno automático ao vivo por inatividade
+
+**Status**: FEITO **apenas em `/tv`** nesta branch (junto do item 6). Timeout
+de ~30s fora do ao vivo, reiniciado a cada interação local, com indicação
+visível ("volta ao vivo em Ns"). Host e celulares de revisores **não** têm
+esse timeout — permanece diferido para o Host.
 
 **Ideia levantada**: se a pessoa para de folhear e esquece de voltar ao vivo,
 retornar sozinho à foto mais recente depois de ~10s.

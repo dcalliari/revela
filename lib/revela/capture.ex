@@ -16,15 +16,46 @@ defmodule Revela.Capture do
   @photos_topic "photos"
   @labels_topic "labels"
   @status_topic "capture_status"
+  @host_viewer_topic "host_viewer"
+  @host_viewer_key {__MODULE__, :host_viewer}
+  @default_host_viewer %{photo_id: nil, follow: true, open: false}
 
   # ── PubSub ────────────────────────────────────────────────────────────────
 
   def subscribe_photos, do: PubSub.subscribe(Revela.PubSub, @photos_topic)
   def subscribe_labels, do: PubSub.subscribe(Revela.PubSub, @labels_topic)
   def subscribe_status, do: PubSub.subscribe(Revela.PubSub, @status_topic)
+  def subscribe_host_viewer, do: PubSub.subscribe(Revela.PubSub, @host_viewer_topic)
 
   def broadcast_status(status),
     do: PubSub.broadcast(Revela.PubSub, @status_topic, {:capture_status, status})
+
+  @doc """
+  Publica o estado do visualizador do Host para a superficie `/tv`.
+  Mantem o ultimo estado para LiveViews que entram no meio da sessao.
+  """
+  def broadcast_host_viewer(state) when is_map(state) do
+    normalized = %{
+      photo_id: Map.get(state, :photo_id),
+      follow: Map.get(state, :follow, true) == true,
+      open: Map.get(state, :open, false) == true
+    }
+
+    :persistent_term.put(@host_viewer_key, normalized)
+    PubSub.broadcast(Revela.PubSub, @host_viewer_topic, {:host_viewer, normalized})
+    :ok
+  end
+
+  @doc "Ultimo estado do visualizador do Host (ou follow ao vivo se ainda nao houve broadcast)."
+  def host_viewer_state do
+    :persistent_term.get(@host_viewer_key, @default_host_viewer)
+  end
+
+  @doc false
+  def reset_host_viewer_state do
+    :persistent_term.put(@host_viewer_key, @default_host_viewer)
+    :ok
+  end
 
   defp broadcast_photo(photo),
     do: PubSub.broadcast(Revela.PubSub, @photos_topic, {:new_photo, photo})
@@ -85,6 +116,7 @@ defmodule Revela.Capture do
     end)
     |> case do
       {:ok, editorial} ->
+        reset_host_viewer_state()
         PubSub.broadcast(Revela.PubSub, @photos_topic, :session_reset)
         {:ok, editorial}
 
@@ -99,6 +131,7 @@ defmodule Revela.Capture do
   """
   def finish_editorial do
     finish_active_editorial()
+    reset_host_viewer_state()
     PubSub.broadcast(Revela.PubSub, @photos_topic, :session_reset)
     :ok
   end
