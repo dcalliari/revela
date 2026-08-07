@@ -42,16 +42,42 @@ defmodule Revela.Capture.Ingest do
 
     case make_preview(path, web_dest) do
       :ok ->
-        Capture.create_photo(%{
-          web_path: web_path,
-          original_path: path,
-          raw_path: find_raw_sibling(path),
-          shot_at: DateTime.utc_now()
-        })
+        case Capture.create_photo(%{
+               web_path: web_path,
+               original_path: path,
+               raw_path: nil,
+               shot_at: DateTime.utc_now()
+             }) do
+          {:ok, photo} ->
+            maybe_claim_raw_sibling(photo, path)
+
+          error ->
+            error
+        end
 
       {:error, reason} ->
         Logger.error("Falha ao gerar preview de #{path}: #{reason}")
         {:error, reason}
+    end
+  end
+
+  defp maybe_claim_raw_sibling(photo, jpeg_path) do
+    case find_raw_sibling(jpeg_path) do
+      nil ->
+        {:ok, photo}
+
+      raw_path ->
+        case Capture.update_raw_path(photo, raw_path) do
+          {:ok, updated} ->
+            {:ok, updated}
+
+          {:error, reason} ->
+            Logger.warning(
+              "ingest raw_path: falha ao gravar photo=#{photo.id} raw=#{raw_path}: #{inspect(reason)}"
+            )
+
+            {:ok, photo}
+        end
     end
   end
 
@@ -166,7 +192,7 @@ defmodule Revela.Capture.Ingest do
       dir = Path.dirname(raw_path)
 
       candidates =
-        Capture.list_photos_missing_raw()
+        Capture.list_photos_missing_raw(dir: dir)
         |> Enum.filter(fn photo ->
           is_binary(photo.original_path) and Path.dirname(photo.original_path) == dir and
             sibling_pair?(photo.original_path, raw_path)
@@ -212,7 +238,7 @@ defmodule Revela.Capture.Ingest do
   Percorre fotos com `raw_path` vazio e preenche matches unívocos no disco.
   Idempotente; nunca sobrescreve `raw_path` nao-vazio.
 
-  Retorna `%{matched: n, ambiguous: n, not_found: n, skipped_missing_file: n}`.
+  Retorna `%{matched: n, ambiguous: n, not_found: n, claim_error: n, skipped_missing_file: n}`.
   """
   def backfill_raw_paths(opts \\ []) do
     dry_run? = Keyword.get(opts, :dry_run, false)
@@ -251,7 +277,7 @@ defmodule Revela.Capture.Ingest do
                       "backfill raw_path: falha ao gravar photo=#{photo.id} raw=#{raw_path}: #{inspect(reason)}"
                     )
 
-                    {Map.update!(summary, :not_found, &(&1 + 1)), taken}
+                    {Map.update!(summary, :claim_error, &(&1 + 1)), taken}
                 end
             end
 
@@ -269,7 +295,7 @@ defmodule Revela.Capture.Ingest do
   end
 
   defp empty_backfill_summary do
-    %{matched: 0, ambiguous: 0, not_found: 0, skipped_missing_file: 0}
+    %{matched: 0, ambiguous: 0, not_found: 0, claim_error: 0, skipped_missing_file: 0}
   end
 
   defp exact_raw_sibling(jpeg_path, taken) do

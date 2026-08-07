@@ -63,13 +63,38 @@ defmodule Revela.Capture do
     end
   end
 
-  @doc "Fotos com `raw_path` nulo ou vazio (qualquer editorial), ordenadas por id."
-  def list_photos_missing_raw do
+  @doc """
+  Fotos com `raw_path` nulo ou vazio, ordenadas por id.
+
+  Opcoes:
+  - `:dir` — restringe a `original_path` cujo diretorio e exatamente este
+    (prefixo `dir/` via LIKE), para o hot path de `attach_raw/1`.
+  """
+  def list_photos_missing_raw(opts \\ []) do
+    dir = Keyword.get(opts, :dir)
+
     from(p in Photo,
       where: is_nil(p.raw_path) or p.raw_path == "",
       order_by: [asc: p.id]
     )
+    |> maybe_scope_missing_raw_to_dir(dir)
     |> Repo.all()
+  end
+
+  defp maybe_scope_missing_raw_to_dir(query, nil), do: query
+
+  defp maybe_scope_missing_raw_to_dir(query, dir) when is_binary(dir) and dir != "" do
+    pattern = like_dir_prefix(dir)
+    escape = "\\"
+    from(p in query, where: fragment("? LIKE ? ESCAPE ?", p.original_path, ^pattern, ^escape))
+  end
+
+  defp like_dir_prefix(dir) do
+    dir
+    |> String.replace("\\", "\\\\")
+    |> String.replace("%", "\\%")
+    |> String.replace("_", "\\_")
+    |> Kernel.<>("/%")
   end
 
   @doc "Conjunto de caminhos RAW ja associados a alguma foto."
