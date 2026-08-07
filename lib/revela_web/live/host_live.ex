@@ -75,8 +75,7 @@ defmodule RevelaWeb.HostLive do
         {:noreply, socket}
 
       {:error, reason} ->
-        {:noreply,
-         assign(socket, :notice, "Falha ao gravar JPEG de demo (#{inspect(reason)}).")}
+        {:noreply, assign(socket, :notice, "Falha ao gravar JPEG de demo (#{inspect(reason)}).")}
     end
   end
 
