@@ -215,11 +215,97 @@ defmodule Revela.Capture.CameraServerTest do
     send(server, :poll_disk)
     refute_receive {:capture_status, %{status: :disk_full}}, 100
     assert CameraServer.status(server).status == :running
+    assert is_reference(:sys.get_state(server).quiet_disk_check_ref)
 
-    :sys.replace_state(server, &%{&1 | last_transfer_at: now - 6_000})
+    :sys.replace_state(server, &%{&1 | last_transfer_at: now - 6_000, quiet_disk_check_ref: nil})
     send(server, :poll_disk)
 
     assert_receive {:capture_status, %{status: :disk_full}}
+  end
+
+  test "stdout reagenda quiet disk check quando pending esta vazio" do
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        transfer_quiet_ms: 5_000,
+        min_free_disk_bytes: 5_000_000_000,
+        disk_checker: fn _dir -> 1_000_000_000 end
+      })
+
+    fake_port = make_ref()
+    old_ref = make_ref()
+
+    :sys.replace_state(
+      server,
+      &%{
+        &1
+        | status: :running,
+          desired: true,
+          port: fake_port,
+          pending: %{},
+          quiet_disk_check_ref: old_ref
+      }
+    )
+
+    send(server, {fake_port, {:data, "Saving file as /tmp/foo.jpg"}})
+    state = :sys.get_state(server)
+
+    assert is_reference(state.quiet_disk_check_ref)
+    assert state.quiet_disk_check_ref != old_ref
+    assert is_integer(state.last_transfer_at)
+  end
+
+  test "usa fallback de media quando arquivos do editorial tem tamanho zero" do
+    editorials_dir = temporary_editorials_dir()
+    captures_dir = Path.join(editorials_dir, "_sem-editorial")
+    File.mkdir_p!(captures_dir)
+    File.write!(Path.join(captures_dir, "empty.jpg"), "")
+
+    fallback = 30 * 1024 * 1024
+    free_bytes = fallback * 4
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> free_bytes end
+      })
+
+    assert CameraServer.status(server).estimated_shots_left == 4
+  end
+
+  test "mensagem de disco baixo inclui cabem ~0 fotos" do
+    Capture.subscribe_status()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        transfer_quiet_ms: 50,
+        min_free_disk_bytes: 5_000_000_000,
+        disk_checker: fn _dir -> 100 end
+      })
+
+    :sys.replace_state(
+      server,
+      &%{&1 | status: :running, desired: true, pending: %{}, last_transfer_at: nil}
+    )
+
+    send(server, :poll_disk)
+
+    assert_receive {:capture_status, %{status: :disk_full, message: message}}
+    assert message =~ "cabem ~0 fotos"
+    assert CameraServer.status(server).estimated_shots_left == 0
   end
 
   test "recusa rearmar a captura enquanto o disco ainda esta abaixo do minimo" do

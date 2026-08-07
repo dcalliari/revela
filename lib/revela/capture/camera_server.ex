@@ -325,7 +325,9 @@ defmodule Revela.Capture.CameraServer do
       if data == "" do
         state
       else
-        note_transfer_activity(state)
+        state
+        |> note_transfer_activity()
+        |> maybe_schedule_quiet_disk_check()
       end
 
     {:noreply, state}
@@ -756,7 +758,12 @@ defmodule Revela.Capture.CameraServer do
   defp update_disk_status(state) do
     case run_disk_checker(state.disk_checker, state.captures_dir) do
       free_bytes when is_integer(free_bytes) ->
-        avg_bytes = avg_bytes_per_shot(state.captures_dir) || @fallback_avg_bytes_per_shot
+        avg_bytes =
+          case avg_bytes_per_shot(state.captures_dir) do
+            avg when is_number(avg) and avg > 0 -> avg
+            _other -> @fallback_avg_bytes_per_shot
+          end
+
         estimated_shots = max(div(free_bytes, trunc(avg_bytes)), 0)
 
         %{
@@ -780,25 +787,30 @@ defmodule Revela.Capture.CameraServer do
   # em curso (pending vazio) e janela quiet sem atividade recente. A quiet
   # window evita SIGKILL no buraco antes do primeiro inotify / entre JPEG-RAW.
   defp maybe_stop_for_low_disk(%{status: :running} = state) do
-    if disk_below_minimum?(state) and safe_to_stop_for_disk?(state) do
-      Logger.warning(
-        "Espaco livre (#{state.free_disk_bytes} bytes) abaixo do minimo configurado " <>
-          "(#{state.min_free_disk_bytes} bytes); parando captura entre disparos"
-      )
+    cond do
+      disk_below_minimum?(state) and safe_to_stop_for_disk?(state) ->
+        Logger.warning(
+          "Espaco livre (#{state.free_disk_bytes} bytes) abaixo do minimo configurado " <>
+            "(#{state.min_free_disk_bytes} bytes); parando captura entre disparos"
+        )
 
-      message = low_disk_message(state)
+        message = low_disk_message(state)
 
-      state
-      |> kill_port()
-      |> Map.merge(%{
-        desired: false,
-        status: :disk_full,
-        message: message,
-        backoff_ms: @initial_backoff
-      })
-      |> schedule_presence_poll(0)
-    else
-      state
+        state
+        |> kill_port()
+        |> Map.merge(%{
+          desired: false,
+          status: :disk_full,
+          message: message,
+          backoff_ms: @initial_backoff
+        })
+        |> schedule_presence_poll(0)
+
+      disk_below_minimum?(state) ->
+        maybe_schedule_quiet_disk_check(state)
+
+      true ->
+        state
     end
   end
 
@@ -846,7 +858,9 @@ defmodule Revela.Capture.CameraServer do
     gb = format_gb(state.free_disk_bytes)
 
     shots_hint =
-      if state.estimated_shots_left, do: ", cabem ~#{state.estimated_shots_left} fotos", else: ""
+      if is_integer(state.estimated_shots_left),
+        do: ", cabem ~#{state.estimated_shots_left} fotos",
+        else: ""
 
     "Espaço em disco abaixo do mínimo (~#{gb} GB livres#{shots_hint}). " <>
       "Captura parada entre disparos para proteger a câmera; libere espaço e vincule novamente."
@@ -906,8 +920,12 @@ defmodule Revela.Capture.CameraServer do
           |> Map.values()
 
         case shot_sizes do
-          [] -> nil
-          sizes -> Enum.sum(sizes) / length(sizes)
+          [] ->
+            nil
+
+          sizes ->
+            avg = Enum.sum(sizes) / length(sizes)
+            if avg > 0, do: avg, else: nil
         end
 
       {:error, _reason} ->
