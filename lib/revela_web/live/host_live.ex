@@ -1,10 +1,12 @@
 defmodule RevelaWeb.HostLive do
   @moduledoc """
   Tela de controle no laptop: QR code + URL da LAN para os celulares entrarem,
-  status do captura (start/stop), estimativa de fotos restantes no disco,
-  quem esta online e a agregacao de cores (consenso) de cada foto entre todos
-  os revisores. Indisponibilidade do monitoramento de disco (:os_mon) nao
-  aparece na UI — so um aviso no console do browser.
+  status honesto do tether (auto-arm pendente, armado automaticamente,
+  retomar apos stop, ingestao degradada), estimativa de fotos restantes no
+  disco, quem esta online e a agregacao de cores (consenso) de cada foto entre
+  todos os revisores. Sem `:os_mon`, a estimativa de fotos nao aparece e o
+  help pede vinculo manual quando ha camera; o console do browser tambem
+  recebe um aviso via `push_event("disk-awareness", ...)`.
 
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
@@ -553,8 +555,9 @@ defmodule RevelaWeb.HostLive do
 
   # traduz espaco livre para o que o fotografo entende: quantas fotos ainda
   # cabem, calculado a partir da media real de bytes por disparo do editorial.
-  # Sem os_mon (:disk_awareness :unavailable) nao polui a UI — o aviso vai ao
-  # console do browser via push_event "disk-awareness" (ver maybe_warn_disk/1).
+  # Sem os_mon (:disk_awareness :unavailable) esta dica some; o aviso de
+  # monitoramento vai ao help (camera presente) e ao console via push_event
+  # "disk-awareness" (ver maybe_warn_disk/1).
   defp free_space_hint(%{estimated_shots_left: n}) when is_integer(n),
     do: "Espaço livre: cabem ~#{n} fotos."
 

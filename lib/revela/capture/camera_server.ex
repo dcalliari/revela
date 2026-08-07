@@ -33,7 +33,8 @@ defmodule Revela.Capture.CameraServer do
   Falha ao spawnar o tether limpa `desired` e arma um cooldown curto de auto-arm
   (sem reconexao fantasma nem tight-loop). Se o watcher de pasta nao sobe,
   `ingest_awareness` fica `:unavailable` enquanto `:running` para a UI Host
-  mostrar tether degradado (arquivos no disco, sem ingestao).
+  mostrar tether degradado (arquivos no disco, sem ingestao). Status publico
+  tambem expoe `armed_automatically` e `auto_arm_pending` para a UI Host.
 
   Espaco em disco (`free_disk_bytes`, `estimated_shots_left`, `disk_awareness`):
   o gphoto2 ignora SIGTERM, entao a parada normal manda SIGKILL nele (ver
@@ -42,8 +43,9 @@ defmodule Revela.Capture.CameraServer do
   por disco cheio (`maybe_stop_for_low_disk/1`) so age quando `pending` esta
   vazio (JPEG e RAW) e a janela de silencio pos-atividade de transferencia
   passou — cobrindo o intervalo entre o disparo e o primeiro evento inotify, e
-  entre arquivos do mesmo disparo. Se `:os_mon`/`:disksup` estiver ausente,
-  `disk_awareness` fica `:unavailable` e a UI avisa (boot nao falha).
+  entre arquivos do mesmo disparo. Apos liberar espaco, o auto-arm pode remar
+  (sem clique) se o contrato ainda valer. Se `:os_mon`/`:disksup` estiver
+  ausente, `disk_awareness` fica `:unavailable` e a UI avisa (boot nao falha).
 
   Piso configuravel via opt `min_free_disk_bytes` ou env
   `TETHER_MIN_FREE_DISK_BYTES` (padrao 5 GiB). Ver README.
