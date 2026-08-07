@@ -36,13 +36,17 @@ defmodule RevelaWeb.RawDownloadController do
 
           true ->
             case build_zip(pull.files) do
-              {:ok, bin} ->
+              {:ok, zip_path} ->
                 name = "revela-raw-e#{editorial_id}.zip"
 
+                conn =
+                  conn
+                  |> put_resp_content_type("application/zip")
+                  |> put_resp_header("content-disposition", ~s(attachment; filename="#{name}"))
+                  |> send_file(200, zip_path)
+
+                _ = File.rm(zip_path)
                 conn
-                |> put_resp_content_type("application/zip")
-                |> put_resp_header("content-disposition", ~s(attachment; filename="#{name}"))
-                |> send_resp(200, bin)
 
               {:error, reason} ->
                 conn
@@ -76,15 +80,68 @@ defmodule RevelaWeb.RawDownloadController do
   end
 
   defp build_zip(files) do
-    entries =
-      Enum.map(files, fn %{path: path} ->
-        basename = path |> Path.basename() |> String.to_charlist()
-        {basename, File.read!(path)}
-      end)
+    id = System.unique_integer([:positive])
+    work_dir = Path.join(System.tmp_dir!(), "revela-raw-#{id}")
+    zip_path = Path.join(System.tmp_dir!(), "revela-raw-#{id}.zip")
 
-    case :zip.create(~c"raws.zip", entries, [:memory]) do
-      {:ok, {_, bin}} when is_binary(bin) -> {:ok, bin}
-      other -> {:error, other}
+    try do
+      with :ok <- File.mkdir_p(work_dir),
+           :ok <- stage_files(files, work_dir),
+           {:ok, _} <- create_zip_file(work_dir, zip_path) do
+        {:ok, zip_path}
+      else
+        {:error, _} = err ->
+          _ = File.rm(zip_path)
+          err
+
+        other ->
+          _ = File.rm(zip_path)
+          {:error, other}
+      end
+    after
+      File.rm_rf(work_dir)
+    end
+  end
+
+  defp stage_files(files, work_dir) do
+    Enum.reduce_while(files, :ok, fn %{photo: photo, path: path}, :ok ->
+      dest = Path.join(work_dir, zip_entry_name(photo, path))
+
+      case link_or_copy(path, dest) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp zip_entry_name(photo, path) do
+    "#{photo.seq}-#{Path.basename(path)}"
+  end
+
+  defp link_or_copy(src, dest) do
+    case File.ln(src, dest) do
+      :ok -> :ok
+      {:error, _} -> File.cp(src, dest)
+    end
+  end
+
+  defp create_zip_file(work_dir, zip_path) do
+    names =
+      work_dir
+      |> File.ls!()
+      |> Enum.map(&String.to_charlist/1)
+
+    cwd = File.cwd!()
+
+    try do
+      File.cd!(work_dir)
+
+      case :zip.create(String.to_charlist(zip_path), names) do
+        {:ok, zip} -> {:ok, List.to_string(zip)}
+        other -> {:error, other}
+      end
+    after
+      File.cd!(cwd)
     end
   end
 end
