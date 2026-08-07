@@ -30,6 +30,10 @@ defmodule Revela.Capture.CameraServer do
   editorial (limbo `_sem-editorial`) ou com `disk_awareness: :unavailable`, nao
   arma — exige clique. `stop_capture` gruda (`operator_stopped`); so
   `start_capture` libera o latch. Reconexao apos queda com `desired` permanece.
+  Falha ao spawnar o tether limpa `desired` e arma um cooldown curto de auto-arm
+  (sem reconexao fantasma nem tight-loop). Se o watcher de pasta nao sobe,
+  `ingest_awareness` fica `:unavailable` enquanto `:running` para a UI Host
+  mostrar tether degradado (arquivos no disco, sem ingestao).
 
   Espaco em disco (`free_disk_bytes`, `estimated_shots_left`, `disk_awareness`):
   o gphoto2 ignora SIGTERM, entao a parada normal manda SIGKILL nele (ver
@@ -63,6 +67,9 @@ defmodule Revela.Capture.CameraServer do
 
   # debounce na borda USB presente→auto-arm (flaps curtos nao disparam gphoto2)
   @presence_debounce_ms 1_500
+
+  # apos falha de spawn do tether: nao auto-armar de novo imediatamente
+  @spawn_failure_cooldown_ms 15_000
 
   # piso de espaco livre em disco: abaixo disso a captura para sozinha, entre
   # disparos (nunca durante uma transferencia em curso). Motivacao: em
@@ -146,6 +153,10 @@ defmodule Revela.Capture.CameraServer do
       operator_stopped: false,
       # true quando o tether subiu via auto-arm (UI honestidade)
       armed_automatically: false,
+      # monotonic ms: ate quando o auto-arm fica bloqueado apos falha de spawn
+      auto_arm_cooldown_until: nil,
+      spawn_failure_cooldown_ms:
+        Keyword.get(opts, :spawn_failure_cooldown_ms, @spawn_failure_cooldown_ms),
       backoff_ms: @initial_backoff,
       # ha uma camera respondendo no USB agora? (ver poll de presenca)
       camera_present: false,
@@ -193,6 +204,7 @@ defmodule Revela.Capture.CameraServer do
       | desired: false,
         operator_stopped: false,
         armed_automatically: false,
+        auto_arm_cooldown_until: nil,
         status: :idle,
         message: nil
     }
@@ -208,7 +220,8 @@ defmodule Revela.Capture.CameraServer do
         state
         | desired: true,
           operator_stopped: false,
-          armed_automatically: false
+          armed_automatically: false,
+          auto_arm_cooldown_until: nil
       })
 
     {_reply, state} = do_start(state)
@@ -542,7 +555,21 @@ defmodule Revela.Capture.CameraServer do
             {public_status(state), state}
 
           {:error, message} ->
-            state = %{state | status: :error, message: message, armed_automatically: false}
+            now = System.monotonic_time(:millisecond)
+
+            state =
+              %{
+                state
+                | desired: false,
+                  armed_automatically: false,
+                  status: :error,
+                  message: message,
+                  auto_arm_cooldown_until: now + state.spawn_failure_cooldown_ms,
+                  backoff_ms: @initial_backoff
+              }
+              |> cancel_auto_arm_debounce()
+              |> schedule_presence_poll(0)
+
             broadcast(state)
             {public_status(state), state}
         end
@@ -645,7 +672,14 @@ defmodule Revela.Capture.CameraServer do
       not state.desired and
       state.status not in [:running, :reconnecting, :waiting_camera] and
       state.disk_awareness == :available and
-      not disk_below_minimum?(state)
+      not disk_below_minimum?(state) and
+      auto_arm_cooldown_clear?(state)
+  end
+
+  defp auto_arm_cooldown_clear?(%{auto_arm_cooldown_until: nil}), do: true
+
+  defp auto_arm_cooldown_clear?(state) do
+    System.monotonic_time(:millisecond) >= state.auto_arm_cooldown_until
   end
 
   defp maybe_schedule_auto_arm(state) do
@@ -892,11 +926,16 @@ defmodule Revela.Capture.CameraServer do
       operator_stopped: state.operator_stopped,
       armed_automatically: state.armed_automatically,
       auto_arm_pending: is_reference(state.presence_debounce_ref),
+      ingest_awareness: ingest_awareness(state),
       free_disk_bytes: state.free_disk_bytes,
       estimated_shots_left: state.estimated_shots_left,
       disk_awareness: state.disk_awareness
     }
   end
+
+  defp ingest_awareness(%{status: :running, watcher_pid: pid}) when is_pid(pid), do: :available
+  defp ingest_awareness(%{status: :running}), do: :unavailable
+  defp ingest_awareness(_state), do: :available
 
   defp broadcast_if_changed(previous, state) do
     if previous != public_status(state), do: broadcast(state)

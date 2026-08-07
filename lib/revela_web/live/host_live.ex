@@ -496,6 +496,14 @@ defmodule RevelaWeb.HostLive do
   defp capture_action(_capture),
     do: {"Conecte a câmera", nil, true, "btn-primary"}
 
+  defp capture_help(%{auto_arm_pending: true}),
+    do: "Câmera detectada; armando tether automaticamente…"
+
+  defp capture_help(%{status: :running, ingest_awareness: :unavailable}),
+    do:
+      "Tether armado, mas ingestão por pasta indisponível (inotify). " <>
+        "Fotos não entram na revisão automaticamente."
+
   defp capture_help(%{status: :running, armed_automatically: true}),
     do: "Câmera vinculada automaticamente. Aguardando disparos."
 
@@ -514,9 +522,6 @@ defmodule RevelaWeb.HostLive do
   defp capture_help(%{status: :disk_full, message: message}) when is_binary(message),
     do: message
 
-  defp capture_help(%{auto_arm_pending: true}),
-    do: "Câmera detectada; armando tether automaticamente…"
-
   defp capture_help(%{operator_stopped: true, camera_present: true}),
     do: "Captura pausada. Clique para retomar o tether."
 
@@ -531,6 +536,11 @@ defmodule RevelaWeb.HostLive do
 
   defp capture_help(_capture),
     do: "Ligue a câmera e conecte o cabo USB."
+
+  defp capture_help_class(%{auto_arm_pending: true}), do: "opacity-60"
+
+  defp capture_help_class(%{status: :running, ingest_awareness: :unavailable}),
+    do: "text-warning"
 
   defp capture_help_class(%{status: status}) when status in [:error, :disk_full],
     do: "text-error"
@@ -569,12 +579,13 @@ defmodule RevelaWeb.HostLive do
   defp status_badge(assigns) do
     {label, class} =
       case assigns.capture do
+        %{auto_arm_pending: true} -> {"armando", "badge-info"}
+        %{status: :running, ingest_awareness: :unavailable} -> {"sem ingestão", "badge-warning"}
         %{status: :running} -> {"vinculada", "badge-success"}
         %{status: :reconnecting} -> {"reconectando", "badge-warning"}
         %{status: :waiting_camera} -> {"desconectada", "badge-warning"}
         %{status: :error} -> {"erro", "badge-error"}
         %{status: :disk_full} -> {"espaço cheio", "badge-error"}
-        %{auto_arm_pending: true} -> {"armando", "badge-info"}
         %{camera_present: true} -> {"detectada", "badge-info"}
         _capture -> {"desconectada", "badge-ghost"}
       end

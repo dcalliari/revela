@@ -39,6 +39,23 @@ defmodule RevelaWeb.HostLiveTest do
     assert selected_text(document, "#capture-help") =~ "armando tether automaticamente"
   end
 
+  test "prefere armando sobre espaco cheio enquanto o auto-arm esta pendente" do
+    document =
+      render_capture_card(%{
+        status: :disk_full,
+        message: "Espaço em disco abaixo do mínimo (~4.7 GB livres). Libere espaço.",
+        camera_present: true,
+        auto_arm_pending: true,
+        editorial: "Casamento",
+        disk_awareness: :available
+      })
+
+    assert selected_text(document, "#capture-action") == "Armando tether…"
+    assert selected_text(document, "#capture-status") == "armando"
+    assert selected_text(document, "#capture-help") =~ "armando tether automaticamente"
+    refute selected_text(document, "#capture-help") =~ "Libere espaço"
+  end
+
   test "mostra retomar apos stop explicito do operador" do
     document =
       render_capture_card(%{
@@ -88,6 +105,21 @@ defmodule RevelaWeb.HostLiveTest do
       })
 
     assert selected_text(document, "#capture-help") =~ "vinculada automaticamente"
+  end
+
+  test "avisa tether degradado quando a ingestao por pasta esta indisponivel" do
+    document =
+      render_capture_card(%{
+        status: :running,
+        message: nil,
+        camera_present: true,
+        armed_automatically: true,
+        ingest_awareness: :unavailable
+      })
+
+    assert selected_text(document, "#capture-status") == "sem ingestão"
+    assert selected_text(document, "#capture-help") =~ "ingestão por pasta indisponível"
+    assert selected_text(document, "#capture-help") =~ "não entram na revisão"
   end
 
   test "explica a retomada automatica depois de uma desconexao" do

@@ -118,7 +118,7 @@ externo antes da próxima produção.
 
 ### 14. Tether deve armar sozinho ao detectar a câmera
 
-**Status**: EM ANDAMENTO (ship após o freio de disco do item 0).
+**Status**: FEITO via https://github.com/dcalliari/revela/pull/5 (ship após o freio de disco do item 0).
 
 **Observado / decisão**: na produção o caminho feliz é tether. Hoje a presença
 USB já é polled (`gphoto2 --auto-detect`), mas a captura só sobe no clique

@@ -766,6 +766,115 @@ defmodule Revela.Capture.CameraServerTest do
     assert_receive {:capture_status, %{status: :running, armed_automatically: true}}, 500
   end
 
+  test "falha de spawn limpa desired e aplica cooldown sem reconexao fantasma" do
+    Capture.subscribe_status()
+    detector_state = start_supervised!({Agent, fn -> true end})
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> Agent.get(detector_state, & &1) end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 20,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10_000_000_000 end,
+        spawn_failure_cooldown_ms: 60_000,
+        tether_spawner: fn _state -> {:error, "Falha ao iniciar captura tethered"} end
+      })
+
+    wait_for_presence_check(server)
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Casamento", nil})
+
+    send(server, :poll_presence)
+    wait_for_presence_check(server)
+
+    assert_receive {:capture_status,
+                    %{status: :error, message: "Falha ao iniciar captura tethered"}},
+                   500
+
+    state = :sys.get_state(server)
+    assert state.desired == false
+    assert is_integer(state.auto_arm_cooldown_until)
+    refute CameraServer.status(server).auto_arm_pending
+
+    flush_capture_status()
+
+    Agent.update(detector_state, fn _ -> false end)
+    send(server, :poll_presence)
+    wait_for_presence_check(server)
+
+    refute_receive {:capture_status, %{status: :waiting_camera}}, 80
+    assert CameraServer.status(server).status == :error
+    assert :sys.get_state(server).desired == false
+
+    Agent.update(detector_state, fn _ -> true end)
+    send(server, :poll_presence)
+    wait_for_presence_check(server)
+
+    refute CameraServer.status(server).auto_arm_pending
+    refute_receive {:capture_status, %{status: :running}}, 80
+    assert CameraServer.status(server).status == :error
+  end
+
+  test "start_capture explicito limpa o cooldown de falha de spawn" do
+    Capture.subscribe_status()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> true end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 20,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10_000_000_000 end,
+        spawn_failure_cooldown_ms: 60_000,
+        tether_spawner: fn _state -> {:error, "Falha ao iniciar captura tethered"} end
+      })
+
+    wait_for_presence_check(server)
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Casamento", nil})
+    assert_receive {:capture_status, %{status: :error}}, 500
+
+    :sys.replace_state(server, fn state ->
+      %{state | tether_spawner: fn _state -> {:ok, nil, nil} end}
+    end)
+
+    resumed = CameraServer.start_capture(server)
+    assert resumed.status == :running
+    assert :sys.get_state(server).desired == true
+    assert :sys.get_state(server).auto_arm_cooldown_until == nil
+  end
+
+  test "status running sem watcher reporta ingest_awareness unavailable" do
+    Capture.subscribe_status()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        presence_detector: fn -> true end,
+        presence_poll_ms: 60_000,
+        presence_debounce_ms: 20,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 10_000_000_000 end,
+        tether_spawner: fn _state -> {:ok, nil, nil} end
+      })
+
+    wait_for_presence_check(server)
+    assert {:ok, _} = GenServer.call(server, {:set_editorial, "Casamento", nil})
+    assert_receive {:capture_status, %{status: :running}}, 500
+
+    :sys.replace_state(server, &%{&1 | watcher_pid: nil})
+    status = CameraServer.status(server)
+    assert status.status == :running
+    assert status.ingest_awareness == :unavailable
+  end
+
   defp wait_for_presence_check(server) do
     case :sys.get_state(server).presence_check_ref do
       nil -> :ok
