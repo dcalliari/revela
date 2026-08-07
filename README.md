@@ -50,10 +50,16 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
   Fora do ao vivo, apos ~10s de inatividade local volta sozinho ao vivo
   (contagem "volta ao vivo em Ns"); Host e revisores nao tem esse timeout.
   Override do prazo: `config :revela, :tv_idle_ms` (padrao `10_000`).
+- `RevelaWeb.PostLive` (`/post`) pos-producao: grade completa do editorial,
+  filtro por cor, selecao de intervalo (clique + shift), classificacao na
+  selecao, link JPG tokenizado para a marca (`/share/:token`), download ZIP
+  de RAW da selecao (`/raws/:token`, exige `raw_path`), desfazer fixo +
+  Ctrl/Cmd+Z + historico de sessao. Google Fotos/Drive: stubs em
+  `Revela.Delivery` (proximo passo, sem bloquear o URL local).
 - `RevelaWeb.ViewerComponents` visualizador compartilhado: botoes de cor e
-  limpar sem legenda ou numeros visiveis (so `aria-label`, atalhos abaixo
-  continuam ativos), placeholder para RAW sem preview, pinch-zoom no celular
-  (hook `PinchZoom`) e `presentation/1` para `/tv`.
+  limpar sem legenda ou numeros visiveis (so `aria-label`), placeholder para
+  RAW sem preview, pinch-zoom no celular (hook `PinchZoom`) e `presentation/1`
+  para `/tv`.
 
 As cores no banco usam o mesmo mapeamento do darktable: `0` vermelho,
 `1` amarelo, `2` verde, `3` azul, `4` roxo. No teclado/UI as teclas `1`–`5`
@@ -89,6 +95,7 @@ mix phx.server       # sobe em 0.0.0.0:4000
 - Host/controle (no laptop): http://localhost:4000/host
 - Apresentacao / TV (segunda janela ou monitor): http://localhost:4000/tv
   (tambem ha o link **Abrir modo apresentação (/tv)** no `/host`).
+- Pos-producao: http://localhost:4000/post
 - Revisao (celulares na LAN): a URL/QR que aparece na tela do host.
 
 ### Importar do cartão

@@ -639,7 +639,12 @@ defmodule RevelaWeb.HostLive do
 
             <div class="card bg-base-100 shadow">
               <div class="card-body gap-2">
-                <h2 class="card-title text-base">Editorial</h2>
+                <div class="flex items-center justify-between gap-2">
+                  <h2 class="card-title text-base">Editorial</h2>
+                  <.link navigate={~p"/post"} id="link-post" class="btn btn-ghost btn-xs">
+                    Pós-produção
+                  </.link>
+                </div>
 
                 <form :if={!@capture.editorial} phx-submit="start_editorial" class="flex gap-2">
                   <input
