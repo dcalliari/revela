@@ -36,6 +36,12 @@ editorial ativo após reinício/deploy.
 
 ### 0. O disco encheu, a câmera parou e a máquina travou
 
+**Status**: FEITO na `main` em 2026-08-07 via
+https://github.com/dcalliari/revela/pull/3 (`879446a`) para aviso de espaço,
+estimativa de disparos e parada preventiva entre disparos. Ainda abertos como
+follow-up: descartar JPEG após preview (direção 3) e rotina de gravar fora do
+disco de sistema (direção 4).
+
 **Observado**: o armazenamento acabou rápido durante a sessão. Quando esgotou, a
 câmera parou de tirar foto e travou por completo, a ponto do botão de desligar
 **da própria câmera** não desligar mais.
@@ -109,6 +115,25 @@ não cabe. Os 50 GB do editorial de 2026-08-04 precisam sair para armazenamento
 externo antes da próxima produção.
 
 ## P0: atrito direto observado na sessão
+
+### 14. Tether deve armar sozinho ao detectar a câmera
+
+**Status**: EM ANDAMENTO (ship após o freio de disco do item 0).
+
+**Observado / decisão**: na produção o caminho feliz é tether. Hoje a presença
+USB já é polled (`gphoto2 --auto-detect`), mas a captura só sobe no clique
+**Conectar câmera**. Depois de `desired=true`, a reconexão já é automática.
+Falta o primeiro armar.
+
+**Contrato aceito (captain, 2026-08-07)**:
+
+1. Auto-start só com **editorial ativo** + **câmera presente** + **disco OK**
+   (reusar o piso/`disk_below_minimum?` do item 0; se `disk_awareness` for
+   `:unavailable`, não armar automaticamente — exigir clique e manter o aviso).
+2. **Stop explícito** (`stop_capture`) deve grudar: não remar sozinho até o
+   operador pedir de novo (ou até um “retomar”/start explícito).
+3. Debounce curto na borda USB para não thrashar o gphoto2.
+4. Sem editorial ativo: não armar no limbo `_sem-editorial`.
 
 ### 1. Atalho de teclado para voltar ao vivo
 
