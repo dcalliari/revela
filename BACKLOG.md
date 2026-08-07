@@ -180,7 +180,8 @@ sobre cada bolinha de cor/limpar.
 
 ### 4. Zoom instável no celular
 
-**Status**: FEITO em 2026-08-07 (`8b3bc7e`). PR URL a preencher no ship.
+**Status**: FEITO em 2026-08-07 via
+https://github.com/dcalliari/revela/pull/6 (`8b3bc7e`).
 
 **Observado**: o pinçar às vezes só dava zoom enquanto o dedo estava na tela, o
 zoom só funcionava no centro da imagem, e o comportamento era inconsistente
