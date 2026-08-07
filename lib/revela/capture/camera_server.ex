@@ -1056,7 +1056,19 @@ defmodule Revela.Capture.CameraServer do
         end
 
       raw_path?(path) ->
-        # RAW so entra em pending para nao SIGKILL no meio do PTP; nao ingerir.
+        # RAW so entra em pending para nao SIGKILL no meio do PTP; nao ingerir
+        # como foto. Se o JPEG ja foi ingerido (ordem tipica), associa o raw_path.
+        case Ingest.attach_raw(path) do
+          {:ok, _photo} ->
+            :ok
+
+          :ignore ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning("Falha ao associar RAW #{path}: #{inspect(reason)}")
+        end
+
         %{state | processed: MapSet.put(state.processed, path)}
 
       true ->
