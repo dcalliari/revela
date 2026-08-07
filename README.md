@@ -31,6 +31,7 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
 - `RevelaWeb.HostLive` (`/host`) QR + URL da LAN, start/stop da captura,
   iniciar/finalizar editorial, estimativa de fotos restantes no disco, quem
   esta online e o consenso de cores; o viewer imersivo reusa os mesmos atalhos.
+  Com `REVELA_DEMO=1`, badge **DEMO** e **Disparar (demo)** / `D` (ver abaixo).
 - `RevelaWeb.ViewerComponents` visualizador compartilhado: legenda de atalhos
   no rodape, numeros `1`–`5` / `0` nas bolinhas, e pinch-zoom no celular
   (hook `PinchZoom`).
@@ -82,6 +83,34 @@ piso em testes (bytes):
 ```bash
 TETHER_MIN_FREE_DISK_BYTES=1073741824 mix phx.server
 ```
+
+### Modo demo (sem camera fisica)
+
+Para exercitar o fluxo completo (vincular → disparar → ingest → preview →
+classificar) sem Canon/gphoto2:
+
+```bash
+REVELA_DEMO=1 mix phx.server
+```
+
+Com o env ligado:
+
+- Host mostra badge **DEMO**; `camera_present` fica sempre true (detector fake).
+- **Nunca** spawna `gphoto2` (mesmo com Canon no USB) — o demo ganha.
+- Armar / parar / piso de disco / regras de editorial ativo seguem iguais a
+  producao. Desarmar gruda: `D` / botao sem captura armada nao gravam nada.
+- Com a captura armada (`status: :running`), o botao **Disparar (demo)** grava
+  um JPEG sintetico na pasta observada (naming gphoto2
+  `%Y%m%d-%H%M%S-%03n.jpg`; o `%03n` sobe a cada disparo nesta vida do
+  processo). A tecla `D`/`d` so liga depois de haver editorial ativo (enquanto
+  o formulario de nome esta aberto, use o botao).
+- Ingest e o caminho real: inotify → settle → preview → PubSub. Se o watcher
+  de arquivos nao sobe (ex. CI sem inotify), o `demo_fire` agenda o settle
+  direto — sem mock so de UI.
+
+Sem o env, o comportamento e o de producao. Nao ha toggle no Host — so o env
+`REVELA_DEMO=1` / `true` / `yes` (compile-time `config :revela, :demo` nao
+ativa o modo; `runtime.exs` sempre redefine a partir do env).
 
 Em Arch Linux, instale `erlang-os_mon` (ou use um Erlang via mise que ja
 traga `os_mon`). Sem isso o app sobe normalmente, mas o `/host` avisa

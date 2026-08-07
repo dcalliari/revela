@@ -36,6 +36,13 @@ defmodule Revela.Capture.CameraServer do
 
   Piso configuravel via opt `min_free_disk_bytes` ou env
   `TETHER_MIN_FREE_DISK_BYTES` (padrao 5 GiB). Ver README.
+
+  Modo demo (`REVELA_DEMO=1` only — runtime sets `:demo` from that env; compile-time
+  config cannot enable it): presença sempre verdadeira, nunca spawna gphoto2, e
+  `demo_fire/1` grava um JPEG sintético na pasta do editorial (mesmo naming
+  `%Y%m%d-%H%M%S-%03n.jpg`; `%03n` sobe por vida do processo) para o caminho real
+  inotify → ingest. Se o watcher de arquivos não sobe, agenda settle direto —
+  o ingest continua o mesmo. Sem toggle no Host.
   """
 
   use GenServer
@@ -53,6 +60,11 @@ defmodule Revela.Capture.CameraServer do
 
   # intervalo do poll de presenca da camera (gphoto2 --auto-detect)
   @presence_poll_ms 3_000
+
+  # JPEG minimo valido (1x1 cinza) — demo_fire escreve isto (sem bloquear em magick)
+  @minimal_jpeg Base.decode64!(
+                  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGfAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAQUCf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQMBAT8Bf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQIBAT8Bf//Z"
+                )
 
   # piso de espaco livre em disco: abaixo disso a captura para sozinha, entre
   # disparos (nunca durante uma transferencia em curso). Motivacao: em
@@ -85,6 +97,18 @@ defmodule Revela.Capture.CameraServer do
   def start_capture(server \\ __MODULE__), do: GenServer.call(server, :start_capture)
   def stop_capture(server \\ __MODULE__), do: GenServer.call(server, :stop_capture)
   def status(server \\ __MODULE__), do: GenServer.call(server, :status)
+
+  @doc """
+  No modo demo, com a captura armada (`status: :running` e `desired: true`),
+  grava um JPEG sintético na pasta observada (naming gphoto2
+  `%Y%m%d-%H%M%S-%03n.jpg`). Com watcher, o inotify leva ao settle; sem
+  watcher, agenda settle direto. Fora do demo ou desarmada, devolve
+  `{:error, :not_demo}` / `{:error, :not_armed}`.
+  """
+  def demo_fire(server \\ __MODULE__), do: GenServer.call(server, :demo_fire)
+
+  @doc "True quando `REVELA_DEMO=1` (ou opt `demo: true` no start, ex. testes)."
+  def demo?(server \\ __MODULE__), do: GenServer.call(server, :demo?)
 
   @doc """
   Inicia um editorial: aponta a captura para `folder` (ou a pasta reservada /
@@ -120,9 +144,17 @@ defmodule Revela.Capture.CameraServer do
 
     {editorial, captures_dir} = restore_active_editorial(editorials_base)
 
+    demo? = demo_enabled?(opts)
+
+    default_detector =
+      if demo?, do: &demo_presence_detector/0, else: &detect_camera_present?/0
+
     state = %{
       status: :idle,
       message: nil,
+      demo: demo?,
+      # contador %03n do naming gphoto2; sobe a cada demo_fire nesta vida do processo
+      demo_seq: 0,
       editorials_base: editorials_base,
       editorial: editorial,
       reserved_folder: nil,
@@ -135,7 +167,7 @@ defmodule Revela.Capture.CameraServer do
       backoff_ms: @initial_backoff,
       # ha uma camera respondendo no USB agora? (ver poll de presenca)
       camera_present: false,
-      presence_detector: Keyword.get(opts, :presence_detector, &detect_camera_present?/0),
+      presence_detector: Keyword.get(opts, :presence_detector, default_detector),
       presence_poll_ms: Keyword.get(opts, :presence_poll_ms, @presence_poll_ms),
       presence_check_ref: nil,
       presence_timer: nil,
@@ -166,6 +198,31 @@ defmodule Revela.Capture.CameraServer do
   @impl true
   def handle_call(:status, _from, state) do
     {:reply, public_status(state), state}
+  end
+
+  def handle_call(:demo?, _from, state) do
+    {:reply, state.demo, state}
+  end
+
+  def handle_call(:demo_fire, _from, %{demo: false} = state) do
+    {:reply, {:error, :not_demo}, state}
+  end
+
+  def handle_call(:demo_fire, _from, %{demo: true, status: :running, desired: true} = state) do
+    # Com inotify, o watcher entrega :file_event. Sem watcher (CI sem
+    # inotify-tools), agenda o settle direto — o ingest continua o mesmo.
+    case write_demo_jpeg(state) do
+      {:ok, path, state} ->
+        state = maybe_schedule_demo_settle(state, path)
+        {:reply, {:ok, path}, state}
+
+      {:error, reason, state} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(:demo_fire, _from, state) do
+    {:reply, {:error, :not_armed}, state}
   end
 
   # sem camera detectada, mantem a captura parada e nao arma reconexao
@@ -443,49 +500,75 @@ defmodule Revela.Capture.CameraServer do
 
         {public_status(state), state}
 
+      state.demo ->
+        do_start_demo(state)
+
       is_nil(System.find_executable("gphoto2")) ->
         state = %{state | status: :error, message: "gphoto2 não encontrado no PATH"}
         broadcast(state)
         {public_status(state), state}
 
       true ->
-        gphoto2 = System.find_executable("gphoto2")
-        release_gvfs()
-        state = ensure_watcher(state)
-
-        port =
-          Port.open(
-            {:spawn_executable, gphoto2},
-            [
-              :binary,
-              :exit_status,
-              :stderr_to_stdout,
-              cd: state.captures_dir,
-              args: [
-                "--capture-tethered",
-                "--filename",
-                "%Y%m%d-%H%M%S-%03n.%C",
-                "--force-overwrite"
-              ]
-            ]
-          )
-
-        os_pid = port |> Port.info(:os_pid) |> elem(1)
-
-        state = %{
-          state
-          | port: port,
-            os_pid: os_pid,
-            status: :running,
-            message: nil,
-            backoff_ms: @initial_backoff
-        }
-
-        state = cancel_presence_poll(state)
-        broadcast(state)
-        Logger.info("Captura iniciado (gphoto2 pid #{os_pid}) em #{state.captures_dir}")
-        {public_status(state), state}
+        do_start_gphoto2(state)
     end
+  end
+
+  # demo: arma captura + watcher sem nunca spawnar gphoto2 (mesmo com Canon no USB)
+  defp do_start_demo(state) do
+    state = ensure_watcher_soft(state)
+
+    state = %{
+      state
+      | port: nil,
+        os_pid: nil,
+        status: :running,
+        message: nil,
+        backoff_ms: @initial_backoff
+    }
+
+    state = cancel_presence_poll(state)
+    broadcast(state)
+    Logger.info("Captura demo armada (sem gphoto2) em #{state.captures_dir}")
+    {public_status(state), state}
+  end
+
+  defp do_start_gphoto2(state) do
+    gphoto2 = System.find_executable("gphoto2")
+    release_gvfs()
+    state = ensure_watcher(state)
+
+    port =
+      Port.open(
+        {:spawn_executable, gphoto2},
+        [
+          :binary,
+          :exit_status,
+          :stderr_to_stdout,
+          cd: state.captures_dir,
+          args: [
+            "--capture-tethered",
+            "--filename",
+            "%Y%m%d-%H%M%S-%03n.%C",
+            "--force-overwrite"
+          ]
+        ]
+      )
+
+    os_pid = port |> Port.info(:os_pid) |> elem(1)
+
+    state = %{
+      state
+      | port: port,
+        os_pid: os_pid,
+        status: :running,
+        message: nil,
+        backoff_ms: @initial_backoff
+    }
+
+    state = cancel_presence_poll(state)
+    broadcast(state)
+    Logger.info("Captura iniciado (gphoto2 pid #{os_pid}) em #{state.captures_dir}")
+    {public_status(state), state}
   end
 
   defp transition_after_presence_check(%{camera_present: false, desired: true} = state) do
@@ -562,6 +645,12 @@ defmodule Revela.Capture.CameraServer do
     _kind, _reason -> false
   end
 
+  defp demo_enabled?(opts) do
+    Keyword.get(opts, :demo, Application.get_env(:revela, :demo, false)) == true
+  end
+
+  defp demo_presence_detector, do: true
+
   defp detect_camera_present? do
     with gphoto2 when is_binary(gphoto2) <- System.find_executable("gphoto2"),
          {output, 0} <- System.cmd(gphoto2, ["--auto-detect"], stderr_to_stdout: true) do
@@ -575,6 +664,32 @@ defmodule Revela.Capture.CameraServer do
     end
   rescue
     _error -> false
+  end
+
+  # naming alinhado ao --filename do gphoto2: %Y%m%d-%H%M%S-%03n.jpg
+  defp write_demo_jpeg(state) do
+    seq = state.demo_seq + 1
+    {{y, m, d}, {h, min, s}} = :calendar.local_time()
+
+    stamp =
+      :io_lib.format("~4..0B~2..0B~2..0B-~2..0B~2..0B~2..0B-~3..0B", [y, m, d, h, min, s, seq])
+      |> to_string()
+
+    filename = stamp <> ".jpg"
+    path = Path.join(state.captures_dir, filename)
+    state = %{state | demo_seq: seq}
+
+    case write_synthetic_jpeg(path) do
+      :ok -> {:ok, path, state}
+      {:error, reason} -> {:error, reason, state}
+    end
+  end
+
+  defp write_synthetic_jpeg(path) do
+    with :ok <- File.mkdir_p(Path.dirname(path)),
+         :ok <- File.write(path, @minimal_jpeg) do
+      :ok
+    end
   end
 
   defp detach_capture(state) do
@@ -658,6 +773,35 @@ defmodule Revela.Capture.CameraServer do
     %{state | watcher_pid: pid}
   end
 
+  # demo tolera ausencia de inotify-tools (CI); producao continua exigindo watcher
+  defp ensure_watcher_soft(%{watcher_pid: pid} = state) when is_pid(pid), do: state
+
+  defp ensure_watcher_soft(state) do
+    case FileSystem.start_link(dirs: [state.captures_dir]) do
+      {:ok, pid} ->
+        FileSystem.subscribe(pid)
+        %{state | watcher_pid: pid}
+
+      other ->
+        Logger.warning(
+          "Demo: file_system watcher indisponivel (#{inspect(other)}); settle via demo_fire"
+        )
+
+        state
+    end
+  end
+
+  defp maybe_schedule_demo_settle(%{watcher_pid: pid} = state, _path) when is_pid(pid), do: state
+
+  defp maybe_schedule_demo_settle(state, path) do
+    if ref = state.pending[path], do: Process.cancel_timer(ref)
+    ref = Process.send_after(self(), {:settle, path}, @settle_ms)
+
+    state
+    |> note_transfer_activity()
+    |> Map.put(:pending, Map.put(state.pending, path, ref))
+  end
+
   defp kill_port(%{port: nil} = state), do: state
 
   defp kill_port(%{port: port, os_pid: os_pid} = state) do
@@ -732,7 +876,8 @@ defmodule Revela.Capture.CameraServer do
       camera_present: state.camera_present,
       free_disk_bytes: state.free_disk_bytes,
       estimated_shots_left: state.estimated_shots_left,
-      disk_awareness: state.disk_awareness
+      disk_awareness: state.disk_awareness,
+      demo: state.demo
     }
   end
 

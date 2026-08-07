@@ -20,6 +20,17 @@ if System.get_env("PHX_SERVER") do
   config :revela, RevelaWeb.Endpoint, server: true
 end
 
+# Demo/test mode: fake camera presence + synthetic JPEG fire (no gphoto2).
+# Armed only by REVELA_DEMO (1/true/yes). Runtime always sets :demo from the env
+# (false when unset) — compile-time config cannot enable it. Never a Host toggle.
+demo_mode? =
+  case System.get_env("REVELA_DEMO") do
+    nil -> false
+    v -> String.downcase(String.trim(v)) in ["1", "true", "yes"]
+  end
+
+config :revela, :demo, demo_mode?
+
 config :revela, RevelaWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 

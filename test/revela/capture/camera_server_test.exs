@@ -540,6 +540,132 @@ defmodule Revela.Capture.CameraServerTest do
     refute MapSet.member?(:sys.get_state(server).processed, foreign)
   end
 
+  test "demo off: status.demo false e demo_fire recusado" do
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: temporary_editorials_dir(),
+        demo: false,
+        presence_detector: fn -> true end,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 42_000_000_000 end
+      })
+
+    wait_for_presence_check(server)
+
+    assert CameraServer.status(server).demo == false
+    assert CameraServer.demo?(server) == false
+    assert {:error, :not_demo} = CameraServer.demo_fire(server)
+  end
+
+  test "demo on: camera_present true, arma sem gphoto2, fire grava JPEG e ingere" do
+    editorials_dir = temporary_editorials_dir()
+    folder = Path.join(editorials_dir, "2026-08-07 Demo 120000-1")
+    File.mkdir_p!(folder)
+    {:ok, _editorial} = Capture.start_editorial("Demo", folder)
+    Capture.subscribe_photos()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        demo: true,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 42_000_000_000 end
+      })
+
+    wait_for_presence_check(server)
+
+    assert CameraServer.status(server).demo == true
+    assert CameraServer.status(server).camera_present == true
+
+    status = CameraServer.start_capture(server)
+    assert status.status == :running
+    assert status.demo == true
+
+    state = :sys.get_state(server)
+    assert state.port == nil
+    assert state.os_pid == nil
+    assert state.desired == true
+
+    assert {:error, :not_armed} =
+             (
+               CameraServer.stop_capture(server)
+               CameraServer.demo_fire(server)
+             )
+
+    status = CameraServer.start_capture(server)
+    assert status.status == :running
+
+    assert {:ok, path} = CameraServer.demo_fire(server)
+    assert path =~ ~r/\d{8}-\d{6}-001\.jpg$/
+    assert File.exists?(path)
+    assert File.stat!(path).size > 0
+
+    assert {:ok, path2} = CameraServer.demo_fire(server)
+    assert path2 =~ ~r/\d{8}-\d{6}-002\.jpg$/
+    refute path == path2
+
+    # caminho real: inotify → settle → ingest (ou settle manual se o watcher atrasar)
+    assert_receive {:new_photo, _photo}, 5_000
+  end
+
+  test "demo on: stop desarma e D/demo_fire nao grava" do
+    editorials_dir = temporary_editorials_dir()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        demo: true,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 42_000_000_000 end
+      })
+
+    wait_for_presence_check(server)
+    assert CameraServer.start_capture(server).status == :running
+    assert CameraServer.stop_capture(server).status == :idle
+    assert :sys.get_state(server).desired == false
+    assert {:error, :not_armed} = CameraServer.demo_fire(server)
+
+    captures_dir = :sys.get_state(server).captures_dir
+    assert File.ls!(captures_dir) == []
+  end
+
+  test "demo_fire devolve erro de escrita sem derrubar o GenServer" do
+    editorials_dir = temporary_editorials_dir()
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        demo: true,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> 42_000_000_000 end
+      })
+
+    wait_for_presence_check(server)
+    assert CameraServer.start_capture(server).status == :running
+
+    captures_dir = :sys.get_state(server).captures_dir
+    File.chmod!(captures_dir, 0o500)
+
+    try do
+      assert {:error, :eacces} = CameraServer.demo_fire(server)
+      assert Process.alive?(server)
+    after
+      File.chmod!(captures_dir, 0o755)
+    end
+  end
+
   defp wait_for_presence_check(server) do
     case :sys.get_state(server).presence_check_ref do
       nil -> :ok
