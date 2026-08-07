@@ -60,9 +60,10 @@ defmodule Revela.Capture.CameraServer do
   @default_min_free_disk_bytes 5 * 1024 * 1024 * 1024
 
   # estimativa usada antes do primeiro disparo do editorial, quando ainda nao
-  # ha arquivos na pasta para calcular a media real. Baseada na sessao de
-  # 2026-08-04: RAW + JPEG da camera por disparo ficou em torno de 30 MB.
-  @fallback_avg_bytes_per_shot 30 * 1024 * 1024
+  # ha arquivos na pasta para calcular a media real. Sessao 2026-08-04:
+  # ~30 MB com RAW+JPEG; ~24 MB so com RAW (padrao apos descartar o JPEG).
+  @fallback_avg_bytes_with_jpeg 30 * 1024 * 1024
+  @fallback_avg_bytes_raw_only 24 * 1024 * 1024
 
   # intervalo do poll de espaco em disco (fora do gatilho por disparo, que roda
   # a cada foto que assenta)
@@ -761,7 +762,7 @@ defmodule Revela.Capture.CameraServer do
         avg_bytes =
           case avg_bytes_per_shot(state.captures_dir) do
             avg when is_number(avg) and avg > 0 -> avg
-            _other -> @fallback_avg_bytes_per_shot
+            _other -> fallback_avg_bytes_per_shot()
           end
 
         estimated_shots = max(div(free_bytes, max(trunc(avg_bytes), 1)), 0)
@@ -896,9 +897,18 @@ defmodule Revela.Capture.CameraServer do
     _kind, _reason -> :unavailable
   end
 
-  # media real de bytes por disparo na pasta do editorial atual (soma RAW+JPEG
-  # do mesmo stem), usada para traduzir espaco livre em "cabem ~N fotos".
-  # nil quando a pasta ainda nao tem nenhum arquivo (editorial recem-criado).
+  defp fallback_avg_bytes_per_shot do
+    if Ingest.keep_camera_jpeg?() do
+      @fallback_avg_bytes_with_jpeg
+    else
+      @fallback_avg_bytes_raw_only
+    end
+  end
+
+  # media real de bytes por disparo na pasta do editorial atual (soma por stem
+  # dos arquivos que restam — RAW e, se ainda guardado, JPEG), usada para
+  # traduzir espaco livre em "cabem ~N fotos". nil quando a pasta ainda nao
+  # tem nenhum arquivo (editorial recem-criado).
   defp avg_bytes_per_shot(dir) do
     case File.ls(dir) do
       {:ok, entries} ->

@@ -4,6 +4,10 @@ defmodule Revela.Capture.Ingest do
   do JPEG (em `uploads/<editorial_id>/` ou `uploads/_sem-editorial/`) e registra
   a foto no editorial ativo. O RAW (.cr2) irmao, quando existe, e associado para
   edicao posterior (ex: no darktable).
+
+  Por padrao o JPEG da camera e apagado depois que o preview web existe (o RAW
+  e o preview bastam). Defina `REVELA_KEEP_CAMERA_JPEG=1` ou
+  `config :revela, :keep_camera_jpeg, true` para manter o JPEG no disco.
   """
 
   require Logger
@@ -24,23 +28,52 @@ defmodule Revela.Capture.Ingest do
     end
   end
 
+  @doc """
+  Quando `false` (padrao), o JPEG da camera e removido apos o preview web
+  nascer. Override via `config :revela, :keep_camera_jpeg` ou env
+  `REVELA_KEEP_CAMERA_JPEG=1`.
+  """
+  def keep_camera_jpeg? do
+    Application.get_env(:revela, :keep_camera_jpeg, false) == true
+  end
+
   defp do_process(path) do
     stem = path |> Path.basename() |> Path.rootname()
     {web_rel, web_path} = preview_paths(stem)
     web_dest = Path.join(uploads_dir(), web_rel)
+    raw_path = find_raw_sibling(path)
 
     case make_preview(path, web_dest) do
       :ok ->
+        original_path = maybe_discard_camera_jpeg(path)
+
         Capture.create_photo(%{
           web_path: web_path,
-          original_path: path,
-          raw_path: find_raw_sibling(path),
+          original_path: original_path,
+          raw_path: raw_path,
           shot_at: DateTime.utc_now()
         })
 
       {:error, reason} ->
         Logger.error("Falha ao gerar preview de #{path}: #{reason}")
         {:error, reason}
+    end
+  end
+
+  # So depois do preview ok. Nunca apaga RAW nem o preview web. Se o rm falhar,
+  # mantem o caminho apontando para o JPEG que ainda esta no disco.
+  defp maybe_discard_camera_jpeg(path) do
+    if keep_camera_jpeg?() do
+      path
+    else
+      case File.rm(path) do
+        :ok ->
+          nil
+
+        {:error, reason} ->
+          Logger.warning("Nao foi possivel apagar JPEG da camera #{path}: #{inspect(reason)}")
+          path
+      end
     end
   end
 

@@ -265,6 +265,33 @@ defmodule Revela.Capture.CameraServerTest do
     File.mkdir_p!(captures_dir)
     File.write!(Path.join(captures_dir, "empty.jpg"), "")
 
+    # padrao: JPEG descartado apos preview => fallback RAW-only (~24 MiB)
+    fallback = 24 * 1024 * 1024
+    free_bytes = fallback * 4
+
+    server =
+      start_supervised!({
+        CameraServer,
+        name: nil,
+        editorials_dir: editorials_dir,
+        presence_poll_ms: 60_000,
+        disk_poll_ms: 60_000,
+        disk_checker: fn _dir -> free_bytes end
+      })
+
+    assert CameraServer.status(server).estimated_shots_left == 4
+  end
+
+  test "fallback de media usa 30 MiB quando REVELA_KEEP_CAMERA_JPEG esta ativo" do
+    previous = Application.get_env(:revela, :keep_camera_jpeg)
+    Application.put_env(:revela, :keep_camera_jpeg, true)
+    on_exit(fn -> Application.put_env(:revela, :keep_camera_jpeg, previous) end)
+
+    editorials_dir = temporary_editorials_dir()
+    captures_dir = Path.join(editorials_dir, "_sem-editorial")
+    File.mkdir_p!(captures_dir)
+    File.write!(Path.join(captures_dir, "empty.jpg"), "")
+
     fallback = 30 * 1024 * 1024
     free_bytes = fallback * 4
 

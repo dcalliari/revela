@@ -78,6 +78,13 @@ piso em testes (bytes):
 TETHER_MIN_FREE_DISK_BYTES=1073741824 mix phx.server
 ```
 
+Por padrao o JPEG da camera e apagado depois que o preview web existe (~20%
+menos disco por disparo; o RAW e o preview ficam). Para manter o JPEG:
+
+```bash
+REVELA_KEEP_CAMERA_JPEG=1 mix phx.server
+```
+
 Em Arch Linux, instale `erlang-os_mon` (ou use um Erlang via mise que ja
 traga `os_mon`). Sem isso o app sobe normalmente, mas o `/host` avisa
 **monitoramento de disco indisponivel** e a parada preventiva fica
@@ -104,9 +111,10 @@ de uma transferencia PTP): libere espaco e vincule de novo.
   editorial **nao** apaga fotos nem classificacoes — so troca qual sessao esta
   ativa. Sem editorial ativo, as telas ficam vazias (fotos com `editorial_id`
   nulo nao entram na UI; nao ha backfill).
-- Originais (JPEG + RAW) baixam para pastas unicas
+- Originais baixam para pastas unicas
   `editorials/yyyy-mm-dd NOME HHMMSS-uid/` (ou `editorials/_sem-editorial/`
-  quando nao ha sessao).
+  quando nao ha sessao). O RAW permanece; o JPEG da camera e descartado apos
+  o preview (a menos que `REVELA_KEEP_CAMERA_JPEG=1`).
 - Previews web ficam em `priv/static/uploads/<editorial_id>/` (ou
   `_sem-editorial/`) e sao servidos em `/uploads/...`.
 - Estado (fotos + labels) em SQLite (`*.db`), escopado ao editorial atual.

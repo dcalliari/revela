@@ -38,9 +38,11 @@ editorial ativo após reinício/deploy.
 
 **Status**: FEITO na `main` em 2026-08-07 via
 https://github.com/dcalliari/revela/pull/3 (`879446a`) para aviso de espaço,
-estimativa de disparos e parada preventiva entre disparos. Ainda abertos como
-follow-up: descartar JPEG após preview (direção 3) e rotina de gravar fora do
-disco de sistema (direção 4).
+estimativa de disparos e parada preventiva entre disparos. Follow-up direção 3
+(descartar JPEG após preview, toggle `REVELA_KEEP_CAMERA_JPEG`) FEITO na
+branch `fm/revela-jpeg-discard-after-preview` — PR URL ao shippar. Direção 4
+(gravar fora do disco de sistema / SSD externo) continua aberta como rotina
+de produção (`editorials_dir` já é configurável).
 
 **Observado**: o armazenamento acabou rápido durante a sessão. Quando esgotou, a
 câmera parou de tirar foto e travou por completo, a ponto do botão de desligar
@@ -98,13 +100,10 @@ processo quando o espaço acabar.
    disparos, enquanto deixar chegar no limite custa a câmera travada e uma
    bateria a ser removida no meio da produção. Provavelmente é o item de maior
    valor da lista toda.
-3. **Consumir menos**: o JPEG da câmera só serve para gerar o preview web. Depois
-   que o preview existe, ele é redundante, porque o RAW é o que se guarda e o
-   preview é o que se exibe. Descartá-lo após o ingest economiza uns 20% do
-   volume. Vale notar que foi exatamente isso que aconteceu na marra: hoje a
-   pasta do editorial tem 2168 RAWs e **nenhum JPEG**, porque eles foram apagados
-   para liberar espaço. Transformar isso numa opção explícita e consciente é
-   melhor que fazer na emergência.
+3. **Consumir menos** — FEITO: após preview ok, `Ingest` apaga o JPEG da
+   câmera e zera `original_path` (nunca RAW/preview). Padrao on; manter com
+   `REVELA_KEEP_CAMERA_JPEG=1`. Estimativa de disparos usa média real do que
+   resta no disco e fallback ~24 MB (RAW-only) quando o discard está ativo.
 4. **Gravar fora do disco de sistema**: 50 GB por editorial pede SSD externo, e
    `editorials_dir` já é configurável, então isso é mais questão de rotina de
    produção que de código. Tira a escrita pesada do disco do sistema e dá

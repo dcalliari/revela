@@ -9,7 +9,10 @@ import Config
 
 config :revela,
   ecto_repos: [Revela.Repo],
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  # JPEG da camera so serve para gerar o preview web; padrao e apaga-lo apos
+  # o preview. Override em runtime.exs via REVELA_KEEP_CAMERA_JPEG=1.
+  keep_camera_jpeg: false
 
 # Configure the endpoint
 config :revela, RevelaWeb.Endpoint,

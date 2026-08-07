@@ -20,6 +20,11 @@ if System.get_env("PHX_SERVER") do
   config :revela, RevelaWeb.Endpoint, server: true
 end
 
+# JPEG da camera: por padrao apagado apos o preview web. Defina
+# REVELA_KEEP_CAMERA_JPEG=1 para manter o original no disco do editorial.
+config :revela,
+  keep_camera_jpeg: System.get_env("REVELA_KEEP_CAMERA_JPEG") in ~w(1 true TRUE yes YES)
+
 config :revela, RevelaWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
