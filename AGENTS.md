@@ -27,9 +27,21 @@ Keyboard shortcuts (`1`–`5`, `0`/Backspace/Delete, arrows, `L`) and the footer
 legend live in those LiveViews + `ViewerComponents` (see README). Do not reintroduce
 a special-case that only sets follow on pick of the penultimate photo.
 
+## Domain: viewer PinchZoom (mobile)
+
+Hook `PinchZoom` in `assets/js/app.js` (pure helpers + `node --test` coverage in
+`assets/js/pinch_zoom.js` / `mix assets.test`, part of `precommit`). Invariants:
+focal zoom uses `transform-origin: 0 0` with `tx`/`ty` (not CSS center origin);
+pinch-end / `touchcancel` must not count as double-tap (only single-finger taps);
+`updated()` resets only when photo identity (`img` src) changes — otherwise
+re-apply transform so LiveView patches (tallies, presence) do not wipe zoom.
+Do not reintroduce center-origin CSS on the viewer `<img>` or unconditional
+`resetZoom()` in `updated()`.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
+  (`precommit` runs `mix assets.test` for PinchZoom helpers, then `mix test`)
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
 - `Revela.Capture.CameraServer` supervises `gphoto2 --capture-tethered` for tethered shooting. It sends `SIGKILL` (never `SIGTERM`, which gphoto2 ignores) to stop the process; killing it mid-PTP-transfer wedges the Canon camera hard (see `@moduledoc` and `maybe_stop_for_low_disk/1` for the disk-space preventive-stop mechanism, which only acts between shots). Floor defaults to 5 GiB; override with start opt `min_free_disk_bytes` or env `TETHER_MIN_FREE_DISK_BYTES` (documented in README).
 - `:disksup` (part of OTP's `os_mon`) is used for free-disk-space checks but is **not guaranteed to be installed**: Arch Linux ships `os_mon` as a separate `erlang-os_mon` package, absent by default (confirmed: `mix compile` warns `:disksup.get_disk_info/1 is undefined` on a bare `pacman -S erlang` install; a `mise`-managed Erlang toolchain may bundle it instead — check `ls $(mise where erlang 2>/dev/null)/lib | grep os_mon`). `default_disk_checker/1` in `camera_server.ex` starts `:os_mon` lazily via `Application.ensure_all_started/1` and returns `:unavailable` on failure, so the app boots and captures fine without it — disk-space awareness soft-fails and the host UI shows a degraded-mode warning (`disk_awareness: :unavailable`). Free space is read live via `:disksup.get_disk_info/1` (not the ~30m `get_disk_data/0` cache). `mix.exs` has `elixirc_options: [no_warn_undefined: [{:disksup, :get_disk_info, 1}]]` so this doesn't fail `mix precommit`'s `--warnings-as-errors`. If packaging for a target (e.g. the Arch native package on branch `fm/revela-arch-release`), add `erlang-os_mon` as a build/runtime dependency there to make the feature actually work.

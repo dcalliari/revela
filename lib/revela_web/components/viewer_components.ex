@@ -7,6 +7,10 @@ defmodule RevelaWeb.ViewerComponents do
   O rodape expoe a legenda `#shortcuts-legend` (`1`–`5` cores, `0` limpar,
   setas, `L` ao vivo) e numeros nas bolinhas; o mapeamento das teclas vive em
   `HostLive` / `ReviewLive`.
+
+  No celular, o container `#zoomer` (ou `zoom_id`) usa o hook JS `PinchZoom`
+  (focal pinch, pan com zoom > 1, toque duplo reseta). Nao fixe
+  `transform-origin: center` no `<img>` — a origem fica em `0 0` via JS.
   """
   use RevelaWeb, :html
 
