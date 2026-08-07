@@ -95,6 +95,9 @@ defmodule Mix.Tasks.Revela.ExportColors do
       {:error, :no_active_editorial} ->
         Mix.raise("nenhum editorial ativo; passe --editorial ID")
 
+      {:error, :editorial_not_found} ->
+        Mix.raise("editorial nao encontrado; confira --editorial ID")
+
       {:error, reason} ->
         Mix.raise("falha no export: #{inspect(reason)}")
     end

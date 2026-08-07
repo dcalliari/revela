@@ -21,7 +21,7 @@ defmodule Revela.Capture.Export do
 
   alias Revela.Repo
   alias Revela.Capture
-  alias Revela.Capture.{Photo, Label}
+  alias Revela.Capture.{Editorial, Photo, Label}
 
   @folder_names %{
     0 => "vermelho",
@@ -108,7 +108,12 @@ defmodule Revela.Capture.Export do
     end
   end
 
-  defp resolve_editorial_id(id) when is_integer(id), do: {:ok, id}
+  defp resolve_editorial_id(id) when is_integer(id) do
+    case Repo.get(Editorial, id) do
+      nil -> {:error, :editorial_not_found}
+      _editorial -> {:ok, id}
+    end
+  end
 
   defp ensure_dest(dest) do
     case File.mkdir_p(dest) do
@@ -323,8 +328,12 @@ defmodule Revela.Capture.Export do
 
   defp transfer(:copy, src, dest) do
     case File.cp(src, dest) do
-      :ok -> :ok
-      {:error, reason} -> {:error, reason}
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        _ = File.rm(dest)
+        {:error, reason}
     end
   end
 

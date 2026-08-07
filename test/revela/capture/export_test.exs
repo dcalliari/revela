@@ -257,6 +257,40 @@ defmodule Revela.Capture.ExportTest do
     assert {:error, :no_active_editorial} = Export.export(dest: Path.join(tmp, "x"))
   end
 
+  test "rejeita editorial_id inexistente", %{tmp: tmp} do
+    Capture.finish_editorial()
+    missing_id = 999_999_999
+
+    assert {:error, :editorial_not_found} =
+             Export.export(dest: Path.join(tmp, "x"), editorial_id: missing_id)
+  end
+
+  test "copia falha limpa dest parcial", %{tmp: tmp} do
+    {:ok, _} = Capture.start_editorial("Copy cleanup", Path.join(tmp, "ed-cc"))
+    raw = Path.join(tmp, "copyfail.CR2")
+    File.write!(raw, "copy-bytes")
+    File.chmod!(raw, 0o000)
+
+    on_exit(fn ->
+      File.chmod!(raw, 0o644)
+    end)
+
+    {:ok, photo} =
+      Capture.create_photo(%{
+        web_path: "/uploads/copyfail.jpg",
+        raw_path: raw
+      })
+
+    {:ok, _} = Capture.set_label(photo.id, "host", "host", 0)
+
+    dest = Path.join(tmp, "out-cc")
+    assert {:ok, result} = Export.export(dest: dest)
+    assert result.exported == []
+    assert [%{photo_id: id, reason: {:transfer_failed, _reason, ^raw, dest_file}}] = result.skipped
+    assert id == photo.id
+    refute File.exists?(dest_file)
+  end
+
   test "aceita editorial_id de sessao finalizada", %{tmp: tmp} do
     {:ok, editorial} = Capture.start_editorial("Fechado", Path.join(tmp, "ed-c"))
     raw = Path.join(tmp, "closed.CR2")
