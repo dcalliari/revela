@@ -50,6 +50,12 @@ defmodule Revela.Capture.Export do
     * `:editorial_id` — editorial alvo (padrao: editorial ativo)
     * `:colors` — lista de inteiros `0..4` a exportar (padrao: todas)
     * `:photo_ids` — se informado, so esses ids (ainda respeitam `:colors`)
+
+  Retorna `{:ok, %{exported: [...], warnings: [...], skipped: [...]}}`.
+  Fotos sem label do revisor entram em `skipped` com `:unlabeled`. Erros
+  de precondicao: `{:error, :no_active_editorial}`, `{:error, :editorial_not_found}`,
+  `{:error, {:invalid_mode, _}}`, `{:error, {:invalid_colors, _}}`,
+  `{:error, {:mkdir_failed, dest, reason}}`.
   """
   def export(opts) when is_list(opts) do
     dest = Keyword.fetch!(opts, :dest)

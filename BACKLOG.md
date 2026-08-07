@@ -273,9 +273,10 @@ seguinte (ex.: `20260804-133708-027.jpg` e `20260804-133708-028.cr2`). O carimbo
 de tempo também pode variar em 1s, porque o arquivo maior demora mais para
 transferir.
 
-**Impacto**: qualquer funcionalidade que dependa do RAW fica inviável, incluindo
-o export de sidecars `.xmp` para o darktable que já está previsto no README.
-Vale corrigir antes desse export, e fazer um backfill dos registros existentes.
+**Impacto**: o export de sidecars `.xmp` para o darktable (README) precisa do
+RAW de verdade. O export por pastas de cor (item 12) já cai para JPEG/preview
+com aviso quando `raw_path` falta, mas o resultado deixa de ser o arquivo de
+edição. Vale corrigir o sibling match e fazer backfill dos registros existentes.
 
 ### 11. Tela de pós-produção
 
@@ -292,6 +293,9 @@ dentro da tela de captura.
 
 **Relacionado**: depende do item 10. Não faz sentido investir numa tela de
 revisão pós-editorial enquanto finalizar o editorial apaga o resultado dela.
+Quando a seleção por intervalo existir, a ação de organizar por cor deve
+chamar `Revela.Capture.Export.export/1` (já usado por `mix revela.export_colors`;
+item 12) em vez de reimplementar cópia/movimento de arquivos.
 
 #### O índice de contato validou a ideia na prática
 
@@ -406,5 +410,6 @@ cada uma custa em setup no dia da produção, antes de decidir qualquer coisa.
 ---
 
 Ver também a seção "Pendente (proxima fase)" do [README](README.md), que já
-registra o export de sidecars `.xmp` para o darktable (dependente do item 8) e o
-espelho de vídeo ao vivo.
+registra o export de sidecars `.xmp` para o darktable (dependente do item 8), o
+espelho de vídeo ao vivo, e o upload Google Fotos/Drive a partir do export por
+cor (follow-up do item 12).

@@ -43,8 +43,10 @@ Do not reintroduce center-origin CSS on the viewer `<img>` or unconditional
 `Revela.Capture.Export` (+ `mix revela.export_colors`) copies/moves classified
 files into `vermelho`/`amarelo`/`verde`/`azul`/`roxo` using one reviewer's
 labels (default `host`). Prefers `raw_path`, then JPEG, then web preview (with
-warnings). Google Fotos vs Drive upload is phase-2 — see README. Post-prod UI
-(item 11) should call `Export.export/1` rather than reimplementing file ops.
+warnings). Unlabeled photos are skipped. `:move` updates `raw_path`/
+`original_path` in the DB; web preview is never moved. Google Fotos vs Drive
+upload is phase-2 — see README. Post-prod UI (item 11) should call
+`Export.export/1` rather than reimplementing file ops.
 
 ## Project guidelines
 

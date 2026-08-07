@@ -18,9 +18,9 @@ defmodule Mix.Tasks.Revela.ExportColors do
       --ids LISTA          So estes photo ids (ex: 10,11,12)
 
   Prefere `raw_path`; se vazio/ausente, exporta o JPEG/preview e registra aviso.
-  Em `--mode move`, preview web nao e movido (quebraria a UI); RAW/JPEG movidos
-  atualizam o caminho no banco. Google Drive/Fotos fica fora desta tarefa — ver
-  README (entrega vs arquivo).
+  Fotos sem label do revisor sao ignoradas. Em `--mode move`, preview web nao e
+  movido (quebraria a UI); RAW/JPEG movidos atualizam o caminho no banco. Google
+  Drive/Fotos fica fora desta tarefa — ver README (entrega vs arquivo).
   """
 
   use Mix.Task
