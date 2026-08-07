@@ -20,13 +20,16 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
 
 - `Revela.Capture` contexto (editoriais + fotos + labels + agregacao).
 - `Revela.Capture.CameraServer` supervisiona o gphoto2 e o watcher; restaura
-  o editorial ativo do banco no boot.
+  o editorial ativo do banco no boot; monitora espaco livre e para a captura
+  entre disparos se o disco cair abaixo do minimo (protege a Canon de travar
+  no USB).
 - `Revela.Capture.Ingest` gera o preview (namespaced por editorial) e registra
   a foto.
 - `RevelaWeb.ReviewLive` (`/`) tela de revisao mobile, botoes de cor,
   voltar, modo ao vivo. Identidade leve por `localStorage`.
 - `RevelaWeb.HostLive` (`/host`) QR + URL da LAN, start/stop da captura,
-  iniciar/finalizar editorial, quem esta online e o consenso de cores.
+  iniciar/finalizar editorial, estimativa de fotos restantes no disco, quem
+  esta online e o consenso de cores.
 
 As cores usam o mesmo mapeamento do darktable: `0` vermelho, `1` amarelo,
 `2` verde, `3` azul, `4` roxo.
@@ -47,6 +50,19 @@ Se o IP da LAN detectado estiver errado (varias interfaces), fixe manualmente:
 TETHER_LAN_IP=192.168.x.y mix phx.server
 ```
 
+Piso de espaco livre (padrao 5 GiB). Abaixo disso a captura para sozinha
+entre disparos e o `/host` mostra status **espaco cheio**. Para baixar o
+piso em testes (bytes):
+
+```bash
+TETHER_MIN_FREE_DISK_BYTES=1073741824 mix phx.server
+```
+
+Em Arch Linux, instale `erlang-os_mon` (ou use um Erlang via mise que ja
+traga `os_mon`). Sem isso o app sobe normalmente, mas o `/host` avisa
+**monitoramento de disco indisponivel** e a parada preventiva fica
+desligada.
+
 ## Checklist da camera (Canon EOS Rebel T6 / 1300D)
 
 1. **Wi-Fi/NFC = Desativar** (com Wi-Fi ligado a T6 desabilita a porta USB).
@@ -56,7 +72,10 @@ TETHER_LAN_IP=192.168.x.y mix phx.server
 4. Cabo USB firme, de preferencia porta direta no chassi, sem hub.
 
 Na tela `/host`, clique em **Conectar câmera**. Dispare na camera: a foto
-aparece nos celulares em segundos.
+aparece nos celulares em segundos. O host mostra quanto espaco livre
+ainda cabe em fotos (`cabem ~N fotos`, media real do editorial). Se o
+disco cair abaixo do piso, a captura para entre disparos (nunca no meio
+de uma transferencia PTP): libere espaco e vincule de novo.
 
 ## Fluxo de dados
 

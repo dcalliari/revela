@@ -33,6 +33,9 @@ defmodule Revela.Capture.CameraServer do
   passou — cobrindo o intervalo entre o disparo e o primeiro evento inotify, e
   entre arquivos do mesmo disparo. Se `:os_mon`/`:disksup` estiver ausente,
   `disk_awareness` fica `:unavailable` e a UI avisa (boot nao falha).
+
+  Piso configuravel via opt `min_free_disk_bytes` ou env
+  `TETHER_MIN_FREE_DISK_BYTES` (padrao 5 GiB). Ver README.
   """
 
   use GenServer
@@ -52,9 +55,8 @@ defmodule Revela.Capture.CameraServer do
   @presence_poll_ms 3_000
 
   # piso de espaco livre em disco: abaixo disso a captura para sozinha, entre
-  # disparos (nunca durante uma transferencia em curso). Ver docs/backlog do
-  # incidente de 2026-08-04: disco cheio travou a camera de vez, so a bateria
-  # a recuperou.
+  # disparos (nunca durante uma transferencia em curso). Motivacao: em
+  # 2026-08-04 disco cheio + SIGKILL mid-PTP travou a Canon ate puxar bateria.
   @default_min_free_disk_bytes 5 * 1024 * 1024 * 1024
 
   # estimativa usada antes do primeiro disparo do editorial, quando ainda nao

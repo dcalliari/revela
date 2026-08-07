@@ -1,8 +1,9 @@
 defmodule RevelaWeb.HostLive do
   @moduledoc """
   Tela de controle no laptop: QR code + URL da LAN para os celulares entrarem,
-  status do captura (start/stop), quem esta online e a agregacao de cores
-  (consenso) de cada foto entre todos os revisores.
+  status do captura (start/stop), estimativa de fotos restantes no disco
+  (ou aviso se o monitoramento estiver indisponivel), quem esta online e a
+  agregacao de cores (consenso) de cada foto entre todos os revisores.
   """
   use RevelaWeb, :live_view
 
