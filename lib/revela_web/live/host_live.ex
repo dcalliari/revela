@@ -34,6 +34,8 @@ defmodule RevelaWeb.HostLive do
     url = review_url()
     capture = CameraServer.status()
 
+    capture = CameraServer.status()
+
     socket =
       socket
       |> assign(:url, url)
