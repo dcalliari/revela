@@ -1,8 +1,11 @@
 defmodule Revela.Capture do
   @moduledoc """
-  Contexto de captura: fotos que chegam via captura e as classificacoes
-  (labels de cor) por revisor. Cada revisor tem o seu proprio conjunto de cores
-  para cada foto (classificacao por pessoa).
+  Contexto de captura: editoriais (sessoes de revisao), fotos e classificacoes
+  (labels de cor) por revisor. Fotos e labels pertencem ao editorial ativo no
+  momento da captura; iniciar/finalizar um editorial nao apaga dados — so troca
+  qual sessao esta ativa. Sem editorial ativo, listagens ficam vazias (fotos com
+  `editorial_id` nulo nao entram na UI). Cada revisor tem o seu proprio conjunto
+  de cores para cada foto (classificacao por pessoa).
   """
 
   import Ecto.Query, warn: false
@@ -177,8 +180,9 @@ defmodule Revela.Capture do
   end
 
   @doc """
-  Agregacao para a tela do host: mapa %{photo_id => %{color => count}} com a
-  contagem de cada cor entre todos os revisores.
+  Agregacao para a tela do host no editorial atual: mapa
+  `%{photo_id => %{color => count}}` com a contagem de cada cor entre todos os
+  revisores. Vazio se nao ha editorial ativo.
   """
   def tallies do
     from(l in Label,

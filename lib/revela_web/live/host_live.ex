@@ -87,7 +87,7 @@ defmodule RevelaWeb.HostLive do
     end
   end
 
-  # finaliza o editorial atual: para a captura e limpa a tela; originais ficam salvos
+  # finaliza o editorial: para a captura e limpa a tela; originais e labels ficam
   def handle_event("finish_editorial", _params, socket) do
     CameraServer.finish_editorial()
     Capture.finish_editorial()

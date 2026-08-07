@@ -1,7 +1,8 @@
 defmodule Revela.Capture.Ingest do
   @moduledoc """
   Processa um arquivo recem baixado pelo gphoto2: gera um preview web a partir
-  do JPEG e registra a foto. O RAW (.cr2) irmao, quando existe, e associado para
+  do JPEG (em `uploads/<editorial_id>/` ou `uploads/_sem-editorial/`) e registra
+  a foto no editorial ativo. O RAW (.cr2) irmao, quando existe, e associado para
   edicao posterior (ex: no darktable).
   """
 

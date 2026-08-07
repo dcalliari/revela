@@ -1,4 +1,10 @@
 defmodule Revela.Capture.Editorial do
+  @moduledoc """
+  Sessao de revisao fotografica. No maximo uma linha com `finished_at` nulo
+  (indice parcial `editorials_active_index`). Fotos e labels nao sao apagadas
+  ao finalizar — so deixam de ser a sessao ativa.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 

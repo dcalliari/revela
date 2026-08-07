@@ -5,6 +5,12 @@ defmodule Revela.Capture.CameraServer do
   para a pasta observada; o watcher detecta o arquivo, espera ele terminar de
   escrever, e chama a ingestao.
 
+  A pasta observada e a do editorial ativo (restaurada do banco no boot) ou o
+  limbo `_sem-editorial` quando nao ha sessao. Trocar de editorial reserva uma
+  pasta unica (`yyyy-mm-dd NOME HHMMSS-uid`) via `reserve_editorial_folder/1`
+  antes de `Capture.start_editorial/2`, e so depois aponta a captura com
+  `set_editorial/2`.
+
   Estado de captura (`status`):
     :idle           -> nao esta capturando
     :running        -> gphoto2 rodando, aguardando disparos

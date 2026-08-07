@@ -5,14 +5,17 @@ This is a web application written using the Phoenix web framework.
 An "editorial" (photo review session) is a persistent `Revela.Capture.Editorial` row,
 not an ephemeral state. Photos (`Revela.Capture.Photo`) belong to the editorial active
 when they were captured via `editorial_id`; at most one editorial has `finished_at: nil`
-(active) at a time, enforced by a partial unique index. `Revela.Capture.start_editorial/2`
-and `finish_editorial/0` never delete photos or labels — they only flip which editorial
+(active) at a time, enforced by a partial unique index (`editorials_active_index` on
+`(1) WHERE finished_at IS NULL`). `Revela.Capture.start_editorial/2` and
+`finish_editorial/0` never delete photos or labels — they only flip which editorial
 is active, and `list_photos/0`, `labels_for_reviewer/1`, and `tallies/0` scope to the
-current one via `current_editorial_id/0`. See `lib/revela/capture.ex` and
-`test/revela/capture_test.exs` for the reasoning: an earlier version used
-`Capture.clear_all/0` (`delete_all` on Photo/Label) on both start and finish, which
-silently destroyed a client session's classifications when the host started the next
-editorial. Never reintroduce a delete-everything path here.
+current one via `current_editorial_id/0`. With no active editorial those queries return
+empty: photos with `editorial_id: nil` stay out of the UI and must not be backfilled
+onto a later editorial. See `lib/revela/capture.ex` and `test/revela/capture_test.exs`
+for the reasoning: an earlier version used `Capture.clear_all/0` (`delete_all` on
+Photo/Label) on both start and finish, which silently destroyed a client session's
+classifications when the host started the next editorial. Never reintroduce a
+delete-everything path here.
 
 ## Project guidelines
 
