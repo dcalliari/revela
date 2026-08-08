@@ -76,4 +76,32 @@ defmodule RevelaWeb.HostGridTest do
     assert has_element?(view, "#host-photos-title", "Fotos (30)")
     assert has_element?(view, "#grid-page-label", "Página 1 de 2")
   end
+
+  test "label_changed atualiza tallies sem filtro e membership com filtro", %{
+    conn: conn,
+    photos: photos
+  } do
+    newest = List.last(photos)
+    {:ok, view, _html} = live(conn, "/host")
+
+    refute has_element?(view, "#grid-photo-#{newest.id} span")
+
+    {:ok, _} = Capture.set_label(newest.id, "rev", "Rev", 1)
+    send(view.pid, {:label_changed, newest.id})
+    _ = :sys.get_state(view.pid)
+
+    assert has_element?(view, "#grid-photo-#{newest.id} span", "1")
+
+    view |> element("#color-filter-0") |> render_click()
+    assert has_element?(view, "#host-photos-title", "Fotos (0)")
+    assert has_element?(view, "#host-grid-empty")
+
+    {:ok, _} = Capture.set_label(newest.id, "rev", "Rev", 0)
+    send(view.pid, {:label_changed, newest.id})
+    _ = :sys.get_state(view.pid)
+
+    assert has_element?(view, "#host-photos-title", "Fotos (1)")
+    assert has_element?(view, "#grid-photo-#{newest.id}")
+    refute has_element?(view, "#host-grid-empty")
+  end
 end

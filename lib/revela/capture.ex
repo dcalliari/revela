@@ -55,11 +55,10 @@ defmodule Revela.Capture do
   `list_photos/1`. Usada pela paginacao da grade do host.
   """
   def count_photos(opts \\ []) when is_list(opts) do
-    colors = normalize_colors(Keyword.get(opts, :colors))
-
-    from(p in Photo, as: :photo, where: ^editorial_scope(), select: count(p.id))
-    |> apply_color_filter(colors)
-    |> Repo.one()
+    opts
+    |> Keyword.take([:colors])
+    |> photos_query()
+    |> Repo.aggregate(:count)
   end
 
   def get_photo!(id), do: Repo.get!(Photo, id)

@@ -268,9 +268,8 @@ defmodule RevelaWeb.HostLive do
     {:noreply, navigate(socket, idx)}
   end
 
-  def handle_info({:label_changed, _photo_id}, socket) do
-    # tallies vivem dentro dos itens do stream; re-stream + filtro pode incluir/excluir
-    {:noreply, load_grid(socket)}
+  def handle_info({:label_changed, photo_id}, socket) do
+    {:noreply, refresh_grid_for_label(socket, photo_id)}
   end
 
   def handle_info(%{event: "presence_diff"}, socket) do
@@ -323,8 +322,27 @@ defmodule RevelaWeb.HostLive do
     |> assign(:total, total)
     |> assign(:total_pages, total_pages)
     |> assign(:grid_empty?, grid_photos == [])
+    |> assign(:grid_photo_ids, MapSet.new(Enum.map(grid_photos, & &1.id)))
     |> assign(:tallies, Capture.tallies())
     |> stream(:grid_photos, grid_photos, reset: true)
+  end
+
+  defp refresh_grid_for_label(socket, photo_id) do
+    if MapSet.size(socket.assigns.filter_colors) > 0 do
+      load_grid(socket)
+    else
+      socket
+      |> assign(:tallies, Capture.tallies())
+      |> maybe_restream_grid_photo(photo_id)
+    end
+  end
+
+  defp maybe_restream_grid_photo(socket, photo_id) do
+    if MapSet.member?(socket.assigns.grid_photo_ids, photo_id) do
+      stream_insert(socket, :grid_photos, Capture.get_photo!(photo_id))
+    else
+      socket
+    end
   end
 
   defp current_photo(%{photos: photos, idx: idx}), do: Enum.at(photos, idx)
