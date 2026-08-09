@@ -35,8 +35,10 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
   `localStorage`.
 - `RevelaWeb.HostLive` (`/host`) QR + URL da LAN, status honesto do tether
   (auto-arm / retomar / stop), iniciar/finalizar editorial, estimativa de
-  fotos restantes no disco, quem esta online e o consenso de cores; o viewer
-  imersivo reusa os mesmos atalhos.
+  fotos restantes no disco, quem esta online e o consenso de cores; grade de
+  fotos com paginacao (24/pagina) e filtro multi-select pelas bolinhas de cor
+  (`Capture.list_photos/1` + stream LiveView); o viewer imersivo reusa os
+  mesmos atalhos e a lista completa (nao a pagina filtrada).
   Com `REVELA_DEMO=1`, badge **DEMO** e **Disparar (demo)** / `D` (ver abaixo).
 - `RevelaWeb.ViewerComponents` visualizador compartilhado: legenda de atalhos
   no rodape, numeros `1`–`5` / `0` nas bolinhas, e pinch-zoom no celular

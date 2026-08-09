@@ -8,6 +8,13 @@ defmodule RevelaWeb.HostLive do
   help pede vinculo manual quando ha camera; o console do browser tambem
   recebe um aviso via `push_event("disk-awareness", ...)`.
 
+  A grade do editorial e paginada (24/pagina, prev/next) e filtravel por
+  bolinhas de cor (multi-select; vazio = todas; mudar filtro volta a pagina 1).
+  Listagem e contagem vao ao banco via `Capture.list_photos/1` e
+  `count_photos/1`; a pagina corrente e um LiveView stream (`:grid_photos`).
+  O viewer imersivo continua com a lista completa (`list_photos/0`) para
+  idx/follow — nao reusar a pagina da grade.
+
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
   (cores, setas, limpar) e a legenda ficam em `ViewerComponents`.
