@@ -62,7 +62,7 @@ defmodule Revela.Delivery.LocalShare do
       share ->
         case Capture.touch_brand_share(share) do
           {:ok, touched} -> {:ok, touched}
-          {:error, _} -> {:ok, share}
+          {:error, _} -> :new
         end
     end
   end

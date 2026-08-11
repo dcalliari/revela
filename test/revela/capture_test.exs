@@ -124,4 +124,25 @@ defmodule Revela.CaptureTest do
       assert hd(paged).id == p3.id
     end
   end
+
+  describe "tallies_for_editorial/1" do
+    test "ignora votos brand-* de shares supersedidos" do
+      {:ok, editorial} = Capture.start_editorial("Tallies", "/tmp/tallies-#{System.unique_integer()}")
+      {:ok, a} = Capture.create_photo(%{web_path: "/uploads/tally-a.jpg"})
+      {:ok, b} = Capture.create_photo(%{web_path: "/uploads/tally-b.jpg"})
+
+      {:ok, old_share, _} = Delivery.create_brand_share(editorial.id, [a.id], label: "velho")
+      Capture.set_label(a.id, "brand-#{old_share.token}", "marca", 1)
+
+      {:ok, share, _} = Delivery.create_brand_share(editorial.id, [b.id], label: "novo")
+      Capture.set_label(b.id, "brand-#{share.token}", "marca", 2)
+      Capture.set_label(a.id, "host", "host", 0)
+
+      tallies = Capture.tallies_for_editorial(editorial.id)
+
+      # host color 0 only — brand color 1 from superseded share must not appear
+      assert tallies[a.id] == %{0 => 1}
+      assert tallies[b.id] == %{2 => 1}
+    end
+  end
 end
