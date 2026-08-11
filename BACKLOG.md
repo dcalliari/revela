@@ -222,7 +222,7 @@ de pós-produção dedicada ainda aberta).
 
 ### 6. Modo apresentação em janela separada
 
-**Status**: FEITO nesta branch `fm/revela-tv-modo-apresentacao-v2` (PR
+**Status**: FEITO nesta branch `fm/revela-tv-modo-apresentacao-v3` (PR
 https://github.com/dcalliari/revela/pull/9). Rota `/tv` display-only espelha o
 visualizador do Host via PubSub (`Capture.broadcast_host_viewer/1`); sem
 classificação e sem Presence. Inclui a correção do espelho ao voltar do
