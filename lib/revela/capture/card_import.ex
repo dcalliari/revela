@@ -75,13 +75,20 @@ defmodule Revela.Capture.CardImport do
       nested =
         entries
         |> Enum.map(&Path.join(source_dir, &1))
-        |> Enum.filter(&File.dir?/1)
+        |> Enum.filter(&real_directory?/1)
         |> Enum.flat_map(&list_supported_files/1)
 
       {:ok,
        (direct ++ nested)
        |> Enum.uniq()
        |> Enum.sort()}
+    end
+  end
+
+  defp real_directory?(path) do
+    case File.lstat(path) do
+      {:ok, %{type: :directory}} -> true
+      _ -> false
     end
   end
 
@@ -101,7 +108,7 @@ defmodule Revela.Capture.CardImport do
     hash = content_hash(jpeg_src)
     filename = Path.basename(jpeg_src)
 
-    if existing_file_content?(jpeg_src, editorial.id) or already_imported?(editorial.id, hash) do
+    if already_imported?(editorial.id, hash) or existing_file_content?(jpeg_src, editorial.id) do
       photo = get_photo_by_source_hash(editorial.id, hash)
       raw_src = Ingest.find_raw_sibling(jpeg_src)
 
@@ -110,7 +117,7 @@ defmodule Revela.Capture.CardImport do
           {imported, skipped + 1, errors, used_raws}
 
         {:error, reason, used_raws} ->
-          {imported, skipped + 1, [{filename, reason} | errors], used_raws}
+          {imported, skipped, [{filename, reason} | errors], used_raws}
       end
     else
       case merge_into_existing_raw_photo(jpeg_src, editorial, preview_fun, hash, used_raws) do
@@ -278,7 +285,8 @@ defmodule Revela.Capture.CardImport do
            {:ok, _photo} <- Capture.update_raw_path(photo, raw_dest) do
         {:ok, MapSet.put(used_raws, Path.expand(raw_src))}
       else
-        {:error, reason} -> {:error, reason, used_raws}
+        {:error, reason} ->
+          {:error, reason, MapSet.put(used_raws, Path.expand(raw_src))}
       end
     end
   end
