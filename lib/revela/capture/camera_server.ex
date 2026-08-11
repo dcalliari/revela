@@ -1047,7 +1047,7 @@ defmodule Revela.Capture.CameraServer do
   defp settle_file(path, state) do
     cond do
       jpeg_path?(path) ->
-        case Ingest.process(path) do
+        case Ingest.process(path, raw_settled: raw_settled_for?(path, state)) do
           {:ok, _photo} ->
             %{state | processed: MapSet.put(state.processed, path)}
 
@@ -1077,6 +1077,13 @@ defmodule Revela.Capture.CameraServer do
 
       true ->
         state
+    end
+  end
+
+  defp raw_settled_for?(jpeg_path, state) do
+    case Ingest.find_raw_sibling(jpeg_path) do
+      raw_path when is_binary(raw_path) -> MapSet.member?(state.processed, raw_path)
+      _ -> false
     end
   end
 

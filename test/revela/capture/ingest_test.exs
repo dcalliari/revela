@@ -398,6 +398,23 @@ defmodule Revela.Capture.IngestTest do
     assert Capture.get_photo!(photo.id).original_path == jpeg
   end
 
+  test "processa RAW assentado, descarta JPEG e preserva preview", %{dir: dir} do
+    {:ok, _editorial} = Capture.start_editorial("Process", dir)
+    jpeg = Path.join(dir, "20260804-133708-027.jpg")
+    raw = touch!(dir, "20260804-133708-028.cr2")
+    {_, 0} = System.cmd("magick", ["-size", "1x1", "xc:white", jpeg])
+
+    assert {:ok, photo} = Ingest.process(jpeg, raw_settled: true)
+    assert photo.raw_path == raw
+    refute File.exists?(jpeg)
+    assert File.exists?(raw)
+
+    preview = Path.join(Application.app_dir(:revela, "priv/static"), photo.web_path)
+    assert File.exists?(preview)
+    File.rm!(preview)
+    Capture.finish_editorial()
+  end
+
   test "falha no preview nao apaga JPEG", %{dir: dir} do
     jpeg = touch!(dir, "invalid.jpg")
 
