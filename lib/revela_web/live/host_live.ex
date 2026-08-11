@@ -17,8 +17,9 @@ defmodule RevelaWeb.HostLive do
 
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
-  (cores, setas, limpar) sao tratados em `ViewerComponents`, que nao exibe
-  legenda ou numeros visiveis para eles — so `aria-label` por botao.
+  (cores, setas, limpar) sao tratados aqui via `handle_event("key", ...)`;
+  `ViewerComponents` nao exibe legenda ou numeros visiveis — so `aria-label`
+  por botao.
 
   Com `REVELA_DEMO=1`, o Host mostra badge DEMO e, com a captura armada,
   **Disparar (demo)** (caminho real de ingest via arquivo). A tecla `D`/`d`
