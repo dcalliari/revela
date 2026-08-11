@@ -7,21 +7,15 @@ defmodule RevelaWeb.RawDownloadController do
 
   alias Revela.Delivery
 
-  @salt "raw-pull"
-  @max_age 3600
-
   def create_token(editorial_id, photo_ids) when is_list(photo_ids) do
-    Phoenix.Token.sign(
-      RevelaWeb.Endpoint,
-      @salt,
-      %{editorial_id: editorial_id, photo_ids: photo_ids},
-      max_age: @max_age
-    )
+    {:ok, download} = Delivery.create_raw_download(editorial_id, photo_ids)
+    download.token
   end
 
   def download(conn, %{"token" => token}) do
-    case Phoenix.Token.verify(RevelaWeb.Endpoint, @salt, token, max_age: @max_age) do
-      {:ok, %{editorial_id: editorial_id, photo_ids: photo_ids}} ->
+    case Delivery.get_raw_download(token) do
+      %{editorial_id: editorial_id} = download ->
+        photo_ids = Revela.Delivery.RawDownload.decode_photo_ids(download)
         pull = Delivery.raw_pull(photo_ids)
 
         cond do
@@ -56,7 +50,7 @@ defmodule RevelaWeb.RawDownloadController do
             end
         end
 
-      {:error, _} ->
+      nil ->
         conn
         |> put_status(:forbidden)
         |> put_resp_content_type("text/plain")

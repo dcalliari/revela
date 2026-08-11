@@ -285,7 +285,12 @@ defmodule RevelaWeb.PostLive do
   def handle_info({:new_photo, photo}, socket) do
     case socket.assigns.editorial do
       %{id: id} when photo.editorial_id == id ->
-        {:noreply, refresh_editorial_data(socket)}
+        photos = Enum.sort_by([photo | socket.assigns.photos], & &1.seq)
+
+        {:noreply,
+         socket
+         |> assign(:photos, photos)
+         |> refresh_labels_and_tallies()}
 
       _ ->
         {:noreply, socket}
@@ -321,6 +326,23 @@ defmodule RevelaWeb.PostLive do
   end
 
   defp load_editorial(socket, id) when is_integer(id) do
+    if socket.assigns.editorial && socket.assigns.editorial.id == id do
+      case Capture.get_editorial(id) do
+        nil ->
+          clear_editorial(socket)
+
+        editorial ->
+          socket
+          |> assign(:editorial, editorial)
+          |> refresh_editorial_data()
+          |> assign(:page_title, "Pos · #{editorial.name}")
+      end
+    else
+      load_editorial_fresh(socket, id)
+    end
+  end
+
+  defp load_editorial_fresh(socket, id) do
     case Capture.get_editorial(id) do
       nil ->
         clear_editorial(socket)

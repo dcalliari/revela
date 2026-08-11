@@ -9,6 +9,8 @@ defmodule Revela.Delivery do
 
   alias Revela.Capture
   alias Revela.Capture.BrandShare
+  alias Revela.Delivery.RawDownload
+  alias Revela.Repo
   alias Revela.Delivery.{LocalShare, GoogleFotos, GoogleDrive}
 
   @type share_result :: {:ok, BrandShare.t(), String.t()} | {:error, term()}
@@ -31,6 +33,19 @@ defmodule Revela.Delivery do
 
   @doc "Resolve um share pelo token (apenas backend local/persistido)."
   def get_brand_share(token), do: Capture.get_brand_share_by_token(token)
+
+  @doc "Cria um token curto e persistido para uma selecao de RAW."
+  def create_raw_download(editorial_id, photo_ids) when is_list(photo_ids) do
+    %RawDownload{}
+    |> RawDownload.changeset(%{
+      token: Ecto.UUID.generate(),
+      editorial_id: editorial_id,
+      photo_ids: RawDownload.encode_photo_ids(photo_ids)
+    })
+    |> Repo.insert()
+  end
+
+  def get_raw_download(token), do: Repo.get_by(RawDownload, token: token)
 
   @doc """
   Prepara o pull de RAW da selecao. Retorna caminhos existentes e faltantes.
