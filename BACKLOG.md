@@ -212,6 +212,10 @@ transform.
 
 ### 5. Paginação e filtro por cor na grade do host
 
+**Status**: EM ANDAMENTO. Implementado em `fm/revela-paginacao-filtro-cor-v2`; parado numa
+decisão pendente: classificar uma foto recria a grade inteira (piscada), a decidir entre
+corrigir para atualizar só a foto alterada ou aceitar e documentar.
+
 **Observado**: com ~2000 fotos, a grade do host mostra só as 24 mais recentes.
 Não havia como chegar nas primeiras fotos do editorial. Uma paginação temporária
 foi feita e desfeita na sessão de 2026-08-04, justamente para pensar numa
@@ -229,6 +233,10 @@ banco em vez de em memória. Ver também o item 8.
 ## P1: melhorias de fluxo
 
 ### 6. Modo apresentação em janela separada
+
+**Status**: EM ANDAMENTO. PR aberto: https://github.com/dcalliari/revela/pull/9. Inclui a
+correção do espelho ao voltar do ocioso e a regra de só espelhar Host presente
+(decisão do captain em 2026-08-11). Topologia suportada: uma aba de Host por vez.
 
 **Observado**: para mostrar as fotos na TV, a tela do notebook foi espelhada via
 HDMI. Enquanto isso o notebook fica preso: não dá para usar o host para outra
@@ -248,6 +256,9 @@ própria? A primeira é mais simples e cobre o caso relatado.
 
 ### 7. Retorno automático ao vivo por inatividade
 
+**Status**: EM ANDAMENTO, entregue junto do item 6 e **só em `/tv`** (Host e Review
+seguem sem tempo ocioso). Valor efetivo no código: 30s.
+
 **Ideia levantada**: se a pessoa para de folhear e esquece de voltar ao vivo,
 retornar sozinho à foto mais recente depois de ~10s.
 
@@ -265,7 +276,8 @@ voltar. Nos celulares dos revisores, não aplicar.
 
 ### 8. `raw_path` vazio para todas as fotos
 
-**Status**: FEITO em 2026-08-07 (`1fdafb5`). PR: https://github.com/dcalliari/revela/pull/10
+**Status**: FEITO na `main` via https://github.com/dcalliari/revela/pull/11 (o PR #10 foi
+fechado por ter sido superado por uma branch já rebaseada).
 
 **Observado**: ao separar os `.cr2` das fotos marcadas de azul, o campo
 `raw_path` estava vazio nas 2025 fotos do editorial. Os RAWs tiveram que ser
@@ -356,7 +368,8 @@ histórico visível da sessão.
 
 ### 12. Organização por cor e entrega no Google
 
-**Status**: FEITO (export local por pastas de cor). Follow-up: upload Google
+**Status**: FEITO na `main` via https://github.com/dcalliari/revela/pull/8 (export local
+por pastas de cor). Follow-up: upload Google
 Fotos (entrega) / Drive (arquivo) — ver README.
 
 **Observado**: a organização das fotos por cor foi feita à mão, fora da
@@ -384,7 +397,8 @@ preenchido — não precisa reconstruir o par na mão.
 
 ### 13. Fotos capturadas com a câmera desconectada
 
-**Status**: EM ANDAMENTO (ship import pasta → editorial ativo).
+**Status**: EM ANDAMENTO (ship import pasta → editorial ativo). Parado numa decisão
+pendente sobre o preenchimento do endereço do PR neste item.
 
 **Observado**: quando o disco encheu, a saída foi desconectar a câmera e seguir
 fotografando no cartão microSD, para não interromper o editorial. Essas fotos
@@ -405,8 +419,7 @@ o que reforça o valor do item 6.
 
 ### 15. Modo demo sem câmera física
 
-**Status**: FEITO em 2026-08-07 em `fm/revela-demo-mode-sem-camera`
-(`053e0ed`). PR URL a preencher no merge para `main`.
+**Status**: FEITO na `main` via https://github.com/dcalliari/revela/pull/7.
 
 **Observado**: para validar Host/Review (follow, classificar, editorial) sem
 hardware, era preciso uma Canon + gphoto2; isso atrasa demos e testes manuais.
@@ -427,6 +440,11 @@ Documentado no README.
 ## P2: exploração, ainda sem forma definida
 
 ### 9. Operar sem depender de LAN/WiFi
+
+**Status**: LEVANTAMENTO CONCLUÍDO em 2026-08-07. Conclusão: é questão de operação mais
+`TETHER_LAN_IP`, sem código novo; recomendado roteador de viagem ou notebook como ponto
+de acesso. Duas decisões seguem pendentes: qual topologia vira padrão e se o roteador
+entra no kit.
 
 Ideia ainda não concreta: hoje tudo depende de os celulares e o notebook
 estarem na mesma rede, o que amarra a sessão à infraestrutura do local. Vale
