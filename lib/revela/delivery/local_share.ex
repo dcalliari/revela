@@ -24,7 +24,7 @@ defmodule Revela.Delivery.LocalShare do
         else
           ids = Enum.map(photos, & &1.id)
 
-          case reuse_matching_share(editorial_id, ids) do
+          case reuse_matching_share(editorial_id, ids, label) do
             {:ok, share} ->
               {:ok, share, "/share/#{share.token}"}
 
@@ -48,7 +48,7 @@ defmodule Revela.Delivery.LocalShare do
     end
   end
 
-  defp reuse_matching_share(editorial_id, ids) do
+  defp reuse_matching_share(editorial_id, ids, label) do
     wanted = MapSet.new(ids)
 
     match =
@@ -63,7 +63,7 @@ defmodule Revela.Delivery.LocalShare do
         :new
 
       share ->
-        case Capture.touch_brand_share(share) do
+        case Capture.touch_brand_share(share, label: label) do
           {:ok, touched} -> {:ok, touched}
           {:error, _} = error -> error
         end

@@ -457,9 +457,18 @@ defmodule Revela.Capture do
     |> Repo.insert()
   end
 
-  def touch_brand_share(%BrandShare{} = share) do
+  def touch_brand_share(%BrandShare{} = share, opts \\ []) when is_list(opts) do
+    changes = %{updated_at: DateTime.utc_now(:microsecond)}
+
+    changes =
+      if Keyword.has_key?(opts, :label) do
+        Map.put(changes, :label, Keyword.get(opts, :label))
+      else
+        changes
+      end
+
     share
-    |> Ecto.Changeset.change(%{updated_at: DateTime.utc_now(:microsecond)})
+    |> Ecto.Changeset.change(changes)
     |> Repo.update()
   end
 

@@ -69,19 +69,21 @@ defmodule RevelaWeb.PostLive do
   end
 
   def handle_event("filter", %{"color" => "all"}, socket) do
-    {:noreply, assign(socket, filter: :all, selected_ids: MapSet.new(), anchor_id: nil)}
+    {:noreply, clear_raw_download(assign(socket, filter: :all, selected_ids: MapSet.new(), anchor_id: nil))}
   end
 
   def handle_event("filter", %{"color" => "none"}, socket) do
-    {:noreply, assign(socket, filter: :none, selected_ids: MapSet.new(), anchor_id: nil)}
+    {:noreply, clear_raw_download(assign(socket, filter: :none, selected_ids: MapSet.new(), anchor_id: nil))}
   end
 
   def handle_event("filter", %{"color" => color}, socket) do
     {:noreply,
-     assign(socket,
-       filter: String.to_integer(color),
-       selected_ids: MapSet.new(),
-       anchor_id: nil
+     clear_raw_download(
+       assign(socket,
+         filter: String.to_integer(color),
+         selected_ids: MapSet.new(),
+         anchor_id: nil
+       )
      )}
   end
 
@@ -106,12 +108,14 @@ defmodule RevelaWeb.PostLive do
           {MapSet.new([photo_id]), photo_id}
         end
 
-      {:noreply, assign(socket, selected_ids: selected, anchor_id: anchor, raw_error: nil)}
+      {:noreply,
+       clear_raw_download(assign(socket, selected_ids: selected, anchor_id: anchor))}
     end
   end
 
   def handle_event("clear_selection", _params, socket) do
-    {:noreply, assign(socket, selected_ids: MapSet.new(), anchor_id: nil)}
+    {:noreply,
+     clear_raw_download(assign(socket, selected_ids: MapSet.new(), anchor_id: nil))}
   end
 
   def handle_event("label_selection", %{"color" => color}, socket) do
@@ -372,6 +376,11 @@ defmodule RevelaWeb.PostLive do
     |> assign(:anchor_id, nil)
     |> assign(:share_url, nil)
     |> assign(:share_error, nil)
+    |> clear_raw_download()
+  end
+
+  defp clear_raw_download(socket) do
+    socket
     |> assign(:raw_error, nil)
     |> assign(:raw_href, nil)
   end

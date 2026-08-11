@@ -36,6 +36,7 @@ defmodule Revela.DeliveryTest do
 
     assert same.id == share.id
     assert same.token == share.token
+    assert same.label == "de novo"
     assert length(Capture.list_brand_shares_for_editorial(editorial.id)) == 1
   end
 
@@ -74,6 +75,7 @@ defmodule Revela.DeliveryTest do
 
     assert reused.id == share_a.id
     assert reused.token == share_a.token
+    assert reused.label == "a de novo"
     assert length(Capture.list_brand_shares_for_editorial(editorial.id)) == 2
     assert hd(Capture.list_brand_shares_for_editorial(editorial.id)).id == share_a.id
     assert Capture.brand_labeled_photo_ids(editorial.id) == [p1.id]

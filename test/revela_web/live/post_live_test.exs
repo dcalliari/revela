@@ -97,6 +97,47 @@ defmodule RevelaWeb.PostLiveTest do
     refute has_element?(view, "#raw-download-link")
   end
 
+  test "muda selecao/filtro limpa link RAW preparado", %{
+    conn: conn,
+    editorial: editorial,
+    a: a,
+    b: b
+  } do
+    dir = Path.join(System.tmp_dir!(), "revela-post-raw-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    raw = Path.join(dir, "shot.cr2")
+    File.write!(raw, <<1, 2, 3>>)
+
+    {:ok, a} =
+      a
+      |> Ecto.Changeset.change(%{raw_path: raw})
+      |> Revela.Repo.update()
+
+    {:ok, view, _html} = live(conn, ~p"/post/#{editorial.id}")
+
+    render_hook(view, "select_photo", %{"id" => to_string(a.id), "shift" => false})
+    view |> element("#prepare-raw") |> render_click()
+    assert has_element?(view, "#raw-download-link")
+
+    render_hook(view, "select_photo", %{"id" => to_string(b.id), "shift" => false})
+    refute has_element?(view, "#raw-download-link")
+    refute has_element?(view, "#raw-error")
+
+    render_hook(view, "select_photo", %{"id" => to_string(a.id), "shift" => false})
+    view |> element("#prepare-raw") |> render_click()
+    assert has_element?(view, "#raw-download-link")
+
+    view |> element("#clear-selection") |> render_click()
+    refute has_element?(view, "#raw-download-link")
+
+    render_hook(view, "select_photo", %{"id" => to_string(a.id), "shift" => false})
+    view |> element("#prepare-raw") |> render_click()
+    assert has_element?(view, "#raw-download-link")
+
+    view |> element("#filter-all") |> render_click()
+    refute has_element?(view, "#raw-download-link")
+  end
+
   test "Ctrl+Z desfaz via keydown", %{conn: conn, editorial: editorial, a: a} do
     {:ok, view, _html} = live(conn, ~p"/post/#{editorial.id}")
 
