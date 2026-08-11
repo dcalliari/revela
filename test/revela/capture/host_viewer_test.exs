@@ -52,8 +52,23 @@ defmodule Revela.Capture.HostViewerTest do
       send(host_pid, :stop)
       ref = Process.monitor(host_pid)
       assert_receive {:DOWN, ^ref, :process, ^host_pid, _}
-      _ = :sys.get_state(Revela.Capture.HostRegistry)
-      refute Capture.host_present?()
+      # Registry's own DOWN-driven cleanup of the entry races the test
+      # process; :sys.get_state on the registry name doesn't sync on that
+      # internal listener, so poll briefly instead of asserting immediately.
+      wait_until(fn -> not Capture.host_present?() end)
+    end
+  end
+
+  defp wait_until(fun, attempts \\ 20)
+
+  defp wait_until(fun, 0), do: assert(fun.())
+
+  defp wait_until(fun, attempts) do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(5)
+      wait_until(fun, attempts - 1)
     end
   end
 end
