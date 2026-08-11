@@ -53,8 +53,8 @@ upload is phase-2 — see README. Post-prod UI (item 11) should call
 gphoto2 names with `%Y%m%d-%H%M%S-%03n.%C`. In RAW+JPEG each shot is two files
 with adjacent sequence indices (JPEG N, RAW N+1) and the name timestamp can
 skew ~1s (ingest tolerance 2s). Exact-basename match is insufficient — see
-`Revela.Capture.Ingest.find_raw_sibling/2` (JPEG→RAW: only `raw.index == jpeg.index + 1`),
-`attach_raw/1` (RAW-after-JPEG; prefer-closest on ambiguity), and
+`Revela.Capture.Ingest.find_raw_sibling/2` (JPEG→RAW: only `raw.index == jpeg.index + 1`;
+prefer-closest on ambiguity), `attach_raw/1` (RAW-after-JPEG; prefer-closest), and
 `mix revela.backfill_raw_paths` (skips ambiguous). Exclusive claim via conditional
 UPDATE plus partial unique index on non-empty `raw_path` — never attach the same
 RAW to two photos.

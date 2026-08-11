@@ -265,7 +265,7 @@ voltar. Nos celulares dos revisores, não aplicar.
 
 ### 8. `raw_path` vazio para todas as fotos
 
-**Status**: FEITO em 2026-08-07 (`6231449`). PR URL a preencher no ship.
+**Status**: FEITO em 2026-08-07 (`1fdafb5`). PR: https://github.com/dcalliari/revela/pull/10
 
 **Observado**: ao separar os `.cr2` das fotos marcadas de azul, o campo
 `raw_path` estava vazio nas 2025 fotos do editorial. Os RAWs tiveram que ser
