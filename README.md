@@ -78,6 +78,12 @@ mix phx.server       # sobe em 0.0.0.0:4000
 - Host/controle (no laptop): http://localhost:4000/host
 - Revisao (celulares na LAN): a URL/QR que aparece na tela do host.
 
+Quando a captura tethered cair, o Host oferece **Importar do cartão**. Informe uma
+pasta de mídia removível permitida, como `/run/media` ou `/media`; a importação
+aceita JPEG e RAW e percorre a pasta escolhida e uma subpasta imediata. O fluxo é
+síncrono no MVP, então importe uma pasta pequena ou selecionada. O editorial deve
+estar aberto; sem editorial nenhum arquivo é copiado.
+
 Se o IP da LAN detectado estiver errado (varias interfaces), fixe manualmente:
 
 ```bash

@@ -98,9 +98,16 @@ defmodule Revela.Capture.CardImport do
     filename = Path.basename(jpeg_src)
 
     if already_imported?(editorial.id, hash) do
+      photo = get_photo_by_source_hash(editorial.id, hash)
       raw_src = Ingest.find_raw_sibling(jpeg_src)
-      used_raws = if raw_src, do: MapSet.put(used_raws, Path.expand(raw_src)), else: used_raws
-      {imported, skipped + 1, errors, used_raws}
+
+      case attach_existing_raw(photo, raw_src, editorial.folder, used_raws) do
+        {:ok, used_raws} ->
+          {imported, skipped + 1, errors, used_raws}
+
+        {:error, reason, used_raws} ->
+          {imported, skipped + 1, [{filename, reason} | errors], used_raws}
+      end
     else
       raw_src = Ingest.find_raw_sibling(jpeg_src)
 
@@ -141,34 +148,107 @@ defmodule Revela.Capture.CardImport do
       hash = content_hash(raw_src)
       filename = Path.basename(raw_src)
 
-      if already_imported?(editorial.id, hash) do
-        {imported, skipped + 1, errors, used_raws}
-      else
-        with {:ok, raw_dest} <- copy_into_editorial(raw_src, editorial.folder),
-             {:ok, web_path} <- build_preview(raw_dest, preview_fun, editorial.id),
-             {:ok, _photo} <-
-               Capture.create_photo(%{
-                 web_path: web_path,
-                 original_path: raw_dest,
-                 raw_path: raw_dest,
-                 source_hash: hash,
-                 original_filename: filename,
-                 shot_at: file_mtime(raw_src),
-                 editorial_id: editorial.id
-               }) do
-          {imported + 1, skipped, errors, MapSet.put(used_raws, expanded)}
-        else
-          {:error, %Ecto.Changeset{} = changeset} ->
-            if source_hash_conflict?(changeset) do
-              {imported, skipped + 1, errors, used_raws}
-            else
-              {imported, skipped, [{filename, changeset} | errors], used_raws}
-            end
+      case attach_raw_to_existing_photo(raw_src, editorial.folder, used_raws) do
+        {:ok, used_raws} ->
+          {imported, skipped + 1, errors, used_raws}
 
-          {:error, reason} ->
-            {imported, skipped, [{filename, reason} | errors], used_raws}
-        end
+        :not_found ->
+          if already_imported?(editorial.id, hash) do
+            {imported, skipped + 1, errors, used_raws}
+          else
+            import_new_raw(
+              raw_src,
+              editorial,
+              preview_fun,
+              hash,
+              imported,
+              skipped,
+              errors,
+              used_raws
+            )
+          end
+
+        {:error, reason, used_raws} ->
+          {imported, skipped, [{filename, reason} | errors], used_raws}
       end
+    end
+  end
+
+  defp import_new_raw(
+         raw_src,
+         editorial,
+         preview_fun,
+         hash,
+         imported,
+         skipped,
+         errors,
+         used_raws
+       ) do
+    filename = Path.basename(raw_src)
+    expanded = Path.expand(raw_src)
+
+    with {:ok, raw_dest} <- copy_into_editorial(raw_src, editorial.folder),
+         {:ok, web_path} <- build_preview(raw_dest, preview_fun, editorial.id),
+         {:ok, _photo} <-
+           Capture.create_photo(%{
+             web_path: web_path,
+             original_path: raw_dest,
+             raw_path: raw_dest,
+             source_hash: hash,
+             original_filename: filename,
+             shot_at: file_mtime(raw_src),
+             editorial_id: editorial.id
+           }) do
+      {imported + 1, skipped, errors, MapSet.put(used_raws, expanded)}
+    else
+      {:error, %Ecto.Changeset{} = changeset} ->
+        if source_hash_conflict?(changeset) do
+          {imported, skipped + 1, errors, used_raws}
+        else
+          {imported, skipped, [{filename, changeset} | errors], used_raws}
+        end
+
+      {:error, reason} ->
+        {imported, skipped, [{filename, reason} | errors], used_raws}
+    end
+  end
+
+  defp get_photo_by_source_hash(editorial_id, hash) do
+    Repo.one(
+      from p in Photo,
+        where: p.editorial_id == ^editorial_id and p.source_hash == ^hash,
+        limit: 1
+    )
+  end
+
+  defp attach_existing_raw(nil, _raw_src, _folder, used_raws), do: {:ok, used_raws}
+  defp attach_existing_raw(_photo, nil, _folder, used_raws), do: {:ok, used_raws}
+
+  defp attach_existing_raw(photo, raw_src, folder, used_raws) do
+    used_raws = MapSet.put(used_raws, Path.expand(raw_src))
+
+    if is_binary(photo.raw_path) and photo.raw_path != "" do
+      {:ok, used_raws}
+    else
+      with {:ok, raw_dest} <- copy_into_editorial(raw_src, folder),
+           {:ok, _photo} <- Capture.update_raw_path(photo, raw_dest) do
+        {:ok, used_raws}
+      else
+        {:error, reason} -> {:error, reason, used_raws}
+      end
+    end
+  end
+
+  defp attach_raw_to_existing_photo(raw_src, folder, used_raws) do
+    case Capture.list_photos_missing_raw(dir: folder)
+         |> Enum.find(fn photo ->
+           is_binary(photo.original_path) and Ingest.sibling_pair?(photo.original_path, raw_src)
+         end) do
+      nil ->
+        :not_found
+
+      photo ->
+        attach_existing_raw(photo, raw_src, folder, used_raws)
     end
   end
 

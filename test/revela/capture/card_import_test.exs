@@ -54,6 +54,49 @@ defmodule Revela.Capture.CardImportTest do
     assert photo.web_path =~ "/uploads/#{editorial.id}/IMG_0001.jpg"
   end
 
+  test "reimportacao anexa RAW que apareceu depois do JPEG", %{
+    source: source,
+    dest: dest,
+    preview_fun: preview_fun
+  } do
+    {:ok, _editorial} = Capture.start_editorial("Cartao RAW tardio", dest)
+    jpeg = Path.join(source, "IMG_0002.JPG")
+    raw = Path.join(source, "IMG_0002.CR2")
+    write_jpeg!(jpeg, "late-jpeg")
+
+    assert {:ok, %{imported: 1}} = CardImport.import_folder(source, preview_fun: preview_fun)
+    write_bytes!(raw, "late-raw")
+
+    assert {:ok, %{imported: 0, skipped: 1, errors: []}} =
+             CardImport.import_folder(source, preview_fun: preview_fun)
+
+    [photo] = Capture.list_photos()
+    assert photo.raw_path == Path.join(dest, "IMG_0002.CR2")
+    assert File.exists?(photo.raw_path)
+  end
+
+  test "follow-up somente RAW anexa na foto JPEG existente", %{
+    source: source,
+    dest: dest,
+    preview_fun: preview_fun
+  } do
+    {:ok, _editorial} = Capture.start_editorial("Cartao follow-up RAW", dest)
+    jpeg = Path.join(source, "IMG_0003.JPG")
+    raw = Path.join(source, "IMG_0003.CR2")
+    write_jpeg!(jpeg, "follow-jpeg")
+
+    assert {:ok, %{imported: 1}} = CardImport.import_folder(source, preview_fun: preview_fun)
+    File.rm!(jpeg)
+    write_bytes!(raw, "follow-raw")
+
+    assert {:ok, %{imported: 0, skipped: 1, errors: []}} =
+             CardImport.import_folder(source, preview_fun: preview_fun)
+
+    [photo] = Capture.list_photos()
+    assert photo.raw_path == Path.join(dest, "IMG_0003.CR2")
+    assert length(Capture.list_photos()) == 1
+  end
+
   test "importa RAW avulso e preenche raw_path", %{
     source: source,
     dest: dest,
