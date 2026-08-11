@@ -3,7 +3,8 @@ defmodule Revela.Capture.CameraServer do
   Supervisiona o processo `gphoto2 --capture-tethered` e observa a pasta de
   downloads via inotify. Quando o fotografo dispara, o gphoto2 baixa a foto
   para a pasta observada; o watcher detecta o arquivo, espera ele terminar de
-  escrever, e processa: JPEG via `Ingest.process/1`; RAW (`.cr2`/`.cr3`) via
+  escrever, e processa: JPEG via `Ingest.process/2` (passa `raw_settled:` quando
+  o RAW irmao ja esta em `processed`); RAW (`.cr2`/`.cr3`) via
   `Ingest.attach_raw/1` para preencher `raw_path` se o JPEG ja existir (nao
   cria foto nova).
 

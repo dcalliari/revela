@@ -161,9 +161,11 @@ libere espaco — o tether rearma sozinho quando o espaco voltar.
   posterior).
 - Originais (JPEG + RAW) baixam para pastas unicas
   `editorials/yyyy-mm-dd NOME HHMMSS-uid/` (ou `editorials/_sem-editorial/`
-  quando nao ha sessao). Cada foto guarda `original_path` (JPEG) e, quando
-  houver irmao, `raw_path` (unico no banco: o mesmo RAW nao gruda em duas
-  fotos).
+  quando nao ha sessao). Cada foto guarda `raw_path` quando houver irmao
+  (unico no banco: o mesmo RAW nao gruda em duas fotos). Por padrao o JPEG da
+  camera e descartado apos preview + RAW assentado e `original_path` fica
+  `nil` (ver acima); com `REVELA_KEEP_CAMERA_JPEG=1`, `original_path` aponta
+  ao JPEG mantido.
 - Previews web ficam em `priv/static/uploads/<editorial_id>/` (ou
   `_sem-editorial/`) e sao servidos em `/uploads/...`.
 - Estado (fotos + labels) em SQLite (`*.db`), escopado ao editorial atual.

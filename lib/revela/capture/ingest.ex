@@ -78,9 +78,14 @@ defmodule Revela.Capture.Ingest do
     case {raw_settled?, find_raw_sibling(jpeg_path)} do
       {true, raw_path} when is_binary(raw_path) ->
         case Capture.update_raw_path(photo, raw_path) do
-          {:ok, updated} -> maybe_discard_after_raw(updated, jpeg_path, raw_path)
+          {:ok, updated} ->
+            maybe_discard_after_raw(updated, jpeg_path, raw_path)
+
           {:error, reason} ->
-            Logger.warning("ingest raw_path: falha ao gravar photo=#{photo.id}: #{inspect(reason)}")
+            Logger.warning(
+              "ingest raw_path: falha ao gravar photo=#{photo.id}: #{inspect(reason)}"
+            )
+
             {:ok, photo}
         end
 
@@ -95,16 +100,24 @@ defmodule Revela.Capture.Ingest do
 
   defp discard_camera_jpeg(photo, path) do
     cond do
-      keep_camera_jpeg?() or not is_binary(path) -> {:ok, photo}
+      keep_camera_jpeg?() or not is_binary(path) ->
+        {:ok, photo}
+
       true ->
         case File.rm(path) do
           :ok ->
             case Capture.clear_original_path(photo) do
-              {:ok, updated} -> {:ok, updated}
+              {:ok, updated} ->
+                {:ok, updated}
+
               {:error, reason} ->
-                Logger.warning("ingest original_path: falha ao limpar photo=#{photo.id}: #{inspect(reason)}")
+                Logger.warning(
+                  "ingest original_path: falha ao limpar photo=#{photo.id}: #{inspect(reason)}"
+                )
+
                 {:ok, photo}
             end
+
           {:error, reason} ->
             Logger.warning("Nao foi possivel apagar JPEG da camera #{path}: #{inspect(reason)}")
             {:ok, photo}

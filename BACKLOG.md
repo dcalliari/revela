@@ -86,20 +86,12 @@ precisa acontecer numa janela **entre** disparos, com folga de disco suficiente
 para concluir a transferência que estiver em curso, e não simplesmente matar o
 processo quando o espaço acabar.
 
-**Direções a avaliar** (ainda não decidido qual combinação vale):
+**Direções** (1–3 FEITO; 4 ainda aberta):
 
-1. **Avisar**: expor espaço livre no status da captura. O `CameraServer` já tem
-   o canal pronto (`broadcast_status` e `public_status`), então é só acrescentar
-   o dado e mostrar no card de captura do host. Mais útil que "7,5 GB livres" é
-   traduzir para o que o fotógrafo entende: "cabem ~250 fotos", calculado a
-   partir da média real por disparo. O OTP já resolve a leitura via `:disksup`
-   (os_mon), sem precisar chamar `df`.
-2. **Parar sozinho antes do fim**: com um piso de segurança (ex.: 5 GB), desligar
-   a captura por conta própria, num intervalo entre disparos, e dizer por quê.
-   A troca é claramente favorável: parar de forma limpa custa os próximos
-   disparos, enquanto deixar chegar no limite custa a câmera travada e uma
-   bateria a ser removida no meio da produção. Provavelmente é o item de maior
-   valor da lista toda.
+1. **Avisar** — FEITO (PR 3): espaço livre no status da captura e estimativa
+   "cabem ~N fotos" via média real / `:disksup`.
+2. **Parar sozinho antes do fim** — FEITO (PR 3): piso de segurança (padrão
+   5 GiB), desliga entre disparos e explica o motivo.
 3. **Consumir menos** — FEITO: após preview ok, o `Ingest` só apaga o JPEG da
    câmera depois que o RAW irmão foi vinculado **e assentado** pelo watcher, e
    zera `original_path` (nunca RAW/preview). Padrão on; manter com

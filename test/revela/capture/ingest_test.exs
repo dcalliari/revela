@@ -415,6 +415,26 @@ defmodule Revela.Capture.IngestTest do
     Capture.finish_editorial()
   end
 
+  test "RAW no disco sem watcher settle nao descarta JPEG", %{dir: dir} do
+    {:ok, _editorial} = Capture.start_editorial("Race", dir)
+    jpeg = Path.join(dir, "20260804-133708-027.jpg")
+    raw = touch!(dir, "20260804-133708-028.cr2")
+    {_, 0} = System.cmd("magick", ["-size", "1x1", "xc:white", jpeg])
+
+    # JPEG assenta enquanto o RAW irmao ja existe no FS mas ainda nao passou
+    # pelo settle do watcher (race tipica de transferencia / import).
+    assert {:ok, photo} = Ingest.process(jpeg, raw_settled: false)
+    assert File.exists?(jpeg)
+    assert File.exists?(raw)
+    assert photo.raw_path in [nil, ""]
+    assert photo.original_path == jpeg
+
+    preview = Path.join(Application.app_dir(:revela, "priv/static"), photo.web_path)
+    assert File.exists?(preview)
+    File.rm!(preview)
+    Capture.finish_editorial()
+  end
+
   test "falha no preview nao apaga JPEG", %{dir: dir} do
     jpeg = touch!(dir, "invalid.jpg")
 

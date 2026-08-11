@@ -70,7 +70,10 @@ skew ~1s (ingest tolerance 2s). Exact-basename match is insufficient — see
 prefer-closest on ambiguity), `attach_raw/1` (RAW-after-JPEG; prefer-closest), and
 `mix revela.backfill_raw_paths` (skips ambiguous). Exclusive claim via conditional
 UPDATE plus partial unique index on non-empty `raw_path` — never attach the same
-RAW to two photos.
+RAW to two photos. Default post-preview discard of the camera JPEG runs only after
+that RAW is linked **and** watcher-settled (`raw_settled: true` / `attach_raw`);
+never delete RAW or web preview; keep JPEGs with `REVELA_KEEP_CAMERA_JPEG=1`
+(see README).
 
 ## Project guidelines
 
