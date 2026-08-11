@@ -3,7 +3,8 @@ defmodule Revela.Capture.CameraServer do
   Supervisiona o processo `gphoto2 --capture-tethered` e observa a pasta de
   downloads via inotify. Quando o fotografo dispara, o gphoto2 baixa a foto
   para a pasta observada; o watcher detecta o arquivo, espera ele terminar de
-  escrever, e processa: JPEG via `Ingest.process/1`; RAW (`.cr2`/`.cr3`) via
+  escrever, e processa: JPEG via `Ingest.process/2` (passa `raw_settled:` quando
+  o RAW irmao ja esta em `processed`); RAW (`.cr2`/`.cr3`) via
   `Ingest.attach_raw/1` para preencher `raw_path` se o JPEG ja existir (nao
   cria foto nova).
 
@@ -93,9 +94,10 @@ defmodule Revela.Capture.CameraServer do
   @default_min_free_disk_bytes 5 * 1024 * 1024 * 1024
 
   # estimativa usada antes do primeiro disparo do editorial, quando ainda nao
-  # ha arquivos na pasta para calcular a media real. Baseada na sessao de
-  # 2026-08-04: RAW + JPEG da camera por disparo ficou em torno de 30 MB.
-  @fallback_avg_bytes_per_shot 30 * 1024 * 1024
+  # ha arquivos na pasta para calcular a media real. Sessao 2026-08-04:
+  # ~30 MB com RAW+JPEG; ~24 MB so com RAW (padrao apos descartar o JPEG).
+  @fallback_avg_bytes_with_jpeg 30 * 1024 * 1024
+  @fallback_avg_bytes_raw_only 24 * 1024 * 1024
 
   # intervalo do poll de espaco em disco (fora do gatilho por disparo, que roda
   # a cada foto que assenta)
@@ -1046,7 +1048,7 @@ defmodule Revela.Capture.CameraServer do
   defp settle_file(path, state) do
     cond do
       jpeg_path?(path) ->
-        case Ingest.process(path) do
+        case Ingest.process(path, raw_settled: raw_settled_for?(path, state)) do
           {:ok, _photo} ->
             %{state | processed: MapSet.put(state.processed, path)}
 
@@ -1076,6 +1078,13 @@ defmodule Revela.Capture.CameraServer do
 
       true ->
         state
+    end
+  end
+
+  defp raw_settled_for?(jpeg_path, state) do
+    case Ingest.find_raw_sibling(jpeg_path) do
+      raw_path when is_binary(raw_path) -> MapSet.member?(state.processed, raw_path)
+      _ -> false
     end
   end
 
@@ -1128,7 +1137,7 @@ defmodule Revela.Capture.CameraServer do
         avg_bytes =
           case avg_bytes_per_shot(state.captures_dir) do
             avg when is_number(avg) and avg > 0 -> avg
-            _other -> @fallback_avg_bytes_per_shot
+            _other -> fallback_avg_bytes_per_shot()
           end
 
         estimated_shots = max(div(free_bytes, max(trunc(avg_bytes), 1)), 0)
@@ -1264,9 +1273,18 @@ defmodule Revela.Capture.CameraServer do
     _kind, _reason -> :unavailable
   end
 
-  # media real de bytes por disparo na pasta do editorial atual (soma RAW+JPEG
-  # do mesmo stem), usada para traduzir espaco livre em "cabem ~N fotos".
-  # nil quando a pasta ainda nao tem nenhum arquivo (editorial recem-criado).
+  defp fallback_avg_bytes_per_shot do
+    if Ingest.keep_camera_jpeg?() do
+      @fallback_avg_bytes_with_jpeg
+    else
+      @fallback_avg_bytes_raw_only
+    end
+  end
+
+  # media real de bytes por disparo na pasta do editorial atual (soma por stem
+  # dos arquivos que restam — RAW e, se ainda guardado, JPEG), usada para
+  # traduzir espaco livre em "cabem ~N fotos". nil quando a pasta ainda nao
+  # tem nenhum arquivo (editorial recem-criado).
   defp avg_bytes_per_shot(dir) do
     case File.ls(dir) do
       {:ok, entries} ->

@@ -38,9 +38,11 @@ editorial ativo após reinício/deploy.
 
 **Status**: FEITO na `main` em 2026-08-07 via
 https://github.com/dcalliari/revela/pull/3 (`879446a`) para aviso de espaço,
-estimativa de disparos e parada preventiva entre disparos. Ainda abertos como
-follow-up: descartar JPEG após preview (direção 3) e rotina de gravar fora do
-disco de sistema (direção 4).
+estimativa de disparos e parada preventiva entre disparos. Follow-up direção 3
+(descartar JPEG após preview e RAW assentado, toggle `REVELA_KEEP_CAMERA_JPEG`) FEITO na
+branch `fm/revela-jpeg-discard-after-preview` — PR URL ao shippar. Direção 4
+(gravar fora do disco de sistema / SSD externo) continua aberta como rotina
+de produção (`editorials_dir` já é configurável).
 
 **Observado**: o armazenamento acabou rápido durante a sessão. Quando esgotou, a
 câmera parou de tirar foto e travou por completo, a ponto do botão de desligar
@@ -84,27 +86,17 @@ precisa acontecer numa janela **entre** disparos, com folga de disco suficiente
 para concluir a transferência que estiver em curso, e não simplesmente matar o
 processo quando o espaço acabar.
 
-**Direções a avaliar** (ainda não decidido qual combinação vale):
+**Direções** (1–3 FEITO; 4 ainda aberta):
 
-1. **Avisar**: expor espaço livre no status da captura. O `CameraServer` já tem
-   o canal pronto (`broadcast_status` e `public_status`), então é só acrescentar
-   o dado e mostrar no card de captura do host. Mais útil que "7,5 GB livres" é
-   traduzir para o que o fotógrafo entende: "cabem ~250 fotos", calculado a
-   partir da média real por disparo. O OTP já resolve a leitura via `:disksup`
-   (os_mon), sem precisar chamar `df`.
-2. **Parar sozinho antes do fim**: com um piso de segurança (ex.: 5 GB), desligar
-   a captura por conta própria, num intervalo entre disparos, e dizer por quê.
-   A troca é claramente favorável: parar de forma limpa custa os próximos
-   disparos, enquanto deixar chegar no limite custa a câmera travada e uma
-   bateria a ser removida no meio da produção. Provavelmente é o item de maior
-   valor da lista toda.
-3. **Consumir menos**: o JPEG da câmera só serve para gerar o preview web. Depois
-   que o preview existe, ele é redundante, porque o RAW é o que se guarda e o
-   preview é o que se exibe. Descartá-lo após o ingest economiza uns 20% do
-   volume. Vale notar que foi exatamente isso que aconteceu na marra: hoje a
-   pasta do editorial tem 2168 RAWs e **nenhum JPEG**, porque eles foram apagados
-   para liberar espaço. Transformar isso numa opção explícita e consciente é
-   melhor que fazer na emergência.
+1. **Avisar** — FEITO (PR 3): espaço livre no status da captura e estimativa
+   "cabem ~N fotos" via média real / `:disksup`.
+2. **Parar sozinho antes do fim** — FEITO (PR 3): piso de segurança (padrão
+   5 GiB), desliga entre disparos e explica o motivo.
+3. **Consumir menos** — FEITO: após preview ok, o `Ingest` só apaga o JPEG da
+   câmera depois que o RAW irmão foi vinculado **e assentado** pelo watcher, e
+   zera `original_path` (nunca RAW/preview). Padrão on; manter com
+   `REVELA_KEEP_CAMERA_JPEG=1`. Estimativa de disparos usa média real do que
+   resta no disco e fallback ~24 MB (RAW-only) quando o discard está ativo.
 4. **Gravar fora do disco de sistema**: 50 GB por editorial pede SSD externo, e
    `editorials_dir` já é configurável, então isso é mais questão de rotina de
    produção que de código. Tira a escrita pesada do disco do sistema e dá

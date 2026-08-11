@@ -12,7 +12,9 @@ config :revela,
   generators: [timestamp_type: :utc_datetime],
   # demo/test mode (synthetic capture without a physical camera). Armed only via
   # REVELA_DEMO=1 in runtime — never a Host UI toggle.
-  demo: false
+  demo: false,
+  # JPEG da camera e descartado apos preview + RAW assentado, salvo override.
+  keep_camera_jpeg: false
 
 # Configure the endpoint
 config :revela, RevelaWeb.Endpoint,

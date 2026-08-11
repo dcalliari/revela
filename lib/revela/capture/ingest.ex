@@ -5,6 +5,10 @@ defmodule Revela.Capture.Ingest do
   a foto no editorial ativo. O RAW (.cr2/.cr3) irmao, quando existe, e associado
   para edicao posterior (ex: no darktable).
 
+  Por padrao o JPEG da camera e apagado depois que o preview existe e o RAW
+  irmao assentou. Defina `REVELA_KEEP_CAMERA_JPEG=1` ou
+  `config :revela, :keep_camera_jpeg, true` para manter o JPEG.
+
   Em RAW+JPEG o gphoto2 nomeia com `%Y%m%d-%H%M%S-%03n.%C`: o JPEG leva o indice
   N e o RAW o N+1 (ex. `20260804-133708-027.jpg` / `20260804-133708-028.cr2`), e
   o carimbo do nome pode diferir ~1s porque o RAW demora mais a transferir.
@@ -27,21 +31,30 @@ defmodule Revela.Capture.Ingest do
   Processa o JPEG em `path`. Ignora arquivos que nao sejam JPEG (`.cr2`/`.cr3`
   entram via `attach_raw/1` como irmao, nao por este caminho).
   """
-  def process(path) do
+  def process(path, opts \\ []) do
     if jpeg?(path) and File.exists?(path) do
-      do_process(path)
+      do_process(path, opts)
     else
       :ignore
     end
   end
 
-  defp do_process(path) do
+  @doc """
+  Retorna se o JPEG original deve ser mantido.
+  """
+  def keep_camera_jpeg? do
+    Application.get_env(:revela, :keep_camera_jpeg, false) == true
+  end
+
+  defp do_process(path, opts) do
     stem = path |> Path.basename() |> Path.rootname()
     {web_rel, web_path} = preview_paths(stem)
     web_dest = Path.join(uploads_dir(), web_rel)
 
     case make_preview(path, web_dest) do
       :ok ->
+        # So reivindica um RAW quando o chamador confirmou que ele assentou.
+        # Se ainda chega, attach_raw/1 faz o claim na passada posterior.
         case Capture.create_photo(%{
                web_path: web_path,
                original_path: path,
@@ -49,7 +62,7 @@ defmodule Revela.Capture.Ingest do
                shot_at: DateTime.utc_now()
              }) do
           {:ok, photo} ->
-            maybe_claim_raw_sibling(photo, path)
+            maybe_claim_raw_sibling(photo, path, Keyword.get(opts, :raw_settled, false))
 
           error ->
             error
@@ -61,21 +74,52 @@ defmodule Revela.Capture.Ingest do
     end
   end
 
-  defp maybe_claim_raw_sibling(photo, jpeg_path) do
-    case find_raw_sibling(jpeg_path) do
-      nil ->
-        {:ok, photo}
-
-      raw_path ->
+  defp maybe_claim_raw_sibling(photo, jpeg_path, raw_settled?) do
+    case {raw_settled?, find_raw_sibling(jpeg_path)} do
+      {true, raw_path} when is_binary(raw_path) ->
         case Capture.update_raw_path(photo, raw_path) do
           {:ok, updated} ->
-            {:ok, updated}
+            maybe_discard_after_raw(updated, jpeg_path, raw_path)
 
           {:error, reason} ->
             Logger.warning(
-              "ingest raw_path: falha ao gravar photo=#{photo.id} raw=#{raw_path}: #{inspect(reason)}"
+              "ingest raw_path: falha ao gravar photo=#{photo.id}: #{inspect(reason)}"
             )
 
+            {:ok, photo}
+        end
+
+      _ ->
+        {:ok, photo}
+    end
+  end
+
+  defp maybe_discard_after_raw(photo, jpeg_path, _raw_path) do
+    discard_camera_jpeg(photo, jpeg_path)
+  end
+
+  defp discard_camera_jpeg(photo, path) do
+    cond do
+      keep_camera_jpeg?() or not is_binary(path) ->
+        {:ok, photo}
+
+      true ->
+        case File.rm(path) do
+          :ok ->
+            case Capture.clear_original_path(photo) do
+              {:ok, updated} ->
+                {:ok, updated}
+
+              {:error, reason} ->
+                Logger.warning(
+                  "ingest original_path: falha ao limpar photo=#{photo.id}: #{inspect(reason)}"
+                )
+
+                {:ok, photo}
+            end
+
+          {:error, reason} ->
+            Logger.warning("Nao foi possivel apagar JPEG da camera #{path}: #{inspect(reason)}")
             {:ok, photo}
         end
     end
@@ -207,7 +251,10 @@ defmodule Revela.Capture.Ingest do
           :ignore
 
         [photo] ->
-          Capture.update_raw_path(photo, raw_path)
+          case Capture.update_raw_path(photo, raw_path) do
+            {:ok, updated} -> maybe_discard_after_raw(updated, updated.original_path, raw_path)
+            error -> error
+          end
 
         [photo | rest] ->
           Logger.warning(
@@ -216,7 +263,10 @@ defmodule Revela.Capture.Ingest do
               "(outros: #{Enum.map_join(rest, ", ", & &1.original_path)})"
           )
 
-          Capture.update_raw_path(photo, raw_path)
+          case Capture.update_raw_path(photo, raw_path) do
+            {:ok, updated} -> maybe_discard_after_raw(updated, updated.original_path, raw_path)
+            error -> error
+          end
       end
     end
   end

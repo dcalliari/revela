@@ -178,6 +178,18 @@ defmodule Revela.Capture do
     |> MapSet.new()
   end
 
+  @doc "Limpa o caminho do JPEG original apos o arquivo ser removido com sucesso."
+  def clear_original_path(%Photo{} = photo) do
+    now = DateTime.utc_now(:microsecond)
+
+    case Repo.update_all(from(p in Photo, where: p.id == ^photo.id),
+           set: [original_path: nil, updated_at: now]
+         ) do
+      {1, _} -> {:ok, %{photo | original_path: nil, updated_at: now}}
+      {0, _} -> {:error, :photo_not_found}
+    end
+  end
+
   @doc """
   Preenche `raw_path` de uma foto que ainda nao tem RAW associado.
   Nao sobrescreve um `raw_path` ja preenchido. Usa UPDATE condicional e o indice

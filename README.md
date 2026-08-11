@@ -120,6 +120,13 @@ Sem o env, o comportamento e o de producao. Nao ha toggle no Host — so o env
 `REVELA_DEMO=1` / `true` / `yes` (compile-time `config :revela, :demo` nao
 ativa o modo; `runtime.exs` sempre redefine a partir do env).
 
+### Descarte do JPEG da camera
+
+Depois que o preview web e gerado e o RAW irmao esta assentado, o JPEG da
+camera e descartado por padrao para reduzir o uso de disco. O RAW e o preview
+nunca sao removidos. Para manter os JPEGs, use `REVELA_KEEP_CAMERA_JPEG=1` ou
+`config :revela, :keep_camera_jpeg, true`.
+
 Em Arch Linux, instale `erlang-os_mon` (ou use um Erlang via mise que ja
 traga `os_mon`). Sem isso o app sobe normalmente, mas o `/host` avisa
 **monitoramento de disco indisponivel**, a parada preventiva fica desligada
@@ -154,9 +161,11 @@ libere espaco — o tether rearma sozinho quando o espaco voltar.
   posterior).
 - Originais (JPEG + RAW) baixam para pastas unicas
   `editorials/yyyy-mm-dd NOME HHMMSS-uid/` (ou `editorials/_sem-editorial/`
-  quando nao ha sessao). Cada foto guarda `original_path` (JPEG) e, quando
-  houver irmao, `raw_path` (unico no banco: o mesmo RAW nao gruda em duas
-  fotos).
+  quando nao ha sessao). Cada foto guarda `raw_path` quando houver irmao
+  (unico no banco: o mesmo RAW nao gruda em duas fotos). Por padrao o JPEG da
+  camera e descartado apos preview + RAW assentado e `original_path` fica
+  `nil` (ver acima); com `REVELA_KEEP_CAMERA_JPEG=1`, `original_path` aponta
+  ao JPEG mantido.
 - Previews web ficam em `priv/static/uploads/<editorial_id>/` (ou
   `_sem-editorial/`) e sao servidos em `/uploads/...`.
 - Estado (fotos + labels) em SQLite (`*.db`), escopado ao editorial atual.
