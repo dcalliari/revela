@@ -33,8 +33,11 @@ defmodule Revela.Repo.Migrations.AllowPhotoWithoutPreview do
     execute "ALTER TABLE photos_without_preview RENAME TO photos"
     execute "CREATE UNIQUE INDEX photos_seq_index ON photos (seq)"
     execute "CREATE INDEX photos_editorial_id_index ON photos (editorial_id)"
+
     execute "CREATE UNIQUE INDEX photos_raw_path_unique_index ON photos (raw_path) WHERE raw_path IS NOT NULL AND raw_path != ''"
+
     execute "CREATE UNIQUE INDEX photos_editorial_source_hash_index ON photos (editorial_id, source_hash) WHERE source_hash IS NOT NULL AND source_hash != ''"
+
     execute "PRAGMA foreign_keys = ON"
   end
 

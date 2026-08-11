@@ -7,6 +7,8 @@ defmodule RevelaWeb.ViewerComponents do
   O rodape nao exibe indicacao visual dos atalhos (nem legenda, nem numeros
   nas bolinhas); cada botao mantem o `aria-label` correspondente para
   acessibilidade. O mapeamento das teclas vive em `HostLive` / `ReviewLive`.
+  Foto sem `web_path` (RAW importado sem preview) mostra placeholder textual
+  — nao assume `<img>` sempre presente.
 
   No celular, o container `#zoomer` (ou `zoom_id`) usa o hook JS `PinchZoom`
   (focal pinch, pan com zoom > 1, toque duplo reseta). Nao fixe

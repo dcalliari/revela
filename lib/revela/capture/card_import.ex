@@ -3,10 +3,20 @@ defmodule Revela.Capture.CardImport do
   Importa fotos avulsas do cartao da camera (JPEG/RAW) para o editorial ativo.
 
   Copia os arquivos para a pasta do editorial (para o cartao poder ser ejetado),
-  gera preview e cria o mesmo tipo de registro que a ingestao tethered. Sem
-  editorial ativo, recusa — nunca escreve no limbo `_sem-editorial`.
+  gera preview quando possivel e cria o mesmo tipo de registro que a ingestao
+  tethered. Sem editorial ativo, recusa — nunca escreve no limbo
+  `_sem-editorial`.
 
-  Reimportar o mesmo arquivo (mesmo conteudo) e idempotente via `source_hash`.
+  Percorre a pasta escolhida e um nivel de subpasta imediata (ex. DCIM →
+  CAMFOLDER); pastas filhas que sao symlink sao ignoradas. Reimportar o mesmo
+  conteudo e idempotente via `source_hash` (e tambem contra originais tethered
+  ja na pasta do editorial). RAW/JPEG atrasados fazem merge na Photo do irmao
+  (`Ingest.find_raw_sibling/2` / exact stem), sem criar linha duplicada do par.
+  RAW que o ImageMagick nao decodifica ainda vira Photo com `raw_path` e
+  `web_path` nil.
+
+  Allowlist de raizes removiveis e UX do Host: ver `HostLive` / README
+  (`REVELA_CARD_IMPORT_ROOTS`).
   """
 
   import Ecto.Query, warn: false

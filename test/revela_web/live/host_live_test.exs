@@ -227,14 +227,18 @@ defmodule RevelaWeb.HostLiveTest do
   end
 
   test "mostra o formulario de importacao do cartao" do
-    html = render_component(&HostLive.render/1, host_render_assigns(%{
-      capture: %{
-        status: :idle,
-        message: nil,
-        camera_present: false,
-        editorial: "Casamento"
-      }
-    }))
+    html =
+      render_component(
+        &HostLive.render/1,
+        host_render_assigns(%{
+          capture: %{
+            status: :idle,
+            message: nil,
+            camera_present: false,
+            editorial: "Casamento"
+          }
+        })
+      )
 
     document = LazyHTML.from_fragment(html)
     assert selected_count(document, "#card-import") == 1

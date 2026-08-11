@@ -8,12 +8,18 @@ defmodule RevelaWeb.HostLive do
   help pede vinculo manual quando ha camera; o console do browser tambem
   recebe um aviso via `push_event("disk-awareness", ...)`.
 
+  **Importar do cartao** (`#card-import`): pasta sob raizes allowlisted
+  (`:card_import_allowed_roots` / `REVELA_CARD_IMPORT_ROOTS`; padrao
+  `/run/media` e `/media`) via `Capture.import_from_folder/1`. Exige editorial
+  ativo; contrato e limites em `Revela.Capture.CardImport` e no README.
+
   A grade do editorial e paginada (24/pagina, prev/next) e filtravel por
   bolinhas de cor (multi-select; vazio = todas; mudar filtro volta a pagina 1).
   Listagem e contagem vao ao banco via `Capture.list_photos/1` e
   `count_photos/1`; a pagina corrente e um LiveView stream (`:grid_photos`).
   O viewer imersivo continua com a lista completa (`list_photos/0`) para
-  idx/follow — nao reusar a pagina da grade.
+  idx/follow — nao reusar a pagina da grade. Fotos sem `web_path` (RAW
+  importado sem preview) renderizam placeholder, nao quebram a grade.
 
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
