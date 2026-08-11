@@ -212,23 +212,14 @@ transform.
 
 ### 5. Paginação e filtro por cor na grade do host
 
-**Status**: EM ANDAMENTO. Implementado em `fm/revela-paginacao-filtro-cor-v2`; parado numa
-decisão pendente: classificar uma foto recria a grade inteira (piscada), a decidir entre
-corrigir para atualizar só a foto alterada ou aceitar e documentar.
+**Status**: FEITO nesta branch (`fm/revela-paginacao-filtro-cor-v2`); URL do PR
+preenchida na entrega no-mistakes.
 
-**Observado**: com ~2000 fotos, a grade do host mostra só as 24 mais recentes.
-Não havia como chegar nas primeiras fotos do editorial. Uma paginação temporária
-foi feita e desfeita na sessão de 2026-08-04, justamente para pensar numa
-organização melhor.
-
-**Estado atual**: `host_live.ex:209` corta em `@recent 24` fixas. As bolinhas de
-cor no cabeçalho (`host_live.ex:353`) são só legenda, não clicáveis.
-
-**Proposta**: paginação de verdade mais filtro por cor clicando nas bolinhas
-(alternar cada cor, combinando com a paginação). Considerar
-[LiveView streams](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#stream/4)
-para não carregar as 2000 fotos na memória do socket a cada render, e filtrar no
-banco em vez de em memória. Ver também o item 8.
+**Entregue**: grade do Host com paginação real (24/página, prev/next) e bolinhas
+de cor como filtro multi-select; consulta e filtro no banco via
+`Capture.list_photos/1` + `count_photos/1`; página da grade em LiveView stream.
+Filtro vazio = todas; mudar filtro volta à página 1. Ver também item 11 (tela
+de pós-produção dedicada ainda aberta).
 
 ## P1: melhorias de fluxo
 
@@ -298,21 +289,26 @@ foto (UPDATE condicional + índice único parcial); `mix revela.backfill_raw_pat
 ### 11. Tela de pós-produção
 
 **Observado**: terminado o editorial, a equipe quis rever e classificar as fotos
-com calma pelo host. A tela do host é feita para acompanhar a captura ao vivo,
-não para isso: mostra só as 24 mais recentes. Foi preciso improvisar uma
-paginação temporária no código durante a própria sessão para conseguir chegar
-nas primeiras fotos.
+com calma pelo host. Na sessão de 2026-08-04 a grade do host só mostrava as 24
+mais recentes; foi preciso improvisar uma paginação temporária no código
+durante a própria sessão para conseguir chegar nas primeiras fotos.
+
+**Estado atual**: o item 5 entregou paginação real e filtro por cor **na grade
+do host** (captura ao vivo). A tela ainda é a de sessão ao vivo, não uma
+revisão pós-editorial dedicada.
 
 **Proposta**: uma tela própria de pós-produção, separada da de captura ao vivo,
-com navegação por todo o conjunto, filtro por cor e classificação. É o destino
-natural do item 5 (paginação e filtro), e evita continuar espremendo esse uso
-dentro da tela de captura.
+com navegação por todo o conjunto, filtro por cor, classificação e (ver abaixo)
+seleção por intervalo. O item 5 cobriu o mínimo na grade do host; este item
+continua sendo o destino para o fluxo pós-sessão sem espremer o uso dentro da
+tela de captura.
 
-**Relacionado**: depende do item 10. Não faz sentido investir numa tela de
-revisão pós-editorial enquanto finalizar o editorial apaga o resultado dela.
-Quando a seleção por intervalo existir, a ação de organizar por cor deve
-chamar `Revela.Capture.Export.export/1` (já usado por `mix revela.export_colors`;
-item 12) em vez de reimplementar cópia/movimento de arquivos.
+**Relacionado**: o item 10 (apagar classificações ao finalizar) já foi FEITO.
+Ainda assim a tela dedicada permanece aberta — o bloqueio de dados sumiu, mas
+o fluxo de pós-produção não. Quando a seleção por intervalo existir, a ação de
+organizar por cor deve chamar `Revela.Capture.Export.export/1` (já usado por
+`mix revela.export_colors`; item 12) em vez de reimplementar cópia/movimento de
+arquivos.
 
 #### O índice de contato validou a ideia na prática
 
