@@ -17,6 +17,11 @@ defmodule RevelaWeb.PostLive do
 
   @impl true
   def mount(params, _session, socket) do
+    if connected?(socket) do
+      Capture.subscribe_photos()
+      Capture.subscribe_labels()
+    end
+
     editorials = Capture.list_editorials()
 
     socket =
@@ -217,6 +222,7 @@ defmodule RevelaWeb.PostLive do
           {:noreply,
            socket
            |> assign(:tallies, tallies)
+           |> assign(:filter, :all)
            |> assign(:selected_ids, MapSet.new())
            |> assign(:anchor_id, nil)
            |> assign(
@@ -228,6 +234,7 @@ defmodule RevelaWeb.PostLive do
           {:noreply,
            socket
            |> assign(:tallies, tallies)
+           |> assign(:filter, :all)
            |> assign(:selected_ids, MapSet.new(ids))
            |> assign(:anchor_id, List.first(ids))
            |> assign(:raw_error, nil)
@@ -268,6 +275,32 @@ defmodule RevelaWeb.PostLive do
     end
   end
 
+  @impl true
+  def handle_info({:new_photo, photo}, socket) do
+    case socket.assigns.editorial do
+      %{id: id} when photo.editorial_id == id ->
+        {:noreply, refresh_editorial_data(socket)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_info({:label_changed, _photo_id}, socket) do
+    {:noreply, refresh_editorial_data(socket)}
+  end
+
+  def handle_info(:session_reset, socket) do
+    socket = assign(socket, :editorials, Capture.list_editorials())
+
+    case socket.assigns.editorial do
+      %{id: id} -> {:noreply, load_editorial(socket, id)}
+      nil -> {:noreply, socket}
+    end
+  end
+
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
   defp load_editorial(socket, id) when is_binary(id) do
     case Integer.parse(id) do
       {int, ""} -> load_editorial(socket, int)
@@ -300,6 +333,19 @@ defmodule RevelaWeb.PostLive do
         |> assign(:raw_href, nil)
         |> assign(:page_title, "Pos · #{editorial.name}")
         |> assign(:editorials, Capture.list_editorials())
+    end
+  end
+
+  defp refresh_editorial_data(socket) do
+    case socket.assigns.editorial do
+      nil ->
+        socket
+
+      editorial ->
+        socket
+        |> assign(:photos, Capture.list_photos_for_editorial(editorial.id))
+        |> assign(:labels, Capture.labels_for_reviewer_in_editorial(@host_id, editorial.id))
+        |> assign(:tallies, Capture.tallies_for_editorial(editorial.id))
     end
   end
 

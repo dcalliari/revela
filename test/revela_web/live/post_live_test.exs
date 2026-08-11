@@ -3,7 +3,7 @@ defmodule RevelaWeb.PostLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias Revela.Capture
+  alias Revela.{Capture, Delivery}
   alias RevelaWeb.Colors
 
   setup do
@@ -108,13 +108,16 @@ defmodule RevelaWeb.PostLiveTest do
     assert Capture.labels_for_reviewer_in_editorial("host", editorial.id) == %{}
   end
 
-  test "seleciona picks da marca e mostra votos na grade", %{
+  test "seleciona picks da marca, reseta filtro e ancora no menor seq", %{
     conn: conn,
     editorial: editorial,
     a: a,
-    b: b
+    b: b,
+    c: c
   } do
-    Capture.set_label(a.id, "brand-tok", "marca", 2)
+    {:ok, share, _} = Delivery.create_brand_share(editorial.id, [a.id, b.id, c.id])
+    Capture.set_label(c.id, "brand-#{share.token}", "marca", 2)
+    Capture.set_label(a.id, "brand-#{share.token}", "marca", 1)
     Capture.set_label(b.id, "host", "host", 0)
 
     {:ok, view, html} = live(conn, ~p"/post/#{editorial.id}")
@@ -122,7 +125,28 @@ defmodule RevelaWeb.PostLiveTest do
     assert has_element?(view, "#select-brand-picks")
     assert html =~ Colors.hex(2)
 
+    view |> element("#filter-0") |> render_click()
+    refute has_element?(view, "#post-photo-#{a.id}")
+
     view |> element("#select-brand-picks") |> render_click()
-    assert view |> element("#selection-count") |> render() =~ "1"
+    assert view |> element("#selection-count") |> render() =~ "2"
+    assert has_element?(view, "#post-photo-#{a.id}")
+    assert has_element?(view, "#post-photo-#{c.id}")
+  end
+
+  test "atualiza grade e tallies via PubSub", %{conn: conn} do
+    {:ok, editorial} =
+      Capture.start_editorial("Pos-live", "/tmp/pos-live-#{System.unique_integer()}")
+
+    {:ok, a} = Capture.create_photo(%{web_path: "/uploads/pos-live-a.jpg"})
+    {:ok, view, _html} = live(conn, ~p"/post/#{editorial.id}")
+
+    assert has_element?(view, "#post-photo-#{a.id}")
+
+    {:ok, b} = Capture.create_photo(%{web_path: "/uploads/pos-live-b.jpg"})
+    assert has_element?(view, "#post-photo-#{b.id}")
+
+    Capture.set_label(a.id, "brand-live", "marca", 4)
+    assert render(view) =~ Colors.hex(4)
   end
 end
