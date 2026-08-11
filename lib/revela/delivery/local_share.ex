@@ -48,18 +48,22 @@ defmodule Revela.Delivery.LocalShare do
   defp reuse_matching_share(editorial_id, ids) do
     wanted = MapSet.new(ids)
 
-    case Capture.list_brand_shares_for_editorial(editorial_id) do
-      [latest | _] ->
-        existing = MapSet.new(BrandShare.decode_photo_ids(latest))
+    match =
+      editorial_id
+      |> Capture.list_brand_shares_for_editorial()
+      |> Enum.find(fn share ->
+        MapSet.equal?(MapSet.new(BrandShare.decode_photo_ids(share)), wanted)
+      end)
 
-        if MapSet.equal?(existing, wanted) do
-          {:ok, latest}
-        else
-          :new
-        end
-
-      [] ->
+    case match do
+      nil ->
         :new
+
+      share ->
+        case Capture.touch_brand_share(share) do
+          {:ok, touched} -> {:ok, touched}
+          {:error, _} -> {:ok, share}
+        end
     end
   end
 

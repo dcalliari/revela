@@ -53,6 +53,32 @@ defmodule Revela.DeliveryTest do
     assert length(Capture.list_brand_shares_for_editorial(editorial.id)) == 2
   end
 
+  test "create_brand_share reusa share antigo ao oscillar selecao A→B→A", %{
+    editorial: editorial,
+    p1: p1,
+    p2: p2
+  } do
+    assert {:ok, share_a, path_a} =
+             Delivery.create_brand_share(editorial.id, [p1.id], label: "a")
+
+    Capture.set_label(p1.id, "brand-#{share_a.token}", "marca", 1)
+
+    assert {:ok, share_b, _} =
+             Delivery.create_brand_share(editorial.id, [p2.id], label: "b")
+
+    assert share_b.id != share_a.id
+    assert Capture.brand_labeled_photo_ids(editorial.id) == []
+
+    assert {:ok, reused, ^path_a} =
+             Delivery.create_brand_share(editorial.id, [p1.id], label: "a de novo")
+
+    assert reused.id == share_a.id
+    assert reused.token == share_a.token
+    assert length(Capture.list_brand_shares_for_editorial(editorial.id)) == 2
+    assert hd(Capture.list_brand_shares_for_editorial(editorial.id)).id == share_a.id
+    assert Capture.brand_labeled_photo_ids(editorial.id) == [p1.id]
+  end
+
   test "create_brand_share rejeita selecao vazia", %{editorial: editorial} do
     assert {:error, :empty_selection} = Delivery.create_brand_share(editorial.id, [])
   end
