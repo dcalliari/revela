@@ -23,6 +23,105 @@ defmodule RevelaWeb.HostLiveTest do
     assert selected_text(document, "#capture-status") == "detectada"
   end
 
+  test "mostra armando quando o auto-arm esta pendente" do
+    document =
+      render_capture_card(%{
+        status: :idle,
+        message: nil,
+        camera_present: true,
+        auto_arm_pending: true,
+        editorial: "Casamento"
+      })
+
+    assert selected_count(document, "#capture-action[disabled]") == 1
+    assert selected_text(document, "#capture-action") == "Armando tether…"
+    assert selected_text(document, "#capture-status") == "armando"
+    assert selected_text(document, "#capture-help") =~ "armando tether automaticamente"
+  end
+
+  test "prefere armando sobre espaco cheio enquanto o auto-arm esta pendente" do
+    document =
+      render_capture_card(%{
+        status: :disk_full,
+        message: "Espaço em disco abaixo do mínimo (~4.7 GB livres). Libere espaço.",
+        camera_present: true,
+        auto_arm_pending: true,
+        editorial: "Casamento",
+        disk_awareness: :available
+      })
+
+    assert selected_text(document, "#capture-action") == "Armando tether…"
+    assert selected_text(document, "#capture-status") == "armando"
+    assert selected_text(document, "#capture-help") =~ "armando tether automaticamente"
+    refute selected_text(document, "#capture-help") =~ "Libere espaço"
+  end
+
+  test "mostra retomar apos stop explicito do operador" do
+    document =
+      render_capture_card(%{
+        status: :idle,
+        message: nil,
+        camera_present: true,
+        operator_stopped: true,
+        editorial: "Casamento"
+      })
+
+    assert selected_text(document, "#capture-action") == "Retomar captura"
+    assert selected_text(document, "#capture-help") =~ "Captura pausada"
+  end
+
+  test "explica auto-arm quando ha editorial e camera" do
+    document =
+      render_capture_card(%{
+        status: :idle,
+        message: nil,
+        camera_present: true,
+        editorial: "Casamento",
+        disk_awareness: :available
+      })
+
+    assert selected_text(document, "#capture-help") =~ "arma automaticamente"
+  end
+
+  test "pede editorial antes de auto-armar no limbo" do
+    document =
+      render_capture_card(%{
+        status: :idle,
+        message: nil,
+        camera_present: true,
+        editorial: nil
+      })
+
+    assert selected_text(document, "#capture-help") =~ "Inicie um editorial"
+  end
+
+  test "explica vinculacao automatica quando armou sozinho" do
+    document =
+      render_capture_card(%{
+        status: :running,
+        message: nil,
+        camera_present: true,
+        armed_automatically: true
+      })
+
+    assert selected_text(document, "#capture-help") =~ "vinculada automaticamente"
+  end
+
+  test "avisa tether degradado quando a ingestao por pasta esta indisponivel" do
+    document =
+      render_capture_card(%{
+        status: :running,
+        message: nil,
+        camera_present: true,
+        armed_automatically: true,
+        ingest_awareness: :unavailable
+      })
+
+    assert selected_text(document, "#capture-status") == "sem ingestão"
+    assert selected_text(document, "#capture-help") =~ "ingestão por pasta indisponível"
+    assert selected_text(document, "#capture-help") =~ "não entram na revisão"
+  end
+
   test "explica a retomada automatica depois de uma desconexao" do
     document =
       render_capture_card(%{
@@ -40,12 +139,14 @@ defmodule RevelaWeb.HostLiveTest do
     document =
       render_capture_card(%{
         status: :disk_full,
-        message: "Espaço em disco abaixo do mínimo (~4.7 GB livres). Libere espaço.",
+        message:
+          "Espaço em disco abaixo do mínimo (~4.7 GB livres). Libere espaço — " <>
+            "o tether rearma automaticamente quando o espaço voltar.",
         camera_present: true
       })
 
     assert selected_text(document, "#capture-status") == "espaço cheio"
-    assert selected_text(document, "#capture-help") =~ "Libere espaço"
+    assert selected_text(document, "#capture-help") =~ "rearma automaticamente"
     assert selected_text(document, "#capture-action") == "Vincular câmera"
   end
 
@@ -73,11 +174,13 @@ defmodule RevelaWeb.HostLiveTest do
         status: :idle,
         message: nil,
         camera_present: true,
+        editorial: "Casamento",
         disk_awareness: :unavailable
       })
 
-    assert selected_text(document, "#capture-disk-hint") =~ "monitoramento de disco indisponível"
-    assert selected_text(document, "#capture-disk-hint") =~ "Parada preventiva desativada"
+    assert selected_text(document, "#capture-help") =~ "monitoramento de disco indisponível"
+    assert selected_text(document, "#capture-help") =~ "Vincule manualmente"
+    assert selected_count(document, "#capture-disk-hint") == 0
   end
 
   defp render_capture_card(capture) do

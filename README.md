@@ -20,17 +20,19 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
 
 - `Revela.Capture` contexto (editoriais + fotos + labels + agregacao).
 - `Revela.Capture.CameraServer` supervisiona o gphoto2 e o watcher; restaura
-  o editorial ativo do banco no boot; monitora espaco livre e para a captura
-  entre disparos se o disco cair abaixo do minimo (protege a Canon de travar
-  no USB).
+  o editorial ativo do banco no boot; auto-arma o tether (editorial ativo +
+  camera USB + disco OK, com debounce e latch de stop); monitora espaco livre
+  e para a captura entre disparos se o disco cair abaixo do minimo (protege a
+  Canon de travar no USB).
 - `Revela.Capture.Ingest` gera o preview (namespaced por editorial) e registra
   a foto.
 - `RevelaWeb.ReviewLive` (`/`) tela de revisao mobile, botoes de cor,
   navegacao e modo ao vivo (`follow == (idx == last)`). Identidade leve por
   `localStorage`.
-- `RevelaWeb.HostLive` (`/host`) QR + URL da LAN, start/stop da captura,
-  iniciar/finalizar editorial, estimativa de fotos restantes no disco, quem
-  esta online e o consenso de cores; o viewer imersivo reusa os mesmos atalhos.
+- `RevelaWeb.HostLive` (`/host`) QR + URL da LAN, status honesto do tether
+  (auto-arm / retomar / stop), iniciar/finalizar editorial, estimativa de
+  fotos restantes no disco, quem esta online e o consenso de cores; o viewer
+  imersivo reusa os mesmos atalhos.
 - `RevelaWeb.ViewerComponents` visualizador compartilhado: legenda de atalhos
   no rodape, numeros `1`–`5` / `0` nas bolinhas, e pinch-zoom no celular
   (hook `PinchZoom`).
@@ -85,8 +87,8 @@ TETHER_MIN_FREE_DISK_BYTES=1073741824 mix phx.server
 
 Em Arch Linux, instale `erlang-os_mon` (ou use um Erlang via mise que ja
 traga `os_mon`). Sem isso o app sobe normalmente, mas o `/host` avisa
-**monitoramento de disco indisponivel** e a parada preventiva fica
-desligada.
+**monitoramento de disco indisponivel**, a parada preventiva fica desligada
+e o auto-arm exige clique (**Vincular câmera**).
 
 ## Checklist da camera (Canon EOS Rebel T6 / 1300D)
 
@@ -96,11 +98,14 @@ desligada.
    guardado para edicao). Com RAW puro nao ha preview rapido.
 4. Cabo USB firme, de preferencia porta direta no chassi, sem hub.
 
-Na tela `/host`, clique em **Conectar câmera**. Dispare na camera: a foto
-aparece nos celulares em segundos. O host mostra quanto espaco livre
-ainda cabe em fotos (`cabem ~N fotos`, media real do editorial). Se o
-disco cair abaixo do piso, a captura para entre disparos (nunca no meio
-de uma transferencia PTP): libere espaco e vincule de novo.
+Na tela `/host`, com um editorial ativo e disco OK, o tether arma sozinho
+quando a camera aparece no USB (debounce curto; stop explicito gruda ate
+retomar). Sem editorial ou com monitoramento de disco indisponivel, use
+**Vincular câmera**. Dispare na camera: a foto aparece nos celulares em
+segundos. O host mostra quanto espaco livre ainda cabe em fotos
+(`cabem ~N fotos`, media real do editorial). Se o disco cair abaixo do piso,
+a captura para entre disparos (nunca no meio de uma transferencia PTP);
+libere espaco — o tether rearma sozinho quando o espaco voltar.
 
 ## Fluxo de dados
 
