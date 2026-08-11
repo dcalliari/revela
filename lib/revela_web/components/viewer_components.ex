@@ -4,9 +4,9 @@ defmodule RevelaWeb.ViewerComponents do
   (celular) e pela tela do host. Os eventos (`pick`, `clear`, `prev`, `next`,
   `go_live`, `close`, `key`) sao tratados pelo LiveView que renderiza o componente.
 
-  O rodape expoe a legenda `#shortcuts-legend` (`1`–`5` cores, `0` limpar,
-  setas, `L` ao vivo) e numeros nas bolinhas; o mapeamento das teclas vive em
-  `HostLive` / `ReviewLive`.
+  O rodape nao exibe indicacao visual dos atalhos (nem legenda, nem numeros
+  nas bolinhas); cada botao mantem o `aria-label` correspondente para
+  acessibilidade. O mapeamento das teclas vive em `HostLive` / `ReviewLive`.
 
   No celular, o container `#zoomer` (ou `zoom_id`) usa o hook JS `PinchZoom`
   (focal pinch, pan com zoom > 1, toque duplo reseta). Nao fixe
@@ -112,33 +112,18 @@ defmodule RevelaWeb.ViewerComponents do
             phx-value-color={color.value}
             aria-label={"#{color.name} (#{color.value + 1})"}
             class={[
-              "relative h-12 w-12 rounded-full transition-transform active:scale-90 ring-offset-2 ring-offset-neutral-900 touch-manipulation",
+              "h-12 w-12 rounded-full transition-transform active:scale-90 ring-offset-2 ring-offset-neutral-900 touch-manipulation",
               @labels[@photo.id] == color.value && "ring-4 ring-white scale-110",
               @labels[@photo.id] != color.value && "ring-0 opacity-80"
             ]}
             style={"background-color: #{color.hex}"}
-          >
-            <span class="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-white/90 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] pointer-events-none">
-              {color.value + 1}
-            </span>
-          </button>
+          ></button>
           <button
             phx-click="clear"
             aria-label="Limpar cor (0)"
-            class="relative h-12 w-12 rounded-full border-2 border-neutral-600 text-neutral-400 flex items-center justify-center active:scale-90 touch-manipulation"
-          >
-            <span class="text-[11px] font-semibold opacity-70">0</span>
-          </button>
+            class="h-12 w-12 rounded-full border-2 border-neutral-600 active:scale-90 touch-manipulation"
+          ></button>
         </div>
-        <p
-          id="shortcuts-legend"
-          class="mt-2.5 text-center text-[10px] leading-relaxed tracking-wide text-neutral-500"
-        >
-          <span class="tabular-nums">1–5</span>
-          cores · <span class="tabular-nums">0</span>
-          limpar · ← → · <kbd class="font-sans">L</kbd>
-          ao vivo
-        </p>
       </footer>
     </div>
     """

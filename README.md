@@ -40,9 +40,9 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
   (`Capture.list_photos/1` + stream LiveView); o viewer imersivo reusa os
   mesmos atalhos e a lista completa (nao a pagina filtrada).
   Com `REVELA_DEMO=1`, badge **DEMO** e **Disparar (demo)** / `D` (ver abaixo).
-- `RevelaWeb.ViewerComponents` visualizador compartilhado: legenda de atalhos
-  no rodape, numeros `1`–`5` / `0` nas bolinhas, e pinch-zoom no celular
-  (hook `PinchZoom`).
+- `RevelaWeb.ViewerComponents` visualizador compartilhado: botoes de cor e
+  limpar sem legenda ou numeros visiveis (so `aria-label`, atalhos abaixo
+  continuam ativos), e pinch-zoom no celular (hook `PinchZoom`).
 
 As cores no banco usam o mesmo mapeamento do darktable: `0` vermelho,
 `1` amarelo, `2` verde, `3` azul, `4` roxo. No teclado/UI as teclas `1`–`5`

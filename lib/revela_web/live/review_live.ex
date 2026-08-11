@@ -6,8 +6,9 @@ defmodule RevelaWeb.ReviewLive do
   `follow` e derivado do indice (`follow == (idx == last)`): estar na foto mais
   recente e estar ao vivo. Navegar para tras pausa o acompanhamento; chegar de
   novo na ultima (seta, classificacao ou tecla `L`/`l`) religa. Atalhos:
-  `1`..`5` cores, setas, `0`/Backspace/Delete limpar, `L` ao vivo — anunciados
-  no rodape do viewer (`ViewerComponents`).
+  `1`..`5` cores, setas, `0`/Backspace/Delete limpar, `L` ao vivo — tratados
+  aqui via `handle_event("key", ...)`; o rodape do viewer (`ViewerComponents`)
+  nao os anuncia visualmente, so mantem `aria-label` por botao.
   """
   use RevelaWeb, :live_view
 

@@ -172,16 +172,21 @@ quando chega um disparo novo".
 
 ### 3. Descoberta dos atalhos que já existem
 
-**Status**: FEITO em 2026-08-07 via
-https://github.com/dcalliari/revela/pull/4 (`33346ed`, ship empacotado com
-itens 1 e 2).
+**Status**: FECHADO por decisão em 2026-08-11.
 
 **Observado**: pedido de atalhos `1`-`5` para as cores, no estilo darktable. Os
 atalhos já existiam nas duas telas, mas nada na interface indicava.
 
-**O que entrou**: legenda discreta `#shortcuts-legend` no rodapé do viewer
-(`1–5` cores, `0` limpar, setas, `L` ao vivo) e número pequeno (`1`–`5` / `0`)
-sobre cada bolinha de cor/limpar.
+**O que entrou em 2026-08-07** (PR #4, `33346ed`, ship empacotado com itens 1
+e 2): legenda discreta `#shortcuts-legend` no rodapé do viewer (`1–5` cores,
+`0` limpar, setas, `L` ao vivo) e número pequeno (`1`–`5` / `0`) sobre cada
+bolinha de cor/limpar.
+
+**O que saiu em 2026-08-11**: a pedido do captain, a legenda e os números
+foram removidos de `ViewerComponents` — o captain já conhece os atalhos e não
+quer essa indicação na interface. Os atalhos de teclado continuam
+funcionando; o `aria-label` de cada botão mantém a descrição para leitores de
+tela. Item fechado por decisão, não é mais um gap em aberto.
 
 ### 4. Zoom instável no celular
 

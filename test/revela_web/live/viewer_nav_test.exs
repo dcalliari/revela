@@ -60,15 +60,13 @@ defmodule RevelaWeb.ViewerNavTest do
       assert has_element?(view, "span", "4 / 4")
     end
 
-    test "viewer shows shortcuts legend", %{conn: conn, photos: photos} do
+    test "viewer keyboard shortcuts have no visual indicators", %{conn: conn, photos: photos} do
       {:ok, view, _html} = live(conn, "/host")
 
       render_click(view, "open", %{"id" => Integer.to_string(List.last(photos).id)})
 
-      assert has_element?(view, "#shortcuts-legend")
-      html = render(view)
-      assert html =~ "ao vivo"
-      assert html =~ "1–5"
+      refute has_element?(view, "#shortcuts-legend")
+      assert has_element?(view, "button[aria-label='Limpar cor (0)']")
     end
   end
 
@@ -117,11 +115,11 @@ defmodule RevelaWeb.ViewerNavTest do
       assert has_element?(view, "span", "4 / 4")
     end
 
-    test "viewer shows shortcuts legend", %{conn: conn} do
+    test "viewer keyboard shortcuts have no visual indicators", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/")
 
-      assert has_element?(view, "#shortcuts-legend")
-      assert render(view) =~ "L"
+      refute has_element?(view, "#shortcuts-legend")
+      assert has_element?(view, "button[aria-label='Limpar cor (0)']")
     end
   end
 end
