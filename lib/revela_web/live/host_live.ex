@@ -370,16 +370,79 @@ defmodule RevelaWeb.HostLive do
 
   # Host so importa de raizes de midia removivel (padrao /run/media e /media;
   # override via config :card_import_allowed_roots / REVELA_CARD_IMPORT_ROOTS).
+  # Resolve symlinks before the prefix check so a path under an allowed root
+  # that links outside those roots is refused.
   defp allowed_import_path?(path) when is_binary(path) do
-    expanded = Path.expand(path)
+    case resolve_real_path(path) do
+      {:ok, real} -> under_allowed_import_root?(real)
+      {:error, _} -> false
+    end
+  end
 
+  defp under_allowed_import_root?(real_path) do
     :revela
     |> Application.get_env(:card_import_allowed_roots, ["/run/media", "/media"])
     |> List.wrap()
     |> Enum.any?(fn root ->
-      root = root |> to_string() |> Path.expand()
-      expanded == root or String.starts_with?(expanded, root <> "/")
+      root_path =
+        case resolve_real_path(to_string(root)) do
+          {:ok, resolved} -> resolved
+          {:error, _} -> Path.expand(to_string(root))
+        end
+
+      real_path == root_path or String.starts_with?(real_path, root_path <> "/")
     end)
+  end
+
+  defp resolve_real_path(path) when is_binary(path) do
+    abs = Path.expand(path)
+    resolve_real_path_components(Path.split(abs), [], MapSet.new())
+  end
+
+  defp resolve_real_path_components([], acc, _seen) do
+    {:ok, Path.join(Enum.reverse(acc))}
+  end
+
+  defp resolve_real_path_components([comp | rest], [], seen) do
+    resolve_real_path_components(rest, [comp], seen)
+  end
+
+  defp resolve_real_path_components([comp | rest], acc, seen) do
+    current = Path.join(Enum.reverse([comp | acc]))
+
+    if MapSet.member?(seen, current) do
+      {:error, :symlink_loop}
+    else
+      case File.lstat(current) do
+        {:ok, %{type: :symlink}} ->
+          case File.read_link(current) do
+            {:ok, target} ->
+              parent = Path.join(Enum.reverse(acc))
+
+              resolved =
+                if Path.type(target) == :absolute do
+                  Path.expand(target)
+                else
+                  Path.expand(target, parent)
+                end
+
+              resolve_real_path_components(
+                Path.split(resolved) ++ rest,
+                [],
+                MapSet.put(seen, current)
+              )
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+
+        {:ok, _} ->
+          resolve_real_path_components(rest, [comp | acc], seen)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
   end
 
   # lista completa para o viewer (follow/atalhos); grade usa pagina filtrada via stream

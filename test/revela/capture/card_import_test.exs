@@ -384,6 +384,28 @@ defmodule Revela.Capture.CardImportTest do
     refute File.exists?(Path.join(uploads, "_sem-editorial/IMG_PIN.jpg"))
   end
 
+  test "arquivo ilegivel no cartao vira erro controlado, sem crash", %{
+    source: source,
+    dest: dest,
+    preview_fun: preview_fun
+  } do
+    {:ok, _editorial} = Capture.start_editorial("Cartao Unreadable", dest)
+    bad = Path.join(source, "IMG_BAD.JPG")
+    write_jpeg!(bad, "unreadable-card")
+    File.chmod!(bad, 0o000)
+
+    on_exit(fn ->
+      File.chmod!(bad, 0o644)
+    end)
+
+    assert {:ok, %{imported: 0, skipped: 0, errors: errors}} =
+             CardImport.import_folder(source, preview_fun: preview_fun)
+
+    assert [{"IMG_BAD.JPG", reason}] = errors
+    assert is_binary(reason)
+    assert Capture.list_photos() == []
+  end
+
   defp stub_preview(_src, dest) do
     File.mkdir_p!(Path.dirname(dest))
     File.write!(dest, <<0xFF, 0xD8, 0xFF, 0xD9>>)

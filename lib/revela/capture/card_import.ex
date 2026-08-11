@@ -105,41 +105,47 @@ defmodule Revela.Capture.CardImport do
   end
 
   defp import_jpeg(jpeg_src, editorial, preview_fun, {imported, skipped, errors, used_raws}) do
-    hash = content_hash(jpeg_src)
     filename = Path.basename(jpeg_src)
 
-    if already_imported?(editorial.id, hash) or existing_file_content?(jpeg_src, editorial.id) do
-      photo = get_photo_by_source_hash(editorial.id, hash)
-      raw_src = Ingest.find_raw_sibling(jpeg_src)
+    case content_hash(jpeg_src) do
+      {:error, reason} ->
+        {imported, skipped, [{filename, reason} | errors], used_raws}
 
-      case attach_existing_raw(photo, raw_src, editorial.folder, used_raws) do
-        {:ok, used_raws} ->
-          {imported, skipped + 1, errors, used_raws}
+      {:ok, hash} ->
+        if already_imported?(editorial.id, hash) or
+             existing_file_content?(jpeg_src, editorial.id, hash) do
+          photo = get_photo_by_source_hash(editorial.id, hash)
+          raw_src = Ingest.find_raw_sibling(jpeg_src)
 
-        {:error, reason, used_raws} ->
-          {imported, skipped, [{filename, reason} | errors], used_raws}
-      end
-    else
-      case merge_into_existing_raw_photo(jpeg_src, editorial, preview_fun, hash, used_raws) do
-        {:ok, used_raws} ->
-          {imported, skipped + 1, errors, used_raws}
+          case attach_existing_raw(photo, raw_src, editorial.folder, used_raws) do
+            {:ok, used_raws} ->
+              {imported, skipped + 1, errors, used_raws}
 
-        :not_found ->
-          import_new_jpeg(
-            jpeg_src,
-            editorial,
-            preview_fun,
-            hash,
-            filename,
-            imported,
-            skipped,
-            errors,
-            used_raws
-          )
+            {:error, reason, used_raws} ->
+              {imported, skipped, [{filename, reason} | errors], used_raws}
+          end
+        else
+          case merge_into_existing_raw_photo(jpeg_src, editorial, preview_fun, hash, used_raws) do
+            {:ok, used_raws} ->
+              {imported, skipped + 1, errors, used_raws}
 
-        {:error, reason, used_raws} ->
-          {imported, skipped, [{filename, reason} | errors], used_raws}
-      end
+            :not_found ->
+              import_new_jpeg(
+                jpeg_src,
+                editorial,
+                preview_fun,
+                hash,
+                filename,
+                imported,
+                skipped,
+                errors,
+                used_raws
+              )
+
+            {:error, reason, used_raws} ->
+              {imported, skipped, [{filename, reason} | errors], used_raws}
+          end
+        end
     end
   end
 
@@ -189,39 +195,44 @@ defmodule Revela.Capture.CardImport do
     if MapSet.member?(used_raws, expanded) do
       {imported, skipped, errors, used_raws}
     else
-      hash = content_hash(raw_src)
       filename = Path.basename(raw_src)
 
-      cond do
-        existing_file_content?(raw_src, editorial.id) ->
-          {imported, skipped + 1, errors, MapSet.put(used_raws, expanded)}
+      case content_hash(raw_src) do
+        {:error, reason} ->
+          {imported, skipped, [{filename, reason} | errors], used_raws}
 
-        raw_already_attached?(raw_src, editorial) ->
-          {imported, skipped + 1, errors, MapSet.put(used_raws, expanded)}
+        {:ok, hash} ->
+          cond do
+            existing_file_content?(raw_src, editorial.id, hash) ->
+              {imported, skipped + 1, errors, MapSet.put(used_raws, expanded)}
 
-        true ->
-          case attach_raw_to_existing_photo(raw_src, editorial, used_raws) do
-            {:ok, used_raws} ->
-              {imported, skipped + 1, errors, used_raws}
+            raw_already_attached?(raw_src, editorial) ->
+              {imported, skipped + 1, errors, MapSet.put(used_raws, expanded)}
 
-            :not_found ->
-              if already_imported?(editorial.id, hash) do
-                {imported, skipped + 1, errors, used_raws}
-              else
-                import_new_raw(
-                  raw_src,
-                  editorial,
-                  preview_fun,
-                  hash,
-                  imported,
-                  skipped,
-                  errors,
-                  used_raws
-                )
+            true ->
+              case attach_raw_to_existing_photo(raw_src, editorial, used_raws) do
+                {:ok, used_raws} ->
+                  {imported, skipped + 1, errors, used_raws}
+
+                :not_found ->
+                  if already_imported?(editorial.id, hash) do
+                    {imported, skipped + 1, errors, used_raws}
+                  else
+                    import_new_raw(
+                      raw_src,
+                      editorial,
+                      preview_fun,
+                      hash,
+                      imported,
+                      skipped,
+                      errors,
+                      used_raws
+                    )
+                  end
+
+                {:error, reason, used_raws} ->
+                  {imported, skipped, [{filename, reason} | errors], used_raws}
               end
-
-            {:error, reason, used_raws} ->
-              {imported, skipped, [{filename, reason} | errors], used_raws}
           end
       end
     end
@@ -432,9 +443,8 @@ defmodule Revela.Capture.CardImport do
     e -> {:error, Exception.message(e)}
   end
 
-  defp existing_file_content?(source_path, editorial_id) do
-    source_hash = content_hash(source_path)
-
+  defp existing_file_content?(_source_path, editorial_id, source_hash)
+       when is_binary(source_hash) do
     Repo.all(
       from p in Photo,
         where: p.editorial_id == ^editorial_id,
@@ -448,9 +458,7 @@ defmodule Revela.Capture.CardImport do
   end
 
   defp same_content_hash?(path, expected_hash) do
-    content_hash(path) == expected_hash
-  rescue
-    _ -> false
+    match?({:ok, ^expected_hash}, content_hash(path))
   end
 
   defp already_imported?(editorial_id, hash) do
@@ -468,18 +476,33 @@ defmodule Revela.Capture.CardImport do
   end
 
   defp content_hash(path) do
-    path
-    |> File.stream!(64 * 1024, [])
-    |> Enum.reduce(:crypto.hash_init(:sha256), fn chunk, acc ->
-      :crypto.hash_update(acc, chunk)
-    end)
-    |> :crypto.hash_final()
-    |> Base.encode16(case: :lower)
+    hash =
+      path
+      |> File.stream!(64 * 1024, [])
+      |> Enum.reduce(:crypto.hash_init(:sha256), fn chunk, acc ->
+        :crypto.hash_update(acc, chunk)
+      end)
+      |> :crypto.hash_final()
+      |> Base.encode16(case: :lower)
+
+    {:ok, hash}
+  rescue
+    e -> {:error, Exception.message(e)}
   end
 
-  defp short_hash(path), do: path |> content_hash() |> String.slice(0, 8)
+  defp short_hash(path) do
+    case content_hash(path) do
+      {:ok, hash} -> String.slice(hash, 0, 8)
+      {:error, _} -> "00000000"
+    end
+  end
 
-  defp same_content?(a, b), do: content_hash(a) == content_hash(b)
+  defp same_content?(a, b) do
+    case {content_hash(a), content_hash(b)} do
+      {{:ok, ha}, {:ok, hb}} -> ha == hb
+      _ -> false
+    end
+  end
 
   defp file_mtime(path) do
     case File.stat(path) do
