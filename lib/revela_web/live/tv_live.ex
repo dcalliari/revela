@@ -7,8 +7,19 @@ defmodule RevelaWeb.TvLive do
   a foto mais recente; quando o Host folheia, segue a foto atual do Host.
 
   Item 7 so nesta superficie: apos ~30s parado fora do ao vivo, volta sozinho
-  para a foto mais recente (com contagem visivel). Qualquer interacao local
-  reinicia o timer. Host e celulares de revisores nao tem esse timeout.
+  para a foto mais recente (com contagem visivel), sem consultar o Host —
+  ninguem decide nesta tela, entao o timeout e incondicional. Host e
+  celulares de revisores nao tem esse timeout.
+
+  `Capture.broadcast_host_viewer/1` dedupe: um Host que nao mudou de estado
+  nao gera novo evento PubSub. Depois do retorno por idle, o `/tv` fica
+  mostrando "ao vivo" mesmo com o Host ainda parado ate que algo o traga de
+  volta — nao ha novo broadcast so porque o Host nao mudou. Qualquer
+  interacao local (`tv_activity`) e a reconexao (`mount/3`) por isso leem
+  `Capture.host_viewer_state/0` direto (nao dependem do PubSub) e
+  resincronizam sempre, mesmo que o estado seja identico ao ultimo
+  broadcast — e o unico jeito do operador forcar o `/tv` a voltar a
+  espelhar o Host sem precisar navegar o Host para algo diferente e voltar.
   """
   use RevelaWeb, :live_view
 
@@ -42,7 +53,7 @@ defmodule RevelaWeb.TvLive do
 
   @impl true
   def handle_event("tv_activity", _params, socket) do
-    {:noreply, bump_idle(socket)}
+    {:noreply, resync(socket)}
   end
 
   @impl true
@@ -112,23 +123,15 @@ defmodule RevelaWeb.TvLive do
 
   # ── helpers ──────────────────────────────────────────────────────────────────
 
-  defp apply_host_viewer(socket, %{open: false}) do
-    photos = socket.assigns.photos
-    photo_id = latest_photo_id(photos)
-    maybe_apply_mirror(socket, true, photo_id)
+  defp apply_host_viewer(socket, state) do
+    {follow, photo_id} = mirror_target(state, socket.assigns.photos)
+    maybe_apply_mirror(socket, follow, photo_id)
   end
 
-  defp apply_host_viewer(socket, %{open: true, follow: true} = state) do
-    photos = socket.assigns.photos
-    photo_id = state.photo_id || latest_photo_id(photos)
-    maybe_apply_mirror(socket, true, photo_id)
-  end
+  defp mirror_target(%{open: false}, photos), do: {true, latest_photo_id(photos)}
 
-  defp apply_host_viewer(socket, %{open: true, follow: false} = state) do
-    photos = socket.assigns.photos
-    photo_id = state.photo_id || latest_photo_id(photos)
-    maybe_apply_mirror(socket, false, photo_id)
-  end
+  defp mirror_target(%{open: true, follow: follow} = state, photos),
+    do: {follow, state.photo_id || latest_photo_id(photos)}
 
   defp maybe_apply_mirror(socket, follow, photo_id) do
     if socket.assigns[:follow] == follow and socket.assigns[:photo_id] == photo_id do
@@ -149,14 +152,17 @@ defmodule RevelaWeb.TvLive do
     end
   end
 
-  defp bump_idle(socket) do
-    if socket.assigns.follow do
-      socket
-    else
-      socket
-      |> cancel_idle()
-      |> schedule_idle()
-    end
+  # le Capture.host_viewer_state/0 direto e reaplica incondicionalmente (nao
+  # via maybe_apply_mirror), porque o broadcast do Host e deduplicado quando
+  # o estado nao muda: sem essa leitura direta, uma interacao local no /tv
+  # nao teria como perceber que o Host segue parado na mesma foto.
+  defp resync(socket) do
+    {follow, photo_id} = mirror_target(Capture.host_viewer_state(), socket.assigns.photos)
+
+    socket
+    |> cancel_idle()
+    |> assign(follow: follow, photo_id: photo_id)
+    |> schedule_idle()
   end
 
   defp schedule_idle(socket) do

@@ -73,6 +73,58 @@ defmodule RevelaWeb.TvLiveTest do
     refute host_html =~ "AO VIVO"
   end
 
+  test "toque no /tv apos retorno por idle resincroniza com o Host mesmo sem novo broadcast",
+       %{conn: conn} do
+    {:ok, photo_a} = Capture.create_photo(%{web_path: "/uploads/resync-a.jpg"})
+    {:ok, _photo_b} = Capture.create_photo(%{web_path: "/uploads/resync-b.jpg"})
+
+    {:ok, host, _html} = live(conn, ~p"/host")
+    {:ok, tv, _html} = live(conn, ~p"/tv")
+
+    open_photo(host, photo_a)
+    assert render(tv) =~ "tv-photo-#{photo_a.id}"
+    assert render(tv) =~ "ESPELHO"
+
+    %{socket: %{assigns: %{idle_gen: gen}}} = :sys.get_state(tv.pid)
+    send(tv.pid, {:idle_return_live, gen})
+    _ = :sys.get_state(tv.pid)
+
+    assert render(tv) =~ "AO VIVO"
+    # o Host nao mudou de estado: o broadcast_host_viewer/1 correspondente e
+    # deduplicado, entao nao ha novo evento PubSub para o /tv reagir
+    assert Capture.host_viewer_state() == %{photo_id: photo_a.id, follow: false, open: true}
+
+    render_click(element(tv, "#tv-presentation"))
+
+    html = render(tv)
+    assert html =~ "tv-photo-#{photo_a.id}"
+    assert html =~ "ESPELHO"
+    assert has_element?(tv, "#tv-idle-hint")
+  end
+
+  test "reconectar em /tv apos retorno por idle resincroniza com o Host mesmo sem novo broadcast",
+       %{conn: conn} do
+    {:ok, photo_a} = Capture.create_photo(%{web_path: "/uploads/reconnect-a.jpg"})
+    {:ok, _photo_b} = Capture.create_photo(%{web_path: "/uploads/reconnect-b.jpg"})
+
+    {:ok, host, _html} = live(conn, ~p"/host")
+    {:ok, tv, _html} = live(conn, ~p"/tv")
+
+    open_photo(host, photo_a)
+
+    %{socket: %{assigns: %{idle_gen: gen}}} = :sys.get_state(tv.pid)
+    send(tv.pid, {:idle_return_live, gen})
+    _ = :sys.get_state(tv.pid)
+    assert render(tv) =~ "AO VIVO"
+    assert Capture.host_viewer_state() == %{photo_id: photo_a.id, follow: false, open: true}
+
+    {:ok, tv2, _html} = live(conn, ~p"/tv")
+
+    html = render(tv2)
+    assert html =~ "tv-photo-#{photo_a.id}"
+    assert html =~ "ESPELHO"
+  end
+
   test "interacao local reinicia o timer e mantem espelho", %{conn: conn} do
     {:ok, photo_a} = Capture.create_photo(%{web_path: "/uploads/bump-a.jpg"})
     {:ok, _photo_b} = Capture.create_photo(%{web_path: "/uploads/bump-b.jpg"})

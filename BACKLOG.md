@@ -227,7 +227,10 @@ https://github.com/dcalliari/revela/pull/9). Rota `/tv` display-only espelha o
 visualizador do Host via PubSub (`Capture.broadcast_host_viewer/1`); sem
 classificação e sem Presence. Inclui a correção do espelho ao voltar do
 ocioso e a regra de só espelhar Host presente (decisão do captain em
-2026-08-11). Topologia suportada: uma aba de Host por vez.
+2026-08-11). Limitação aceita: o estado espelhado é um slot único (não por
+conexão), então uma segunda aba do Host aberta ao mesmo tempo sobrescreve o
+que a TV vê — uma aba do Host por vez é a topologia suportada (ver AGENTS.md
+"Domain: TV presentation (`/tv`)").
 
 **Observado**: para mostrar as fotos na TV, a tela do notebook foi espelhada via
 HDMI. Enquanto isso o notebook fica preso: não dá para usar o host para outra

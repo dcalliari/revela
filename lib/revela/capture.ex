@@ -35,7 +35,12 @@ defmodule Revela.Capture do
 
   @doc """
   Publica o estado do visualizador do Host para a superficie `/tv`.
-  Mantem o ultimo estado para LiveViews que entram no meio da sessao.
+  Mantem o ultimo estado (slot unico, nao por conexao — uma segunda aba do
+  Host sobrescreve; ver AGENTS.md "Domain: /tv presentation mirror") para
+  LiveViews que entram no meio da sessao. Deduplica: estado igual ao ja
+  persistido nao gera novo evento PubSub, entao consumidores que precisam
+  resincronizar sem depender de uma mudanca real devem ler
+  `host_viewer_state/0` direto em vez de esperar por um broadcast.
   """
   def broadcast_host_viewer(state) when is_map(state) do
     normalized = %{
