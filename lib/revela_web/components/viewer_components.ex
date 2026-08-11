@@ -79,11 +79,15 @@ defmodule RevelaWeb.ViewerComponents do
           phx-hook="PinchZoom"
           class="absolute inset-0 flex items-center justify-center overflow-hidden touch-none"
         >
-          <img
-            src={@photo.web_path}
-            class="max-h-full max-w-full object-contain will-change-transform"
-            draggable="false"
-          />
+          <%= if @photo.web_path do %>
+            <img
+              src={@photo.web_path}
+              class="max-h-full max-w-full object-contain will-change-transform"
+              draggable="false"
+            />
+          <% else %>
+            <div class="text-sm text-white/60">RAW sem preview</div>
+          <% end %>
         </div>
 
         <button

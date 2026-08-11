@@ -29,7 +29,7 @@ defmodule Revela.Capture.Photo do
       :shot_at,
       :editorial_id
     ])
-    |> validate_required([:seq, :web_path])
+    |> validate_required([:seq])
     |> unique_constraint(:seq)
     |> unique_constraint(:raw_path, name: :photos_raw_path_unique_index)
     |> unique_constraint(:source_hash, name: :photos_editorial_source_hash_index)

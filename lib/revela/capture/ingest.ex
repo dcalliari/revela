@@ -281,7 +281,8 @@ defmodule Revela.Capture.Ingest do
         true
 
       true ->
-        with {:ok, jpeg_meta} <- parse_capture_path(jpeg_path),
+        with true <- raw?(raw_path),
+             {:ok, jpeg_meta} <- parse_capture_path(jpeg_path),
              {:ok, raw_meta} <- parse_capture_path(raw_path) do
           jpeg_to_raw_sibling?(jpeg_meta, raw_meta)
         else

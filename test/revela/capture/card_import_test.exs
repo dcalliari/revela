@@ -188,6 +188,21 @@ defmodule Revela.Capture.CardImportTest do
     assert File.exists?(photo.raw_path)
   end
 
+  test "RAW avulso cria Photo mesmo sem preview decodificavel", %{source: source, dest: dest} do
+    {:ok, _editorial} = Capture.start_editorial("Cartao RAW sem preview", dest)
+    raw = Path.join(source, "IMG_NOPREVIEW.CR2")
+    write_bytes!(raw, "raw-undecodable")
+    preview_fun = fn _src, _dest -> {:error, :unsupported_raw} end
+
+    assert {:ok, %{imported: 1, skipped: 0, errors: []}} =
+             CardImport.import_folder(source, preview_fun: preview_fun)
+
+    [photo] = Capture.list_photos()
+    assert photo.web_path == nil
+    assert photo.raw_path == Path.join(dest, "IMG_NOPREVIEW.CR2")
+    assert File.exists?(photo.raw_path)
+  end
+
   test "casa JPEG+RAW pelo mesmo stem e preenche raw_path", %{
     source: source,
     dest: dest,

@@ -227,7 +227,7 @@ defmodule Revela.Capture.CardImport do
     expanded = Path.expand(raw_src)
 
     with {:ok, raw_dest} <- copy_into_editorial(raw_src, editorial.folder),
-         {:ok, web_path} <- build_preview(raw_dest, preview_fun, editorial.id),
+         {:ok, web_path} <- build_preview_or_nil(raw_dest, preview_fun, editorial.id),
          {:ok, _photo} <-
            Capture.create_photo(%{
              web_path: web_path,
@@ -320,7 +320,10 @@ defmodule Revela.Capture.CardImport do
 
     photo =
       from(p in Photo,
-        where: p.editorial_id == ^editorial.id and not is_nil(p.raw_path) and p.raw_path != "",
+        where:
+          p.editorial_id == ^editorial.id and
+            not is_nil(p.raw_path) and p.raw_path != "" and
+            p.original_path == p.raw_path,
         order_by: [asc: p.id]
       )
       |> Repo.all()
@@ -379,6 +382,13 @@ defmodule Revela.Capture.CardImport do
     case preview_fun.(dest_path, web_dest) do
       :ok -> {:ok, web_path}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp build_preview_or_nil(dest_path, preview_fun, editorial_id) do
+    case build_preview(dest_path, preview_fun, editorial_id) do
+      {:ok, web_path} -> {:ok, web_path}
+      {:error, _reason} -> {:ok, nil}
     end
   end
 

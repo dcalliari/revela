@@ -670,7 +670,13 @@ defmodule RevelaWeb.HostLive do
                   phx-click="open"
                   phx-value-id={photo.id}
                 >
-                  <img src={photo.web_path} class="w-full aspect-[3/2] object-cover rounded-lg" />
+                  <%= if photo.web_path do %>
+                    <img src={photo.web_path} class="w-full aspect-[3/2] object-cover rounded-lg" />
+                  <% else %>
+                    <div class="w-full aspect-[3/2] rounded-lg bg-slate-900 flex items-center justify-center text-xs text-slate-400">
+                      RAW sem preview
+                    </div>
+                  <% end %>
                   <div class="absolute bottom-1 left-1 right-1 flex gap-1 flex-wrap">
                     <span
                       :for={{color, count} <- Map.get(@tallies, photo.id, %{}) |> Enum.sort()}
