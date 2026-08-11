@@ -69,11 +69,13 @@ defmodule RevelaWeb.PostLive do
   end
 
   def handle_event("filter", %{"color" => "all"}, socket) do
-    {:noreply, clear_raw_download(assign(socket, filter: :all, selected_ids: MapSet.new(), anchor_id: nil))}
+    {:noreply,
+     clear_raw_download(assign(socket, filter: :all, selected_ids: MapSet.new(), anchor_id: nil))}
   end
 
   def handle_event("filter", %{"color" => "none"}, socket) do
-    {:noreply, clear_raw_download(assign(socket, filter: :none, selected_ids: MapSet.new(), anchor_id: nil))}
+    {:noreply,
+     clear_raw_download(assign(socket, filter: :none, selected_ids: MapSet.new(), anchor_id: nil))}
   end
 
   def handle_event("filter", %{"color" => color}, socket) do
@@ -108,14 +110,12 @@ defmodule RevelaWeb.PostLive do
           {MapSet.new([photo_id]), photo_id}
         end
 
-      {:noreply,
-       clear_raw_download(assign(socket, selected_ids: selected, anchor_id: anchor))}
+      {:noreply, clear_raw_download(assign(socket, selected_ids: selected, anchor_id: anchor))}
     end
   end
 
   def handle_event("clear_selection", _params, socket) do
-    {:noreply,
-     clear_raw_download(assign(socket, selected_ids: MapSet.new(), anchor_id: nil))}
+    {:noreply, clear_raw_download(assign(socket, selected_ids: MapSet.new(), anchor_id: nil))}
   end
 
   def handle_event("label_selection", %{"color" => color}, socket) do
@@ -229,6 +229,7 @@ defmodule RevelaWeb.PostLive do
            |> assign(:filter, :all)
            |> assign(:selected_ids, MapSet.new())
            |> assign(:anchor_id, nil)
+           |> clear_raw_download()
            |> assign(
              :raw_error,
              "A marca ainda nao marcou fotos neste editorial."
@@ -241,6 +242,7 @@ defmodule RevelaWeb.PostLive do
            |> assign(:filter, :all)
            |> assign(:selected_ids, MapSet.new(ids))
            |> assign(:anchor_id, List.first(ids))
+           |> clear_raw_download()
            |> assign(:raw_error, nil)
            |> assign(:raw_href, nil)}
         end
@@ -383,6 +385,8 @@ defmodule RevelaWeb.PostLive do
     socket
     |> assign(:raw_error, nil)
     |> assign(:raw_href, nil)
+    |> assign(:share_url, nil)
+    |> assign(:share_error, nil)
   end
 
   defp visible_photos(%{photos: photos, labels: labels, filter: filter}) do

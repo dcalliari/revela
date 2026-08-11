@@ -973,23 +973,12 @@ defmodule RevelaWeb.HostLive do
   defp free_space_hint(%{estimated_shots_left: n}) when is_integer(n),
     do: "Espaço livre: cabem ~#{n} fotos."
 
+  defp free_space_hint(%{disk_awareness: :unavailable}),
+    do:
+      "Aviso: monitoramento de disco indisponível (pacote erlang-os_mon). " <>
+        "Parada preventiva desativada."
+
   defp free_space_hint(_capture), do: nil
-
-  # aviso de os_mon ausente so no DevTools (uma vez por conexao LiveView)
-  defp maybe_warn_disk(socket, %{disk_awareness: :unavailable}) do
-    if connected?(socket) and not socket.assigns[:disk_warn_pushed] do
-      socket
-      |> assign(:disk_warn_pushed, true)
-      |> push_event("disk-awareness", %{
-        message:
-          "monitoramento de disco indisponível (pacote erlang-os_mon); parada preventiva desativada"
-      })
-    else
-      socket
-    end
-  end
-
-  defp maybe_warn_disk(socket, _capture), do: socket
 
   defp status_badge(assigns) do
     {label, class} =

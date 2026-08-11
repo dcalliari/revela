@@ -39,14 +39,10 @@ defmodule RevelaWeb.RawDownloadController do
               {:ok, zip_path} ->
                 name = "revela-raw-e#{editorial_id}.zip"
 
-                try do
-                  conn
-                  |> put_resp_content_type("application/zip")
-                  |> put_resp_header("content-disposition", ~s(attachment; filename="#{name}"))
-                  |> send_file(200, zip_path)
-                after
-                  _ = File.rm(zip_path)
-                end
+                conn
+                |> put_resp_content_type("application/zip")
+                |> put_resp_header("content-disposition", ~s(attachment; filename="#{name}"))
+                |> send_file(200, zip_path)
 
               {:error, reason} ->
                 conn

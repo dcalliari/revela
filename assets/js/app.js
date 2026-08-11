@@ -214,12 +214,6 @@ window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 // connect if there are any LiveViews on the page
 liveSocket.connect()
 
-// Host: disk awareness unavailable (no erlang-os_mon) — DevTools only, never UI
-window.addEventListener("phx:disk-awareness", (e) => {
-  const msg = e.detail && e.detail.message
-  if (msg) console.warn(msg)
-})
-
 // expose liveSocket on window for web console debug logs and latency simulation:
 // >> liveSocket.enableDebug()
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session
