@@ -235,6 +235,10 @@ defmodule RevelaWeb.HostLive do
 
           {:error, :empty_path} ->
             {:noreply, assign(socket, :notice, "Informe o caminho da pasta do cartão.")}
+
+          {:error, {:source_directory, reason}} ->
+            {:noreply,
+             assign(socket, :notice, "Não foi possível ler a pasta do cartão: #{inspect(reason)}")}
         end
     end
   end

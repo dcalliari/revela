@@ -48,37 +48,41 @@ defmodule Revela.Capture.CardImport do
   defp do_import(editorial, source_dir, preview_fun) do
     File.mkdir_p!(editorial.folder)
 
-    files = list_import_candidates(source_dir)
+    with {:ok, files} <- list_import_candidates(source_dir) do
+      {jpeg_paths, raw_paths} = Enum.split_with(files, &Ingest.jpeg?/1)
 
-    {jpeg_paths, raw_paths} = Enum.split_with(files, &Ingest.jpeg?/1)
+      {imported, skipped, errors, used_raws} =
+        Enum.reduce(jpeg_paths, {0, 0, [], MapSet.new()}, fn jpeg, acc ->
+          import_jpeg(jpeg, editorial, preview_fun, acc)
+        end)
 
-    {imported, skipped, errors, used_raws} =
-      Enum.reduce(jpeg_paths, {0, 0, [], MapSet.new()}, fn jpeg, acc ->
-        import_jpeg(jpeg, editorial, preview_fun, acc)
-      end)
+      {imported, skipped, errors, _used} =
+        Enum.reduce(raw_paths, {imported, skipped, errors, used_raws}, fn raw, acc ->
+          import_orphan_raw(raw, editorial, preview_fun, acc)
+        end)
 
-    {imported, skipped, errors, _used} =
-      Enum.reduce(raw_paths, {imported, skipped, errors, used_raws}, fn raw, acc ->
-        import_orphan_raw(raw, editorial, preview_fun, acc)
-      end)
-
-    {:ok, %{imported: imported, skipped: skipped, errors: Enum.reverse(errors)}}
+      {:ok, %{imported: imported, skipped: skipped, errors: Enum.reverse(errors)}}
+    else
+      {:error, reason} -> {:error, {:source_directory, reason}}
+    end
   end
 
   # Arquivos na pasta selecionada e um nivel abaixo (ex.: DCIM → CAMFOLDER).
   defp list_import_candidates(source_dir) do
-    direct = list_supported_files(source_dir)
+    with {:ok, entries} <- File.ls(source_dir) do
+      direct = list_supported_files(source_dir)
 
-    nested =
-      source_dir
-      |> File.ls!()
-      |> Enum.map(&Path.join(source_dir, &1))
-      |> Enum.filter(&File.dir?/1)
-      |> Enum.flat_map(&list_supported_files/1)
+      nested =
+        entries
+        |> Enum.map(&Path.join(source_dir, &1))
+        |> Enum.filter(&File.dir?/1)
+        |> Enum.flat_map(&list_supported_files/1)
 
-    (direct ++ nested)
-    |> Enum.uniq()
-    |> Enum.sort()
+      {:ok,
+       (direct ++ nested)
+       |> Enum.uniq()
+       |> Enum.sort()}
+    end
   end
 
   defp list_supported_files(dir) do
@@ -97,7 +101,7 @@ defmodule Revela.Capture.CardImport do
     hash = content_hash(jpeg_src)
     filename = Path.basename(jpeg_src)
 
-    if already_imported?(editorial.id, hash) do
+    if existing_file_content?(jpeg_src, editorial.id) or already_imported?(editorial.id, hash) do
       photo = get_photo_by_source_hash(editorial.id, hash)
       raw_src = Ingest.find_raw_sibling(jpeg_src)
 
@@ -182,6 +186,9 @@ defmodule Revela.Capture.CardImport do
       filename = Path.basename(raw_src)
 
       cond do
+        existing_file_content?(raw_src, editorial.id) ->
+          {imported, skipped + 1, errors, MapSet.put(used_raws, expanded)}
+
         raw_already_attached?(raw_src, editorial) ->
           {imported, skipped + 1, errors, MapSet.put(used_raws, expanded)}
 
@@ -345,7 +352,7 @@ defmodule Revela.Capture.CardImport do
 
         with {:ok, jpeg_dest} <- copy_into_editorial(jpeg_src, folder),
              {:ok, web_path} <- build_preview(jpeg_dest, preview_fun, editorial.id),
-             {:ok, _updated} <-
+             {:ok, updated} <-
                photo
                |> Photo.changeset(%{
                  original_path: jpeg_dest,
@@ -355,6 +362,7 @@ defmodule Revela.Capture.CardImport do
                  shot_at: file_mtime(jpeg_src)
                })
                |> Repo.update() do
+          Capture.broadcast_photo_update(updated)
           {:ok, used_raws}
         else
           {:error, reason} -> {:error, reason, used_raws}
@@ -414,6 +422,27 @@ defmodule Revela.Capture.CardImport do
     end
   rescue
     e -> {:error, Exception.message(e)}
+  end
+
+  defp existing_file_content?(source_path, editorial_id) do
+    source_hash = content_hash(source_path)
+
+    Repo.all(
+      from p in Photo,
+        where: p.editorial_id == ^editorial_id,
+        select: {p.original_path, p.raw_path}
+    )
+    |> Enum.flat_map(fn {original_path, raw_path} -> [original_path, raw_path] end)
+    |> Enum.uniq()
+    |> Enum.any?(fn path ->
+      is_binary(path) and File.regular?(path) and same_content_hash?(path, source_hash)
+    end)
+  end
+
+  defp same_content_hash?(path, expected_hash) do
+    content_hash(path) == expected_hash
+  rescue
+    _ -> false
   end
 
   defp already_imported?(editorial_id, hash) do

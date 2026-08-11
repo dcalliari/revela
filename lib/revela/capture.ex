@@ -29,6 +29,12 @@ defmodule Revela.Capture do
   defp broadcast_photo(photo),
     do: PubSub.broadcast(Revela.PubSub, @photos_topic, {:new_photo, photo})
 
+  @doc false
+  def broadcast_photo_update(photo), do: broadcast_photo(photo)
+
+  @doc false
+  def broadcast_photo_update(photo), do: broadcast_photo(photo)
+
   defp broadcast_label(photo_id),
     do: PubSub.broadcast(Revela.PubSub, @labels_topic, {:label_changed, photo_id})
 

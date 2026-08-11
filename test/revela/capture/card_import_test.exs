@@ -239,6 +239,29 @@ defmodule Revela.Capture.CardImportTest do
     assert photo.raw_path == Path.join(dest, "20260804-133708-028.cr2")
   end
 
+  test "pula JPEG cujo conteudo ja existe em foto tethered do editorial", %{
+    source: source,
+    dest: dest,
+    preview_fun: preview_fun
+  } do
+    {:ok, _editorial} = Capture.start_editorial("Cartao Tethered Dedupe", dest)
+    jpeg = Path.join(source, "IMG_TETHERED.JPG")
+    write_jpeg!(jpeg, "already-tethered")
+
+    {:ok, _photo} =
+      Capture.create_photo(%{
+        web_path: "/uploads/existing.jpg",
+        original_path: jpeg,
+        raw_path: nil,
+        shot_at: DateTime.utc_now()
+      })
+
+    assert {:ok, %{imported: 0, skipped: 1, errors: []}} =
+             CardImport.import_folder(source, preview_fun: preview_fun)
+
+    assert length(Capture.list_photos()) == 1
+  end
+
   test "reimportar a mesma pasta nao cria duplicatas", %{
     source: source,
     dest: dest,
