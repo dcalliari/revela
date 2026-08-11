@@ -54,7 +54,6 @@ defmodule RevelaWeb.HostLive do
       Capture.subscribe_labels()
       Capture.subscribe_status()
       Presence.subscribe()
-      Capture.track_host()
     end
 
     url = review_url()
@@ -80,7 +79,18 @@ defmodule RevelaWeb.HostLive do
       |> load_photos()
       |> maybe_warn_disk(capture)
 
-    socket = if connected?(socket), do: broadcast_host_viewer(socket), else: socket
+    socket =
+      if connected?(socket) do
+        # Publish this Host's fresh viewer state before registering presence:
+        # host_present?/0 flips true the instant track_host/0 runs, and until
+        # then /tv could reanimate a dead Host's stale mirrored photo via
+        # host_viewer_mirror_state/0.
+        socket = broadcast_host_viewer(socket)
+        Capture.track_host()
+        socket
+      else
+        socket
+      end
 
     {:ok, socket}
   end
