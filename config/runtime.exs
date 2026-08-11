@@ -35,6 +35,24 @@ if keep_camera_jpeg = System.get_env("REVELA_KEEP_CAMERA_JPEG") do
   config :revela, :keep_camera_jpeg, keep_camera_jpeg in ~w(1 true TRUE yes YES)
 end
 
+# Host card import: allowlist of removable-media roots (no auth). Defaults are
+# /run/media and /media; override with comma-separated absolute paths.
+case System.get_env("REVELA_CARD_IMPORT_ROOTS") do
+  nil ->
+    :ok
+
+  raw ->
+    roots =
+      raw
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+
+    if roots != [] do
+      config :revela, :card_import_allowed_roots, roots
+    end
+end
+
 config :revela, RevelaWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 

@@ -127,6 +127,48 @@ defmodule Revela.Capture.CardImportTest do
     assert Repo.aggregate(Capture.Photo, :count) == 1
   end
 
+  test "importa arquivos um nivel abaixo (DCIM/CAMFOLDER)", %{
+    source: source,
+    dest: dest,
+    preview_fun: preview_fun
+  } do
+    {:ok, _editorial} = Capture.start_editorial("Cartao Nested", dest)
+    dcim = Path.join(source, "DCIM")
+    cam = Path.join(dcim, "CAMFOLDER")
+    File.mkdir_p!(cam)
+    write_jpeg!(Path.join(dcim, "IMG_TOP.JPG"), "dcim-top")
+    write_jpeg!(Path.join(cam, "IMG_NESTED.JPG"), "camfolder")
+
+    assert {:ok, %{imported: 2, skipped: 0, errors: []}} =
+             CardImport.import_folder(dcim, preview_fun: preview_fun)
+
+    names =
+      Capture.list_photos()
+      |> Enum.map(& &1.original_filename)
+      |> Enum.sort()
+
+    assert names == ["IMG_NESTED.JPG", "IMG_TOP.JPG"]
+  end
+
+  test "preview usa stem do destino quando o basename colide", %{
+    source: source,
+    dest: dest,
+    preview_fun: preview_fun
+  } do
+    {:ok, editorial} = Capture.start_editorial("Cartao Collide", dest)
+    File.write!(Path.join(dest, "IMG_SAME.JPG"), "already-there")
+    write_jpeg!(Path.join(source, "IMG_SAME.JPG"), "imported-different")
+
+    assert {:ok, %{imported: 1, skipped: 0, errors: []}} =
+             CardImport.import_folder(source, preview_fun: preview_fun)
+
+    [photo] = Capture.list_photos()
+    assert photo.original_filename == "IMG_SAME.JPG"
+    assert Path.basename(photo.original_path) =~ "import-"
+    assert photo.web_path =~ "/uploads/#{editorial.id}/import-"
+    refute photo.web_path == "/uploads/#{editorial.id}/IMG_SAME.jpg"
+  end
+
   test "nunca escreve no limbo sem editorial", %{source: source, preview_fun: preview_fun} do
     write_jpeg!(Path.join(source, "IMG_LIMBO.JPG"), "limbo")
 

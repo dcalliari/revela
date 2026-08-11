@@ -14,7 +14,10 @@ config :revela,
   # REVELA_DEMO=1 in runtime — never a Host UI toggle.
   demo: false,
   # JPEG da camera e descartado apos preview + RAW assentado, salvo override.
-  keep_camera_jpeg: false
+  keep_camera_jpeg: false,
+  # Host "Importar do cartão": apenas pastas sob estas raízes (sem login).
+  # Override em runtime via REVELA_CARD_IMPORT_ROOTS (lista separada por vírgula).
+  card_import_allowed_roots: ["/run/media", "/media"]
 
 # Configure the endpoint
 config :revela, RevelaWeb.Endpoint,

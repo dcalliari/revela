@@ -185,41 +185,54 @@ defmodule RevelaWeb.HostLive do
 
     socket = assign(socket, :import_path, path)
 
-    case Capture.import_from_folder(path) do
-      {:ok, %{imported: imported, skipped: skipped, errors: errors}} ->
-        notice =
-          cond do
-            errors != [] ->
-              "Importação parcial: #{imported} novas, #{skipped} já existentes, " <>
-                "#{length(errors)} com erro."
-
-            imported == 0 and skipped > 0 ->
-              "Nenhuma foto nova (#{skipped} já estavam no editorial)."
-
-            imported == 0 ->
-              "Nenhum JPEG/RAW suportado na pasta."
-
-            true ->
-              "Importadas #{imported} foto(s)" <>
-                if(skipped > 0, do: " (#{skipped} já existentes).", else: ".")
-          end
-
-        {:noreply,
-         socket
-         |> assign(:notice, notice)
-         |> load_photos()}
-
-      {:error, :no_active_editorial} ->
-        {:noreply,
-         assign(socket, :notice, "Abra um editorial antes de importar fotos do cartão.")}
-
-      {:error, :not_a_directory} ->
-        {:noreply, assign(socket, :notice, "Pasta não encontrada: #{path}")}
-
-      {:error, :empty_path} ->
+    cond do
+      path == "" ->
         {:noreply, assign(socket, :notice, "Informe o caminho da pasta do cartão.")}
+
+      not allowed_import_path?(path) ->
+        {:noreply,
+         assign(
+           socket,
+           :notice,
+           "Pasta fora das raízes de mídia permitidas (ex.: /run/media, /media)."
+         )}
+
+      true ->
+        case Capture.import_from_folder(path) do
+          {:ok, %{imported: imported, skipped: skipped, errors: errors}} ->
+            notice =
+              cond do
+                errors != [] ->
+                  "Importação parcial: #{imported} novas, #{skipped} já existentes, " <>
+                    "#{length(errors)} com erro."
+
+                imported == 0 and skipped > 0 ->
+                  "Nenhuma foto nova (#{skipped} já estavam no editorial)."
+
+                imported == 0 ->
+                  "Nenhum JPEG/RAW suportado na pasta."
+
+                true ->
+                  "Importadas #{imported} foto(s)" <>
+                    if(skipped > 0, do: " (#{skipped} já existentes).", else: ".")
+              end
+
+            {:noreply,
+             socket
+             |> assign(:notice, notice)
+             |> load_photos()}
+
+          {:error, :no_active_editorial} ->
+            {:noreply,
+             assign(socket, :notice, "Abra um editorial antes de importar fotos do cartão.")}
+
+          {:error, :not_a_directory} ->
+            {:noreply, assign(socket, :notice, "Pasta não encontrada: #{path}")}
+
+          {:error, :empty_path} ->
+            {:noreply, assign(socket, :notice, "Informe o caminho da pasta do cartão.")}
+        end
     end
-  end
   end
 
   def handle_event("pick", %{"color" => c}, socket) do
@@ -346,6 +359,20 @@ defmodule RevelaWeb.HostLive do
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   # ── helpers ──────────────────────────────────────────────────────────────────
+
+  # Host so importa de raizes de midia removivel (padrao /run/media e /media;
+  # override via config :card_import_allowed_roots / REVELA_CARD_IMPORT_ROOTS).
+  defp allowed_import_path?(path) when is_binary(path) do
+    expanded = Path.expand(path)
+
+    :revela
+    |> Application.get_env(:card_import_allowed_roots, ["/run/media", "/media"])
+    |> List.wrap()
+    |> Enum.any?(fn root ->
+      root = root |> to_string() |> Path.expand()
+      expanded == root or String.starts_with?(expanded, root <> "/")
+    end)
+  end
 
   # lista completa para o viewer (follow/atalhos); grade usa pagina filtrada via stream
   defp load_photos(socket) do

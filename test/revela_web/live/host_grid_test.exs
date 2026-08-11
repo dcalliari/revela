@@ -104,4 +104,16 @@ defmodule RevelaWeb.HostGridTest do
     assert has_element?(view, "#grid-photo-#{newest.id}")
     refute has_element?(view, "#host-grid-empty")
   end
+
+  test "recusa import do cartao fora das raizes de midia", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/host")
+
+    view
+    |> form("#card-import-form", %{path: "/tmp/not-a-removable-card"})
+    |> render_submit()
+
+    html = render(view)
+    assert html =~ "raízes de mídia permitidas"
+    assert html =~ "/tmp/not-a-removable-card"
+  end
 end

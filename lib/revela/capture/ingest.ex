@@ -145,7 +145,10 @@ defmodule Revela.Capture.Ingest do
   # libjpeg decodifica direto numa escala DCT reduzida em vez de abrir os 17.9 MP
   # da T6 para so entao encolher. `-auto-orient` precisa continuar antes do
   # `-thumbnail`, que descarta o EXIF junto com a tag de orientacao.
-  defp make_preview(src, dest) do
+  @doc """
+  Gera o JPEG de preview web em `dest` a partir de `src` (ImageMagick `magick`).
+  """
+  def make_preview(src, dest) do
     File.mkdir_p!(Path.dirname(dest))
 
     case System.cmd(
@@ -494,15 +497,20 @@ defmodule Revela.Capture.Ingest do
 
   defp parse_name_datetime(_, _), do: :error
 
-  defp jpeg?(path) do
+  @doc "True se a extensao for JPEG (`.jpg`/`.jpeg`)."
+  def jpeg?(path) do
     ext = path |> Path.extname() |> String.downcase()
     ext in @jpeg_exts
   end
 
-  defp raw?(path) do
+  @doc "True se a extensao for RAW Canon (`.cr2`/`.cr3`)."
+  def raw?(path) do
     ext = path |> Path.extname() |> String.downcase()
     ext in @raw_exts
   end
+
+  @doc "True se o arquivo for JPEG ou RAW suportado para import/ingest."
+  def supported_photo?(path), do: jpeg?(path) or raw?(path)
 
   defp raw_filename?(name) do
     ext = name |> Path.extname() |> String.downcase()

@@ -48,12 +48,7 @@ defmodule Revela.Capture.CardImport do
   defp do_import(editorial, source_dir, preview_fun) do
     File.mkdir_p!(editorial.folder)
 
-    files =
-      source_dir
-      |> File.ls!()
-      |> Enum.map(&Path.join(source_dir, &1))
-      |> Enum.filter(&(File.regular?(&1) and Ingest.supported_photo?(&1)))
-      |> Enum.sort()
+    files = list_import_candidates(source_dir)
 
     {jpeg_paths, raw_paths} = Enum.split_with(files, &Ingest.jpeg?/1)
 
@@ -70,6 +65,34 @@ defmodule Revela.Capture.CardImport do
     {:ok, %{imported: imported, skipped: skipped, errors: Enum.reverse(errors)}}
   end
 
+  # Arquivos na pasta selecionada e um nivel abaixo (ex.: DCIM → CAMFOLDER).
+  defp list_import_candidates(source_dir) do
+    direct = list_supported_files(source_dir)
+
+    nested =
+      source_dir
+      |> File.ls!()
+      |> Enum.map(&Path.join(source_dir, &1))
+      |> Enum.filter(&File.dir?/1)
+      |> Enum.flat_map(&list_supported_files/1)
+
+    (direct ++ nested)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp list_supported_files(dir) do
+    case File.ls(dir) do
+      {:ok, names} ->
+        names
+        |> Enum.map(&Path.join(dir, &1))
+        |> Enum.filter(&(File.regular?(&1) and Ingest.supported_photo?(&1)))
+
+      {:error, _} ->
+        []
+    end
+  end
+
   defp import_jpeg(jpeg_src, editorial, preview_fun, {imported, skipped, errors, used_raws}) do
     hash = content_hash(jpeg_src)
     filename = Path.basename(jpeg_src)
@@ -83,7 +106,7 @@ defmodule Revela.Capture.CardImport do
 
       with {:ok, jpeg_dest} <- copy_into_editorial(jpeg_src, editorial.folder),
            {:ok, raw_dest, used_raws} <- maybe_copy_raw(raw_src, editorial.folder, used_raws),
-           {:ok, web_path} <- build_preview(jpeg_dest, filename, preview_fun),
+           {:ok, web_path} <- build_preview(jpeg_dest, preview_fun),
            {:ok, _photo} <-
              Capture.create_photo(%{
                web_path: web_path,
@@ -121,7 +144,7 @@ defmodule Revela.Capture.CardImport do
         {imported, skipped + 1, errors, used_raws}
       else
         with {:ok, raw_dest} <- copy_into_editorial(raw_src, editorial.folder),
-             {:ok, web_path} <- build_preview(raw_dest, filename, preview_fun),
+             {:ok, web_path} <- build_preview(raw_dest, preview_fun),
              {:ok, _photo} <-
                Capture.create_photo(%{
                  web_path: web_path,
@@ -159,12 +182,12 @@ defmodule Revela.Capture.CardImport do
     end
   end
 
-  defp build_preview(src, original_filename, preview_fun) do
-    stem = original_filename |> Path.rootname()
+  defp build_preview(dest_path, preview_fun) do
+    stem = dest_path |> Path.basename() |> Path.rootname()
     {web_rel, web_path} = Ingest.preview_paths(stem)
     web_dest = Path.join(uploads_dir(), web_rel)
 
-    case preview_fun.(src, web_dest) do
+    case preview_fun.(dest_path, web_dest) do
       :ok -> {:ok, web_path}
       {:error, reason} -> {:error, reason}
     end

@@ -227,28 +227,14 @@ defmodule RevelaWeb.HostLiveTest do
   end
 
   test "mostra o formulario de importacao do cartao" do
-    html =
-      render_component(&HostLive.render/1, %{
-        url: "http://localhost:4000/",
-        qr: "",
-        capture: %{
-          status: :idle,
-          message: nil,
-          camera_present: false,
-          editorial: "Casamento"
-        },
-        reviewers: [],
-        open: false,
-        idx: 0,
-        follow: true,
-        notice: nil,
-        import_path: "",
-        labels: %{},
-        photos: [],
-        total: 0,
-        recent: [],
-        tallies: %{}
-      })
+    html = render_component(&HostLive.render/1, host_render_assigns(%{
+      capture: %{
+        status: :idle,
+        message: nil,
+        camera_present: false,
+        editorial: "Casamento"
+      }
+    }))
 
     document = LazyHTML.from_fragment(html)
     assert selected_count(document, "#card-import") == 1
@@ -258,7 +244,21 @@ defmodule RevelaWeb.HostLiveTest do
 
   test "desabilita importacao do cartao sem editorial" do
     html =
-      render_component(&HostLive.render/1, %{
+      render_component(
+        &HostLive.render/1,
+        host_render_assigns(%{
+          capture: %{status: :idle, message: nil, camera_present: false, editorial: nil}
+        })
+      )
+
+    document = LazyHTML.from_fragment(html)
+    assert selected_count(document, "#card-import-submit[disabled]") == 1
+    assert selected_text(document, "#card-import-hint") =~ "Inicie um editorial"
+  end
+
+  defp host_render_assigns(overrides) do
+    Map.merge(
+      %{
         url: "http://localhost:4000/",
         qr: "",
         capture: %{status: :idle, message: nil, camera_present: false, editorial: nil},
@@ -272,12 +272,16 @@ defmodule RevelaWeb.HostLiveTest do
         photos: [],
         total: 0,
         recent: [],
-        tallies: %{}
-      })
-
-    document = LazyHTML.from_fragment(html)
-    assert selected_count(document, "#card-import-submit[disabled]") == 1
-    assert selected_text(document, "#card-import-hint") =~ "Inicie um editorial"
+        tallies: %{},
+        page: 0,
+        page_size: 24,
+        total_pages: 1,
+        filter_colors: MapSet.new(),
+        grid_empty?: true,
+        streams: %{grid_photos: []}
+      },
+      overrides
+    )
   end
 
   defp render_capture_card(capture) do
