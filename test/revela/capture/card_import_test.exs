@@ -120,6 +120,32 @@ defmodule Revela.Capture.CardImportTest do
     assert photo.original_path == Path.join(dest, "IMG_0004.JPG")
   end
 
+  test "RAW reimportado depois do merge JPEG continua idempotente", %{
+    source: source,
+    dest: dest,
+    preview_fun: preview_fun
+  } do
+    {:ok, _editorial} = Capture.start_editorial("Cartao RAW merge idem", dest)
+    jpeg = Path.join(source, "IMG_0006.JPG")
+    raw = Path.join(source, "IMG_0006.CR2")
+    write_bytes!(raw, "raw-first")
+
+    assert {:ok, %{imported: 1}} = CardImport.import_folder(source, preview_fun: preview_fun)
+    File.rm!(raw)
+    write_jpeg!(jpeg, "jpeg-later")
+
+    assert {:ok, %{imported: 0, skipped: 1}} =
+             CardImport.import_folder(source, preview_fun: preview_fun)
+
+    File.rm!(jpeg)
+    write_bytes!(raw, "raw-first")
+
+    assert {:ok, %{imported: 0, skipped: 1, errors: []}} =
+             CardImport.import_folder(source, preview_fun: preview_fun)
+
+    assert length(Capture.list_photos()) == 1
+  end
+
   test "RAW tardio respeita editorial ativo quando a pasta e reutilizada", %{
     source: source,
     dest: dest,
@@ -139,7 +165,9 @@ defmodule Revela.Capture.CardImportTest do
 
     [photo] = Repo.all(from p in Capture.Photo, where: p.editorial_id == ^second.id)
     assert photo.editorial_id == second.id
-    assert Repo.aggregate(from(p in Capture.Photo, where: p.editorial_id == ^first.id), :count) == 1
+
+    assert Repo.aggregate(from(p in Capture.Photo, where: p.editorial_id == ^first.id), :count) ==
+             1
   end
 
   test "importa RAW avulso e preenche raw_path", %{

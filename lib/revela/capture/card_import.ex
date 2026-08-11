@@ -181,28 +181,34 @@ defmodule Revela.Capture.CardImport do
       hash = content_hash(raw_src)
       filename = Path.basename(raw_src)
 
-      case attach_raw_to_existing_photo(raw_src, editorial, used_raws) do
-        {:ok, used_raws} ->
-          {imported, skipped + 1, errors, used_raws}
+      cond do
+        raw_already_attached?(raw_src, editorial) ->
+          {imported, skipped + 1, errors, MapSet.put(used_raws, expanded)}
 
-        :not_found ->
-          if already_imported?(editorial.id, hash) do
-            {imported, skipped + 1, errors, used_raws}
-          else
-            import_new_raw(
-              raw_src,
-              editorial,
-              preview_fun,
-              hash,
-              imported,
-              skipped,
-              errors,
-              used_raws
-            )
+        true ->
+          case attach_raw_to_existing_photo(raw_src, editorial, used_raws) do
+            {:ok, used_raws} ->
+              {imported, skipped + 1, errors, used_raws}
+
+            :not_found ->
+              if already_imported?(editorial.id, hash) do
+                {imported, skipped + 1, errors, used_raws}
+              else
+                import_new_raw(
+                  raw_src,
+                  editorial,
+                  preview_fun,
+                  hash,
+                  imported,
+                  skipped,
+                  errors,
+                  used_raws
+                )
+              end
+
+            {:error, reason, used_raws} ->
+              {imported, skipped, [{filename, reason} | errors], used_raws}
           end
-
-        {:error, reason, used_raws} ->
-          {imported, skipped, [{filename, reason} | errors], used_raws}
       end
     end
   end
@@ -258,18 +264,28 @@ defmodule Revela.Capture.CardImport do
   defp attach_existing_raw(_photo, nil, _folder, used_raws), do: {:ok, used_raws}
 
   defp attach_existing_raw(photo, raw_src, folder, used_raws) do
-    used_raws = MapSet.put(used_raws, Path.expand(raw_src))
-
     if is_binary(photo.raw_path) and photo.raw_path != "" do
-      {:ok, used_raws}
+      {:ok, MapSet.put(used_raws, Path.expand(raw_src))}
     else
       with {:ok, raw_dest} <- copy_into_editorial(raw_src, folder),
            {:ok, _photo} <- Capture.update_raw_path(photo, raw_dest) do
-        {:ok, used_raws}
+        {:ok, MapSet.put(used_raws, Path.expand(raw_src))}
       else
         {:error, reason} -> {:error, reason, used_raws}
       end
     end
+  end
+
+  defp raw_already_attached?(raw_src, editorial) do
+    matching_raw = Path.join(editorial.folder, Path.basename(raw_src))
+
+    from(p in Photo,
+      where: p.editorial_id == ^editorial.id and not is_nil(p.raw_path) and p.raw_path != ""
+    )
+    |> Repo.all()
+    |> Enum.any?(fn photo ->
+      sibling_matches_photo?(photo, matching_raw, editorial.folder)
+    end)
   end
 
   defp attach_raw_to_existing_photo(raw_src, editorial, used_raws) do
