@@ -358,6 +358,69 @@ defmodule Revela.Capture.IngestTest do
     assert Capture.get_photo!(second.id).raw_path in [nil, ""]
   end
 
+  test "attach_raw descarta JPEG apos RAW assentado e preserva RAW", %{dir: dir} do
+    jpeg = touch!(dir, "20260804-133708-027.jpg")
+    raw = touch!(dir, "20260804-133708-028.cr2")
+
+    {:ok, photo} =
+      Capture.create_photo(%{
+        web_path: "/uploads/preview.jpg",
+        original_path: jpeg,
+        raw_path: nil,
+        shot_at: DateTime.utc_now()
+      })
+
+    assert {:ok, updated} = Ingest.attach_raw(raw)
+    assert updated.id == photo.id
+    refute File.exists?(jpeg)
+    assert File.exists?(raw)
+    assert Capture.get_photo!(photo.id).original_path == nil
+  end
+
+  test "JPEG fica quando configurado para manter", %{dir: dir} do
+    previous = Application.get_env(:revela, :keep_camera_jpeg)
+    Application.put_env(:revela, :keep_camera_jpeg, true)
+    on_exit(fn -> Application.put_env(:revela, :keep_camera_jpeg, previous) end)
+
+    jpeg = touch!(dir, "20260804-133708-027.jpg")
+    raw = touch!(dir, "20260804-133708-028.cr2")
+
+    {:ok, photo} =
+      Capture.create_photo(%{
+        web_path: "/uploads/preview.jpg",
+        original_path: jpeg,
+        raw_path: nil,
+        shot_at: DateTime.utc_now()
+      })
+
+    assert {:ok, _updated} = Ingest.attach_raw(raw)
+    assert File.exists?(jpeg)
+    assert Capture.get_photo!(photo.id).original_path == jpeg
+  end
+
+  test "falha no preview nao apaga JPEG", %{dir: dir} do
+    jpeg = touch!(dir, "invalid.jpg")
+
+    assert {:error, _reason} = Ingest.process(jpeg)
+    assert File.exists?(jpeg)
+  end
+
+  test "JPEG permanece quando RAW ainda nao chegou", %{dir: dir} do
+    jpeg = touch!(dir, "20260804-133708-027.jpg")
+
+    {:ok, photo} =
+      Capture.create_photo(%{
+        web_path: "/uploads/preview.jpg",
+        original_path: jpeg,
+        raw_path: nil,
+        shot_at: DateTime.utc_now()
+      })
+
+    assert Ingest.attach_raw(Path.join(dir, "20260804-133708-028.cr2")) == :ignore
+    assert File.exists?(jpeg)
+    assert Capture.get_photo!(photo.id).original_path == jpeg
+  end
+
   defp touch!(dir, name) do
     path = Path.join(dir, name)
     File.write!(path, "x")

@@ -62,7 +62,7 @@ defmodule Revela.Capture.Ingest do
                shot_at: DateTime.utc_now()
              }) do
           {:ok, photo} ->
-            {:ok, photo}
+            maybe_claim_raw_sibling(photo, path)
 
           error ->
             error
@@ -71,6 +71,17 @@ defmodule Revela.Capture.Ingest do
       {:error, reason} ->
         Logger.error("Falha ao gerar preview de #{path}: #{reason}")
         {:error, reason}
+    end
+  end
+
+  defp maybe_claim_raw_sibling(photo, jpeg_path) do
+    case find_raw_sibling(jpeg_path) do
+      nil -> {:ok, photo}
+      raw_path ->
+        case Capture.update_raw_path(photo, raw_path) do
+          {:ok, updated} -> maybe_discard_after_raw(updated, jpeg_path, raw_path)
+          error -> error
+        end
     end
   end
 
