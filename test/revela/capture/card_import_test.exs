@@ -179,6 +179,34 @@ defmodule Revela.Capture.CardImportTest do
     refute File.exists?(Path.join(uploads, "IMG_LIMBO.jpg"))
   end
 
+  test "mantem editorial e preview pinados se o editorial terminar no meio do import", %{
+    source: source,
+    dest: dest
+  } do
+    {:ok, editorial} = Capture.start_editorial("Cartao Mid Finish", dest)
+    write_jpeg!(Path.join(source, "IMG_PIN.JPG"), "pinned-mid-finish")
+
+    preview_fun = fn src, dest_path ->
+      Capture.finish_editorial()
+      stub_preview(src, dest_path)
+    end
+
+    assert {:ok, %{imported: 1, skipped: 0, errors: []}} =
+             CardImport.import_folder(source, preview_fun: preview_fun)
+
+    assert is_nil(Capture.current_editorial_id())
+    assert Capture.list_photos() == []
+
+    [photo] = Repo.all(from p in Capture.Photo, where: p.editorial_id == ^editorial.id)
+    assert photo.editorial_id == editorial.id
+    assert photo.web_path == "/uploads/#{editorial.id}/IMG_PIN.jpg"
+    refute String.contains?(photo.web_path, "_sem-editorial")
+
+    uploads = Application.app_dir(:revela, "priv/static/uploads")
+    assert File.exists?(Path.join(uploads, "#{editorial.id}/IMG_PIN.jpg"))
+    refute File.exists?(Path.join(uploads, "_sem-editorial/IMG_PIN.jpg"))
+  end
+
   defp stub_preview(_src, dest) do
     File.mkdir_p!(Path.dirname(dest))
     File.write!(dest, <<0xFF, 0xD8, 0xFF, 0xD9>>)

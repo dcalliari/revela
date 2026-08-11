@@ -126,18 +126,17 @@ defmodule Revela.Capture.Ingest do
   end
 
   @doc false
-  def preview_paths(stem) do
-    scope = preview_scope()
+  def preview_paths(stem), do: preview_paths(stem, Capture.current_editorial_id())
+
+  @doc false
+  def preview_paths(stem, editorial_id) when is_integer(editorial_id) or is_nil(editorial_id) do
+    scope = preview_scope(editorial_id)
     web_name = stem <> ".jpg"
     {Path.join(scope, web_name), "/uploads/#{scope}/#{web_name}"}
   end
 
-  defp preview_scope do
-    case Capture.current_editorial_id() do
-      nil -> "_sem-editorial"
-      id -> Integer.to_string(id)
-    end
-  end
+  defp preview_scope(nil), do: "_sem-editorial"
+  defp preview_scope(id) when is_integer(id), do: Integer.to_string(id)
 
   # Reduz o JPEG da camera para um preview web (so encolhe, nunca amplia).
   #

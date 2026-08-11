@@ -106,7 +106,7 @@ defmodule Revela.Capture.CardImport do
 
       with {:ok, jpeg_dest} <- copy_into_editorial(jpeg_src, editorial.folder),
            {:ok, raw_dest, used_raws} <- maybe_copy_raw(raw_src, editorial.folder, used_raws),
-           {:ok, web_path} <- build_preview(jpeg_dest, preview_fun),
+           {:ok, web_path} <- build_preview(jpeg_dest, preview_fun, editorial.id),
            {:ok, _photo} <-
              Capture.create_photo(%{
                web_path: web_path,
@@ -114,7 +114,8 @@ defmodule Revela.Capture.CardImport do
                raw_path: raw_dest,
                source_hash: hash,
                original_filename: filename,
-               shot_at: file_mtime(jpeg_src)
+               shot_at: file_mtime(jpeg_src),
+               editorial_id: editorial.id
              }) do
         {imported + 1, skipped, errors, used_raws}
       else
@@ -144,7 +145,7 @@ defmodule Revela.Capture.CardImport do
         {imported, skipped + 1, errors, used_raws}
       else
         with {:ok, raw_dest} <- copy_into_editorial(raw_src, editorial.folder),
-             {:ok, web_path} <- build_preview(raw_dest, preview_fun),
+             {:ok, web_path} <- build_preview(raw_dest, preview_fun, editorial.id),
              {:ok, _photo} <-
                Capture.create_photo(%{
                  web_path: web_path,
@@ -152,7 +153,8 @@ defmodule Revela.Capture.CardImport do
                  raw_path: raw_dest,
                  source_hash: hash,
                  original_filename: filename,
-                 shot_at: file_mtime(raw_src)
+                 shot_at: file_mtime(raw_src),
+                 editorial_id: editorial.id
                }) do
           {imported + 1, skipped, errors, MapSet.put(used_raws, expanded)}
         else
@@ -182,9 +184,9 @@ defmodule Revela.Capture.CardImport do
     end
   end
 
-  defp build_preview(dest_path, preview_fun) do
+  defp build_preview(dest_path, preview_fun, editorial_id) do
     stem = dest_path |> Path.basename() |> Path.rootname()
-    {web_rel, web_path} = Ingest.preview_paths(stem)
+    {web_rel, web_path} = Ingest.preview_paths(stem, editorial_id)
     web_dest = Path.join(uploads_dir(), web_rel)
 
     case preview_fun.(dest_path, web_dest) do

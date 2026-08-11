@@ -119,7 +119,11 @@ defmodule Revela.Capture do
   """
   def create_photo(attrs) do
     seq = (Repo.one(from p in Photo, select: max(p.seq)) || 0) + 1
-    attrs = attrs |> Map.put(:seq, seq) |> Map.put(:editorial_id, current_editorial_id())
+
+    attrs =
+      attrs
+      |> Map.put(:seq, seq)
+      |> Map.put_new(:editorial_id, current_editorial_id())
 
     %Photo{}
     |> Photo.changeset(attrs)

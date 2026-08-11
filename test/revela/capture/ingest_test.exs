@@ -18,6 +18,19 @@ defmodule Revela.Capture.IngestTest do
     %{dir: dir}
   end
 
+  test "preview paths aceitam editorial_id explicito" do
+    {:ok, editorial} = Capture.start_editorial("Pinned", "/tmp/pinned")
+    id = Integer.to_string(editorial.id)
+
+    Capture.finish_editorial()
+
+    assert Ingest.preview_paths("pinned-stem", editorial.id) ==
+             {"#{id}/pinned-stem.jpg", "/uploads/#{id}/pinned-stem.jpg"}
+
+    assert Ingest.preview_paths("pinned-stem") ==
+             {"_sem-editorial/pinned-stem.jpg", "/uploads/_sem-editorial/pinned-stem.jpg"}
+  end
+
   test "preview paths ficam no limbo sem editorial ativo" do
     assert Ingest.preview_paths("IMG_001") ==
              {"_sem-editorial/IMG_001.jpg", "/uploads/_sem-editorial/IMG_001.jpg"}
