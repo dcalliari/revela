@@ -240,9 +240,12 @@ defmodule Revela.Capture.CardImport do
   end
 
   defp attach_raw_to_existing_photo(raw_src, folder, used_raws) do
+    matching_raw = Path.join(folder, Path.basename(raw_src))
+
     case Capture.list_photos_missing_raw(dir: folder)
          |> Enum.find(fn photo ->
-           is_binary(photo.original_path) and Ingest.sibling_pair?(photo.original_path, raw_src)
+           is_binary(photo.original_path) and
+             Ingest.sibling_pair?(photo.original_path, matching_raw)
          end) do
       nil ->
         :not_found
