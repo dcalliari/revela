@@ -40,6 +40,9 @@ defmodule Revela.Delivery.LocalShare do
                 {:ok, share} -> {:ok, share, "/share/#{share.token}"}
                 error -> error
               end
+
+            {:error, _} = error ->
+              error
           end
         end
     end
@@ -62,7 +65,7 @@ defmodule Revela.Delivery.LocalShare do
       share ->
         case Capture.touch_brand_share(share) do
           {:ok, touched} -> {:ok, touched}
-          {:error, _} -> :new
+          {:error, _} = error -> error
         end
     end
   end

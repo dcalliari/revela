@@ -80,7 +80,7 @@ defmodule RevelaWeb.RawDownloadController do
   end
 
   defp build_zip(files) do
-    id = System.unique_integer([:positive])
+    id = Ecto.UUID.generate()
 
     case staging_paths(files, id) do
       {:ok, work_dir, zip_path} ->
@@ -112,6 +112,9 @@ defmodule RevelaWeb.RawDownloadController do
     Enum.find_value(staging_roots(files), fn root ->
       work_dir = Path.join(root, name)
       zip_path = Path.join(root, "#{name}.zip")
+
+      _ = File.rm_rf(work_dir)
+      _ = File.rm(zip_path)
 
       case File.mkdir_p(work_dir) do
         :ok -> {:ok, work_dir, zip_path}

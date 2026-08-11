@@ -380,6 +380,101 @@ defmodule Revela.Capture do
     end
   end
 
+  @doc "Editorial por id, ou nil."
+  def get_editorial(id) when is_integer(id), do: Repo.get(Editorial, id)
+  def get_editorial(_), do: nil
+
+  @doc "Todos os editoriais, mais recentes primeiro (ativos e finalizados)."
+  def list_editorials do
+    from(e in Editorial, order_by: [desc: e.started_at])
+    |> Repo.all()
+  end
+
+  @doc "Mapa %{photo_id => color} de um revisor num editorial (ativo ou nao)."
+  def labels_for_reviewer_in_editorial(reviewer_id, editorial_id) do
+    from(l in Label,
+      join: p in Photo,
+      on: p.id == l.photo_id,
+      where: l.reviewer_id == ^reviewer_id and p.editorial_id == ^editorial_id,
+      select: {l.photo_id, l.color}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc """
+  Agregacao de cores para um editorial especifico.
+
+  Labels `brand-*` so entram do BrandShare mais recente (mesmo criterio de
+  `brand_labeled_photo_ids/1`); shares supersedidos nao aparecem na grade Post.
+  """
+  def tallies_for_editorial(editorial_id) do
+    brand_scope = brand_label_scope(editorial_id)
+
+    from(l in Label,
+      join: p in Photo,
+      on: p.id == l.photo_id,
+      where: p.editorial_id == ^editorial_id,
+      where: ^brand_scope,
+      group_by: [l.photo_id, l.color],
+      select: {l.photo_id, l.color, count(l.id)}
+    )
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn {photo_id, color, count}, acc ->
+      Map.update(acc, photo_id, %{color => count}, &Map.put(&1, color, count))
+    end)
+  end
+
+  @doc """
+  IDs de fotos marcadas no BrandShare mais recente deste editorial
+  (`brand-<token>`), em ordem de captura (`seq`). Shares antigos nao entram.
+  """
+  def brand_labeled_photo_ids(editorial_id) do
+    case list_brand_shares_for_editorial(editorial_id) do
+      [] ->
+        []
+
+      [%BrandShare{token: token} | _] ->
+        reviewer_id = "brand-#{token}"
+
+        from(p in Photo,
+          join: l in Label,
+          on: l.photo_id == p.id,
+          where: p.editorial_id == ^editorial_id,
+          where: l.reviewer_id == ^reviewer_id,
+          order_by: [asc: p.seq],
+          select: p.id
+        )
+        |> Repo.all()
+    end
+  end
+
+  # ── Brand shares (URL de previews para a marca) ─────────────────────────────
+
+  def create_brand_share(attrs) do
+    %BrandShare{}
+    |> BrandShare.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def touch_brand_share(%BrandShare{} = share) do
+    share
+    |> Ecto.Changeset.change(%{updated_at: DateTime.utc_now(:microsecond)})
+    |> Repo.update()
+  end
+
+  def get_brand_share_by_token(token) when is_binary(token) do
+    Repo.get_by(BrandShare, token: token)
+  end
+
+  def list_brand_shares_for_editorial(editorial_id) do
+    from(s in BrandShare,
+      where: s.editorial_id == ^editorial_id,
+      order_by: [desc: s.updated_at, desc: s.id]
+    )
+    |> Repo.all()
+  end
+
   defp finish_active_editorial do
     from(e in Editorial, where: is_nil(e.finished_at))
     |> Repo.update_all(set: [finished_at: DateTime.utc_now()])
@@ -447,13 +542,23 @@ defmodule Revela.Capture do
   Agregacao para a tela do host no editorial atual: mapa
   `%{photo_id => %{color => count}}` com a contagem de cada cor entre todos os
   revisores. Vazio se nao ha editorial ativo.
+
+  Labels `brand-*` seguem o mesmo criterio de `tallies_for_editorial/1`:
+  so o BrandShare mais recente conta.
   """
   def tallies do
+    brand_scope =
+      case current_editorial_id() do
+        nil -> dynamic([l], true)
+        editorial_id -> brand_label_scope(editorial_id)
+      end
+
     from(l in Label,
       join: p in Photo,
       as: :photo,
       on: p.id == l.photo_id,
       where: ^editorial_scope(),
+      where: ^brand_scope,
       group_by: [l.photo_id, l.color],
       select: {l.photo_id, l.color, count(l.id)}
     )
@@ -461,5 +566,16 @@ defmodule Revela.Capture do
     |> Enum.reduce(%{}, fn {photo_id, color, count}, acc ->
       Map.update(acc, photo_id, %{color => count}, &Map.put(&1, color, count))
     end)
+  end
+
+  defp brand_label_scope(editorial_id) do
+    case list_brand_shares_for_editorial(editorial_id) do
+      [%BrandShare{token: token} | _] ->
+        latest = "brand-#{token}"
+        dynamic([l], not like(l.reviewer_id, "brand-%") or l.reviewer_id == ^latest)
+
+      [] ->
+        dynamic([l], not like(l.reviewer_id, "brand-%"))
+    end
   end
 end
