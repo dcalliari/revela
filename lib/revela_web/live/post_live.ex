@@ -300,8 +300,14 @@ defmodule RevelaWeb.PostLive do
     socket = assign(socket, :editorials, Capture.list_editorials())
 
     case socket.assigns.editorial do
-      %{id: id} -> {:noreply, load_editorial(socket, id)}
-      nil -> {:noreply, socket}
+      %{id: id} ->
+        case Capture.get_editorial(id) do
+          nil -> {:noreply, clear_editorial(socket)}
+          editorial -> {:noreply, refresh_editorial_data(assign(socket, :editorial, editorial))}
+        end
+
+      nil ->
+        {:noreply, socket}
     end
   end
 

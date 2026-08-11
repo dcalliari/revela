@@ -187,7 +187,9 @@ defmodule RevelaWeb.PostLiveTest do
     {:ok, b} = Capture.create_photo(%{web_path: "/uploads/pos-live-b.jpg"})
     assert has_element?(view, "#post-photo-#{b.id}")
 
-    Capture.set_label(a.id, "brand-live", "marca", 4)
-    assert render(view) =~ Colors.hex(4)
+    {:ok, share, _} = Delivery.create_brand_share(editorial.id, [a.id])
+    Capture.set_label(a.id, "brand-#{share.token}", "marca", 4)
+
+    assert view |> element("#post-photo-#{a.id}") |> render() =~ Colors.hex(4)
   end
 end
