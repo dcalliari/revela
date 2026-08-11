@@ -53,16 +53,16 @@ defmodule Revela.Capture.Ingest do
 
     case make_preview(path, web_dest) do
       :ok ->
-        raw_path = find_raw_sibling(path)
-
+        # O RAW pode ainda estar em transferencia. O claim e o descarte ficam
+        # para attach_raw/1, chamado somente depois do settle do watcher.
         case Capture.create_photo(%{
                web_path: web_path,
                original_path: path,
-               raw_path: raw_path,
+               raw_path: nil,
                shot_at: DateTime.utc_now()
              }) do
           {:ok, photo} ->
-            maybe_discard_after_raw(photo, path, raw_path)
+            {:ok, photo}
 
           error ->
             error
@@ -75,20 +75,10 @@ defmodule Revela.Capture.Ingest do
   end
 
   defp maybe_discard_after_raw(photo, jpeg_path, raw_path) do
-    if is_binary(raw_path) and raw_settled?(raw_path) do
+    if is_binary(raw_path) do
       discard_camera_jpeg(photo, jpeg_path)
     else
       {:ok, photo}
-    end
-  end
-
-  defp raw_settled?(path) do
-    with {:ok, %{size: size}} <- File.stat(path),
-         _ <- Process.sleep(600),
-         {:ok, %{size: ^size}} <- File.stat(path) do
-      true
-    else
-      _ -> false
     end
   end
 

@@ -178,11 +178,6 @@ defmodule Revela.Capture do
     |> MapSet.new()
   end
 
-  @doc """
-  Preenche `raw_path` de uma foto que ainda nao tem RAW associado.
-  Nao sobrescreve um `raw_path` ja preenchido. Usa UPDATE condicional e o indice
-  unico parcial em `raw_path` nao-vazio para impedir o mesmo RAW em duas fotos.
-  """
   @doc "Limpa o caminho do JPEG original apos o arquivo ser removido com sucesso."
   def clear_original_path(%Photo{} = photo) do
     now = DateTime.utc_now(:microsecond)
@@ -195,6 +190,11 @@ defmodule Revela.Capture do
     end
   end
 
+  @doc """
+  Preenche `raw_path` de uma foto que ainda nao tem RAW associado.
+  Nao sobrescreve um `raw_path` ja preenchido. Usa UPDATE condicional e o indice
+  unico parcial em `raw_path` nao-vazio para impedir o mesmo RAW em duas fotos.
+  """
   def update_raw_path(%Photo{} = photo, raw_path) when is_binary(raw_path) and raw_path != "" do
     if present_raw_path?(photo.raw_path) do
       {:ok, photo}
