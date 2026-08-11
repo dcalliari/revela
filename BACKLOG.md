@@ -222,7 +222,7 @@ de pós-produção dedicada ainda aberta).
 
 ### 6. Modo apresentação em janela separada
 
-**Status**: FEITO nesta branch `fm/revela-tv-modo-apresentacao` (PR
+**Status**: FEITO nesta branch `fm/revela-tv-modo-apresentacao-v2` (PR
 https://github.com/dcalliari/revela/pull/9). Rota `/tv` display-only espelha o
 visualizador do Host via PubSub (`Capture.broadcast_host_viewer/1`); sem
 classificação e sem Presence. Inclui a correção do espelho ao voltar do
@@ -245,7 +245,8 @@ aceita (2026-08-07)**: espelhar o Host; sem navegação própria neste ship.
 
 **O que entrou**: rota `/tv` (`TvLive`) display-only; `ViewerComponents.presentation/1`;
 `Capture.broadcast_host_viewer/1` + `host_viewer_state/0` (PubSub +
-`:persistent_term`); link no `/host`; sem classificação e sem Presence.
+`Capture.HostViewerState`, um `Agent`); link no `/host`; sem classificação e
+sem Presence.
 
 ### 7. Retorno automático ao vivo por inatividade
 
