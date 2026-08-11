@@ -60,6 +60,48 @@ defmodule RevelaWeb.ViewerNavTest do
       assert has_element?(view, "span", "4 / 4")
     end
 
+    test "import while follow advances idx to new last", %{conn: conn, photos: photos} do
+      root =
+        Path.join(
+          System.tmp_dir!(),
+          "revela-import-media-#{System.unique_integer([:positive])}"
+        )
+
+      source = Path.join(root, "card")
+      File.mkdir_p!(source)
+      jpeg = Path.join(source, "IMPORT_NEW.JPG")
+      {_, 0} = System.cmd("magick", ["-size", "8x8", "xc:red", jpeg])
+
+      previous = Application.get_env(:revela, :card_import_allowed_roots)
+
+      on_exit(fn ->
+        File.rm_rf(root)
+
+        if is_nil(previous) do
+          Application.delete_env(:revela, :card_import_allowed_roots)
+        else
+          Application.put_env(:revela, :card_import_allowed_roots, previous)
+        end
+      end)
+
+      Application.put_env(:revela, :card_import_allowed_roots, [root])
+
+      {:ok, view, _html} = live(conn, "/host")
+      render_click(view, "open", %{"id" => Integer.to_string(List.last(photos).id)})
+      assert has_element?(view, "button", "AO VIVO")
+      assert has_element?(view, "span", "3 / 3")
+
+      # Assert on the event reply itself: PubSub :new_photo only repairs later.
+      html =
+        view
+        |> form("#card-import-form", %{path: source})
+        |> render_submit()
+
+      assert html =~ "AO VIVO"
+      assert html =~ "4 / 4"
+      refute html =~ ">3 / 4<"
+    end
+
     test "viewer keyboard shortcuts have no visual indicators", %{conn: conn, photos: photos} do
       {:ok, view, _html} = live(conn, "/host")
 

@@ -217,10 +217,14 @@ defmodule RevelaWeb.HostLive do
                     if(skipped > 0, do: " (#{skipped} já existentes).", else: ".")
               end
 
-            {:noreply,
-             socket
-             |> assign(:notice, notice)
-             |> load_photos()}
+            socket =
+              socket
+              |> assign(:notice, notice)
+              |> load_photos()
+
+            last = max(length(socket.assigns.photos) - 1, 0)
+            idx = if socket.assigns.follow, do: last, else: socket.assigns.idx
+            {:noreply, navigate(socket, idx)}
 
           {:error, :no_active_editorial} ->
             {:noreply,
