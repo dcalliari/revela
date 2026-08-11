@@ -57,20 +57,29 @@ in-memory `@recent` take. See `test/revela_web/live/host_grid_test.exs`.
 
 `RevelaWeb.TvLive` (`/tv`) is a display-only surface that mirrors the Host
 viewer via `Capture.broadcast_host_viewer/1` / `subscribe_host_viewer/0` plus
-`Capture.host_viewer_mirror_state/0` (reads `:persistent_term` only while a
+`Capture.host_viewer_mirror_state/0` (reads the mirror slot only while a
 `HostLive` is registered via `Capture.track_host/0`; otherwise treats the
-viewer as closed / live). No classification, no Presence, no own navigation:
-when the Host viewer is closed or `follow`, `/tv` stays on the latest photo;
-when the Host browses with `follow: false`, `/tv` shows that photo.
-`host_viewer_state/0` is a single global slot, not per-connection — a second
-Host tab open at the same time overwrites it for every `/tv`, so one Host tab
-at a time is the supported topology; do not build per-connection state for
-this. Do not rely on Host `terminate`/`open: false` to clear the slot —
-network drop, crash, or abrupt shutdown never announce; Registry drops the
-Host on process death and mirror state falls back to closed. `broadcast_host_viewer/1`
-dedupes: an unchanged Host state produces no new PubSub event. Idle auto-return
-(~30s, `Application.get_env(:revela, :tv_idle_ms)`) exists **only** on `/tv` —
-do not add the same timeout to `HostLive` / `ReviewLive` without an explicit
+viewer as closed / live). The slot itself lives in `Capture.HostViewerState`,
+a small `Agent` — not `:persistent_term`, which triggers a global GC on every
+write and is unfit for a slot that changes on every Host navigation. No
+classification, no Presence, no own navigation: when the Host viewer is
+closed or `follow`, `/tv` stays on the latest photo; when the Host browses
+with `follow: false`, `/tv` shows that photo. `host_viewer_state/0` is a
+single global slot, not per-connection — a second Host tab open at the same
+time overwrites it for every `/tv`, so one Host tab at a time is the
+supported topology; do not build per-connection state for this. Do not rely
+on Host `terminate`/`open: false` to clear the slot — network drop, crash, or
+abrupt shutdown never announce; Registry drops the Host on process death and
+`host_viewer_mirror_state/0` falls back to closed on its next read. That
+fallback is read-triggered, not push-triggered: `/tv`'s on-screen display
+does not update the instant the Host dies, only when `resync/1` next runs
+(the TV's own idle timeout, ~30s, or local activity/remount) — there is no
+`Process.monitor`/Registry-watch pushing an immediate correction, and this
+lag is an accepted tradeoff (captain decision 2026-08-11), not a bug to fix
+by adding presence monitoring. `broadcast_host_viewer/1` dedupes: an
+unchanged Host state produces no new PubSub event. Idle auto-return (~30s,
+`Application.get_env(:revela, :tv_idle_ms)`) exists **only** on `/tv` — do
+not add the same timeout to `HostLive` / `ReviewLive` without an explicit
 product decision. That idle return is unconditional and does not consult the
 Host, so afterward `/tv` can sit showing "ao vivo" while the Host is still
 parked with no new broadcast to correct it. `TvLive`'s `tv_activity` handler
@@ -78,7 +87,9 @@ and `mount/3` (reconnect) both share `resync/1`, which reads
 `host_viewer_mirror_state/0` and reapply it unconditionally — never gate that
 resync on whether the state differs from what `/tv` last displayed.
 `start_editorial` / `finish_editorial` reset host-viewer state. UI:
-`ViewerComponents.presentation/1`. See `README.md` ("Modo apresentacao") and
+`ViewerComponents.presentation/1` (only `phx-click` + `phx-window-keyup` bind
+`tv_activity` — no `phx-window-keydown`, so holding a key does not flood
+`resync/1` with repeat events). See `README.md` ("Modo apresentacao") and
 `test/revela_web/live/tv_live_test.exs`.
 
 ## Domain: color-folder export

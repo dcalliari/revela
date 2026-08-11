@@ -19,11 +19,12 @@ defmodule Revela.Capture do
   @photos_topic "photos"
   @labels_topic "labels"
   @status_topic "capture_status"
+  alias Revela.Capture.HostViewerState
+
   @host_viewer_topic "host_viewer"
-  @host_viewer_key {__MODULE__, :host_viewer}
   @host_registry __MODULE__.HostRegistry
   @host_registry_key :host
-  @default_host_viewer %{photo_id: nil, follow: true, open: false}
+  @default_host_viewer HostViewerState.default()
 
   # ── PubSub ────────────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ defmodule Revela.Capture do
     if host_viewer_state() == normalized do
       :ok
     else
-      :persistent_term.put(@host_viewer_key, normalized)
+      HostViewerState.put(normalized)
       PubSub.broadcast(Revela.PubSub, @host_viewer_topic, {:host_viewer, normalized})
       :ok
     end
@@ -80,13 +81,13 @@ defmodule Revela.Capture do
 
   @doc "Ultimo estado bruto do visualizador do Host (ou follow ao vivo se ainda nao houve broadcast)."
   def host_viewer_state do
-    :persistent_term.get(@host_viewer_key, @default_host_viewer)
+    HostViewerState.get()
   end
 
   @doc """
   Estado do Host para espelhamento pela TV. Sem Host vivo, trata como viewer
-  fechado (ao vivo) — `:persistent_term` pode ficar com `open: true` apos
-  crash/queda sem anuncio.
+  fechado (ao vivo) — o slot pode ficar com `open: true` apos crash/queda sem
+  anuncio.
   """
   def host_viewer_mirror_state do
     if host_present?() do
@@ -98,7 +99,7 @@ defmodule Revela.Capture do
 
   @doc false
   def reset_host_viewer_state do
-    :persistent_term.put(@host_viewer_key, @default_host_viewer)
+    HostViewerState.reset()
     :ok
   end
 

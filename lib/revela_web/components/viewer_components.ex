@@ -152,7 +152,6 @@ defmodule RevelaWeb.ViewerComponents do
       id="tv-presentation"
       class="fixed inset-0 z-50 flex flex-col bg-black text-white select-none"
       phx-click="tv_activity"
-      phx-window-keydown="tv_activity"
       phx-window-keyup="tv_activity"
     >
       <header class="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-3 text-sm pointer-events-none">

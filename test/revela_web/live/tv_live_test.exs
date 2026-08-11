@@ -225,7 +225,7 @@ defmodule RevelaWeb.TvLiveTest do
     assert has_element?(tv, "#tv-idle-hint")
   end
 
-  test "sem Host vivo, resync e mount ignoram estado fantasma em persistent_term", %{conn: conn} do
+  test "sem Host vivo, resync e mount ignoram estado fantasma no slot espelhado", %{conn: conn} do
     {:ok, photo_a} = Capture.create_photo(%{web_path: "/uploads/ghost-a.jpg"})
     {:ok, photo_b} = Capture.create_photo(%{web_path: "/uploads/ghost-b.jpg"})
 
@@ -236,10 +236,17 @@ defmodule RevelaWeb.TvLiveTest do
     assert Capture.host_present?()
 
     ref = Process.monitor(host.pid)
+    # live/2 links the test process to the LiveView pid (directly, and
+    # transitively through the channel process); :kill is unlinkable and
+    # would otherwise take the test process down along with the Host.
+    Process.flag(:trap_exit, true)
+    Process.unlink(host.pid)
     Process.exit(host.pid, :kill)
     assert_receive {:DOWN, ^ref, :process, _, _}
-    _ = :sys.get_state(Revela.Capture.HostRegistry)
-    refute Capture.host_present?()
+    # Registry's own DOWN-driven cleanup of the entry races the test process;
+    # :sys.get_state on the registry name doesn't sync on that internal
+    # listener, so poll briefly instead of asserting immediately.
+    wait_until(fn -> not Capture.host_present?() end)
 
     assert Capture.host_viewer_state() == %{photo_id: photo_a.id, follow: false, open: true}
     assert Capture.host_viewer_mirror_state() == %{photo_id: nil, follow: true, open: false}
@@ -259,5 +266,18 @@ defmodule RevelaWeb.TvLiveTest do
   defp open_photo(view, photo) do
     render_click(element(view, ~s([phx-click=open][phx-value-id="#{photo.id}"])))
     assert has_element?(view, "#zoomer-host")
+  end
+
+  defp wait_until(fun, attempts \\ 20)
+
+  defp wait_until(fun, 0), do: assert(fun.())
+
+  defp wait_until(fun, attempts) do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(5)
+      wait_until(fun, attempts - 1)
+    end
   end
 end

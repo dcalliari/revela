@@ -15,6 +15,7 @@ defmodule Revela.Application do
       {DNSCluster, query: Application.get_env(:revela, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Revela.PubSub},
       {Registry, keys: :duplicate, name: Revela.Capture.HostRegistry},
+      Revela.Capture.HostViewerState,
       RevelaWeb.Presence,
       Revela.Capture.CameraServer,
       # Start to serve requests, typically the last entry
