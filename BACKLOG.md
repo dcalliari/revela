@@ -39,7 +39,7 @@ editorial ativo após reinício/deploy.
 **Status**: FEITO na `main` em 2026-08-07 via
 https://github.com/dcalliari/revela/pull/3 (`879446a`) para aviso de espaço,
 estimativa de disparos e parada preventiva entre disparos. Follow-up direção 3
-(descartar JPEG após preview, toggle `REVELA_KEEP_CAMERA_JPEG`) FEITO na
+(descartar JPEG após preview e RAW assentado, toggle `REVELA_KEEP_CAMERA_JPEG`) FEITO na
 branch `fm/revela-jpeg-discard-after-preview` — PR URL ao shippar. Direção 4
 (gravar fora do disco de sistema / SSD externo) continua aberta como rotina
 de produção (`editorials_dir` já é configurável).
@@ -100,8 +100,9 @@ processo quando o espaço acabar.
    disparos, enquanto deixar chegar no limite custa a câmera travada e uma
    bateria a ser removida no meio da produção. Provavelmente é o item de maior
    valor da lista toda.
-3. **Consumir menos** — FEITO: após preview ok, `Ingest` apaga o JPEG da
-   câmera e zera `original_path` (nunca RAW/preview). Padrao on; manter com
+3. **Consumir menos** — FEITO: após preview ok, o `Ingest` só apaga o JPEG da
+   câmera depois que o RAW irmão foi vinculado **e assentado** pelo watcher, e
+   zera `original_path` (nunca RAW/preview). Padrão on; manter com
    `REVELA_KEEP_CAMERA_JPEG=1`. Estimativa de disparos usa média real do que
    resta no disco e fallback ~24 MB (RAW-only) quando o discard está ativo.
 4. **Gravar fora do disco de sistema**: 50 GB por editorial pede SSD externo, e

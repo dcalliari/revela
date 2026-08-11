@@ -89,12 +89,8 @@ defmodule Revela.Capture.Ingest do
     end
   end
 
-  defp maybe_discard_after_raw(photo, jpeg_path, raw_path) do
-    if is_binary(raw_path) do
-      discard_camera_jpeg(photo, jpeg_path)
-    else
-      {:ok, photo}
-    end
+  defp maybe_discard_after_raw(photo, jpeg_path, _raw_path) do
+    discard_camera_jpeg(photo, jpeg_path)
   end
 
   defp discard_camera_jpeg(photo, path) do
