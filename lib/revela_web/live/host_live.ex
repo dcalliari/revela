@@ -11,6 +11,10 @@ defmodule RevelaWeb.HostLive do
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
   (cores, setas, limpar) e a legenda ficam em `ViewerComponents`.
+
+  Com `REVELA_DEMO=1`, o Host mostra badge DEMO e, com a captura armada,
+  **Disparar (demo)** (caminho real de ingest via arquivo). A tecla `D`/`d`
+  só liga com editorial ativo; antes disso use o botão `#demo-fire`.
   """
   use RevelaWeb, :live_view
 
@@ -60,6 +64,19 @@ defmodule RevelaWeb.HostLive do
 
   def handle_event("stop", _params, socket) do
     {:noreply, assign(socket, :capture, CameraServer.stop_capture())}
+  end
+
+  def handle_event("demo_fire", _params, socket) do
+    case CameraServer.demo_fire() do
+      {:ok, _path} ->
+        {:noreply, socket}
+
+      {:error, reason} when reason in [:not_armed, :not_demo] ->
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :notice, "Falha ao gravar JPEG de demo (#{inspect(reason)}).")}
+    end
   end
 
   # ── visualizador em tela cheia (host classifica como "host") ─────────────────
@@ -184,6 +201,20 @@ defmodule RevelaWeb.HostLive do
     end
   end
 
+  # Page-level D only (classification stays on the open viewer). Bound only when
+  # demo is armed and an editorial is active — window keyups still fire while
+  # the name <input> is focused, so keep the binding off while that form shows.
+  # Pre-editorial shots use #demo-fire.
+  def handle_event("demo_key", %{"key" => key}, socket) when key in ["d", "D"] do
+    if demo_window_key?(socket.assigns.capture) do
+      handle_event("demo_fire", %{}, socket)
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("demo_key", _params, socket), do: {:noreply, socket}
+
   @impl true
   def handle_info({:capture_status, status}, socket) do
     {:noreply,
@@ -293,7 +324,11 @@ defmodule RevelaWeb.HostLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-dvh bg-base-200 p-4 sm:p-6 relative overflow-hidden">
+    <div
+      class="min-h-dvh bg-base-200 p-4 sm:p-6 relative overflow-hidden"
+      phx-window-keyup={demo_window_key?(@capture) && "demo_key"}
+      phx-key={demo_window_key?(@capture) && "d"}
+    >
       <%!-- Marca d'agua repetida no fundo. O corpo e fixo em vh (acompanha so a
            escala vertical, nunca encolhe com a largura) e as colunas tilam a
            largura exata via auto-fill: entram e saem colunas inteiras conforme
@@ -309,6 +344,18 @@ defmodule RevelaWeb.HostLive do
       </div>
 
       <div class="max-w-5xl mx-auto relative">
+        <div
+          :if={Map.get(@capture, :demo) == true}
+          id="demo-badge"
+          class="mb-4 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/15 px-3 py-2 text-sm font-semibold tracking-wide text-warning"
+          role="status"
+        >
+          <span class="badge badge-warning badge-sm font-bold">DEMO</span>
+          <span class="font-normal opacity-80">
+            Modo demo (`REVELA_DEMO`) — sem câmera física; `D` dispara JPEG sintético.
+          </span>
+        </div>
+
         <div class="grid gap-6 lg:grid-cols-3">
           <div class="lg:col-span-1 flex flex-col gap-4">
             <div :if={@notice} class="alert alert-info text-xs py-2 break-all">{@notice}</div>
@@ -432,6 +479,9 @@ defmodule RevelaWeb.HostLive do
     {action_label, action_event, action_disabled?, action_class} =
       capture_action(assigns.capture)
 
+    demo_armed? =
+      Map.get(assigns.capture, :demo) == true and assigns.capture.status == :running
+
     assigns =
       assign(assigns,
         action_label: action_label,
@@ -440,7 +490,8 @@ defmodule RevelaWeb.HostLive do
         action_class: action_class,
         help: capture_help(assigns.capture),
         help_class: capture_help_class(assigns.capture),
-        disk_hint: free_space_hint(assigns.capture)
+        disk_hint: free_space_hint(assigns.capture),
+        demo_armed?: demo_armed?
       )
 
     ~H"""
@@ -462,6 +513,16 @@ defmodule RevelaWeb.HostLive do
           ]}
         >
           {@action_label}
+        </button>
+
+        <button
+          :if={@demo_armed?}
+          id="demo-fire"
+          type="button"
+          phx-click="demo_fire"
+          class="btn btn-secondary btn-sm w-full"
+        >
+          Disparar (demo)
         </button>
 
         <p
@@ -506,6 +567,13 @@ defmodule RevelaWeb.HostLive do
       "Tether armado, mas ingestão por pasta indisponível (inotify). " <>
         "Fotos não entram na revisão automaticamente."
 
+  defp capture_help(%{status: :running, demo: true, editorial: name})
+       when is_binary(name) and name != "",
+       do: "Demo armada. Dispare com o botão ou a tecla D."
+
+  defp capture_help(%{status: :running, demo: true}),
+    do: "Demo armada. Dispare com o botão."
+
   defp capture_help(%{status: :running, armed_automatically: true}),
     do: "Câmera vinculada automaticamente. Aguardando disparos."
 
@@ -538,6 +606,13 @@ defmodule RevelaWeb.HostLive do
 
   defp capture_help(_capture),
     do: "Ligue a câmera e conecte o cabo USB."
+
+  # Window D only when demo is armed and the editorial name form is gone.
+  defp demo_window_key?(%{demo: true, status: :running, editorial: name})
+       when is_binary(name) and name != "",
+       do: true
+
+  defp demo_window_key?(_capture), do: false
 
   defp capture_help_class(%{auto_arm_pending: true}), do: "opacity-60"
 
