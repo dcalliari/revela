@@ -21,6 +21,8 @@ defmodule Revela.Capture do
   @status_topic "capture_status"
   @host_viewer_topic "host_viewer"
   @host_viewer_key {__MODULE__, :host_viewer}
+  @host_registry __MODULE__.HostRegistry
+  @host_registry_key :host
   @default_host_viewer %{photo_id: nil, follow: true, open: false}
 
   # ── PubSub ────────────────────────────────────────────────────────────────
@@ -34,13 +36,31 @@ defmodule Revela.Capture do
     do: PubSub.broadcast(Revela.PubSub, @status_topic, {:capture_status, status})
 
   @doc """
+  Registra o processo `HostLive` atual como Host presente. O Registry remove
+  a entrada automaticamente quando o processo morre (aba fechada, crash,
+  queda de rede) — nao depende de `terminate/2` nem de um broadcast
+  `open: false`.
+  """
+  def track_host do
+    case Registry.register(@host_registry, @host_registry_key, true) do
+      {:ok, _} -> :ok
+      {:error, {:already_registered, _}} -> :ok
+    end
+  end
+
+  @doc "True se pelo menos um `HostLive` conectado ainda esta vivo."
+  def host_present? do
+    Registry.lookup(@host_registry, @host_registry_key) != []
+  end
+
+  @doc """
   Publica o estado do visualizador do Host para a superficie `/tv`.
   Mantem o ultimo estado (slot unico, nao por conexao — uma segunda aba do
-  Host sobrescreve; ver AGENTS.md "Domain: /tv presentation mirror") para
+  Host sobrescreve; ver AGENTS.md "Domain: TV presentation (`/tv`)") para
   LiveViews que entram no meio da sessao. Deduplica: estado igual ao ja
   persistido nao gera novo evento PubSub, entao consumidores que precisam
   resincronizar sem depender de uma mudanca real devem ler
-  `host_viewer_state/0` direto em vez de esperar por um broadcast.
+  `host_viewer_mirror_state/0` direto em vez de esperar por um broadcast.
   """
   def broadcast_host_viewer(state) when is_map(state) do
     normalized = %{
@@ -58,9 +78,22 @@ defmodule Revela.Capture do
     end
   end
 
-  @doc "Ultimo estado do visualizador do Host (ou follow ao vivo se ainda nao houve broadcast)."
+  @doc "Ultimo estado bruto do visualizador do Host (ou follow ao vivo se ainda nao houve broadcast)."
   def host_viewer_state do
     :persistent_term.get(@host_viewer_key, @default_host_viewer)
+  end
+
+  @doc """
+  Estado do Host para espelhamento pela TV. Sem Host vivo, trata como viewer
+  fechado (ao vivo) — `:persistent_term` pode ficar com `open: true` apos
+  crash/queda sem anuncio.
+  """
+  def host_viewer_mirror_state do
+    if host_present?() do
+      host_viewer_state()
+    else
+      @default_host_viewer
+    end
   end
 
   @doc false

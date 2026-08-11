@@ -16,10 +16,12 @@ defmodule RevelaWeb.TvLive do
   mostrando "ao vivo" mesmo com o Host ainda parado ate que algo o traga de
   volta — nao ha novo broadcast so porque o Host nao mudou. Qualquer
   interacao local (`tv_activity`) e a reconexao (`mount/3`) por isso leem
-  `Capture.host_viewer_state/0` direto (nao dependem do PubSub) e
-  resincronizam sempre, mesmo que o estado seja identico ao ultimo
-  broadcast — e o unico jeito do operador forcar o `/tv` a voltar a
+  `Capture.host_viewer_mirror_state/0` direto (nao dependem do PubSub) e
+  resincronizam sempre via `resync/1`, mesmo que o estado seja identico ao
+  ultimo broadcast — e o unico jeito do operador forcar o `/tv` a voltar a
   espelhar o Host sem precisar navegar o Host para algo diferente e voltar.
+  Sem Host vivo, o espelho trata o viewer como fechado (ao vivo): nao se
+  confia em anuncio de saida nem em `:persistent_term` apos crash/queda.
   """
   use RevelaWeb, :live_view
 
@@ -37,7 +39,6 @@ defmodule RevelaWeb.TvLive do
     end
 
     photos = Capture.list_photos()
-    host = Capture.host_viewer_state()
 
     {:ok,
      socket
@@ -48,7 +49,7 @@ defmodule RevelaWeb.TvLive do
      |> assign(:idle_remaining, nil)
      |> assign(:idle_gen, 0)
      |> assign(:idle_ms, idle_ms())
-     |> apply_host_viewer(host)}
+     |> resync()}
   end
 
   @impl true
@@ -57,8 +58,8 @@ defmodule RevelaWeb.TvLive do
   end
 
   @impl true
-  def handle_info({:host_viewer, state}, socket) do
-    {:noreply, apply_host_viewer(socket, state)}
+  def handle_info({:host_viewer, _state}, socket) do
+    {:noreply, apply_host_viewer(socket, Capture.host_viewer_mirror_state())}
   end
 
   def handle_info({:new_photo, _photo}, socket) do
@@ -152,12 +153,14 @@ defmodule RevelaWeb.TvLive do
     end
   end
 
-  # le Capture.host_viewer_state/0 direto e reaplica incondicionalmente (nao
-  # via maybe_apply_mirror), porque o broadcast do Host e deduplicado quando
-  # o estado nao muda: sem essa leitura direta, uma interacao local no /tv
-  # nao teria como perceber que o Host segue parado na mesma foto.
+  # le Capture.host_viewer_mirror_state/0 direto e reaplica incondicionalmente
+  # (nao via maybe_apply_mirror), porque o broadcast do Host e deduplicado
+  # quando o estado nao muda: sem essa leitura direta, uma interacao local
+  # no /tv nao teria como perceber que o Host segue parado na mesma foto.
+  # Sem Host vivo, mirror_state e "fechado" — evita fantasma em :persistent_term.
   defp resync(socket) do
-    {follow, photo_id} = mirror_target(Capture.host_viewer_state(), socket.assigns.photos)
+    {follow, photo_id} =
+      mirror_target(Capture.host_viewer_mirror_state(), socket.assigns.photos)
 
     socket
     |> cancel_idle()

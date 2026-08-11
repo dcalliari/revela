@@ -225,6 +225,37 @@ defmodule RevelaWeb.TvLiveTest do
     assert has_element?(tv, "#tv-idle-hint")
   end
 
+  test "sem Host vivo, resync e mount ignoram estado fantasma em persistent_term", %{conn: conn} do
+    {:ok, photo_a} = Capture.create_photo(%{web_path: "/uploads/ghost-a.jpg"})
+    {:ok, photo_b} = Capture.create_photo(%{web_path: "/uploads/ghost-b.jpg"})
+
+    {:ok, host, _html} = live(conn, ~p"/host")
+    {:ok, tv, _html} = live(conn, ~p"/tv")
+    open_photo(host, photo_a)
+    assert render(tv) =~ "ESPELHO"
+    assert Capture.host_present?()
+
+    ref = Process.monitor(host.pid)
+    Process.exit(host.pid, :kill)
+    assert_receive {:DOWN, ^ref, :process, _, _}
+    _ = :sys.get_state(Revela.Capture.HostRegistry)
+    refute Capture.host_present?()
+
+    assert Capture.host_viewer_state() == %{photo_id: photo_a.id, follow: false, open: true}
+    assert Capture.host_viewer_mirror_state() == %{photo_id: nil, follow: true, open: false}
+
+    render_click(element(tv, "#tv-presentation"))
+    html = render(tv)
+    assert html =~ "tv-photo-#{photo_b.id}"
+    assert html =~ "AO VIVO"
+    refute has_element?(tv, "#tv-idle-hint")
+
+    {:ok, tv2, _html} = live(conn, ~p"/tv")
+    html2 = render(tv2)
+    assert html2 =~ "tv-photo-#{photo_b.id}"
+    assert html2 =~ "AO VIVO"
+  end
+
   defp open_photo(view, photo) do
     render_click(element(view, ~s([phx-click=open][phx-value-id="#{photo.id}"])))
     assert has_element?(view, "#zoomer-host")

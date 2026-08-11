@@ -54,6 +54,7 @@ defmodule RevelaWeb.HostLive do
       Capture.subscribe_labels()
       Capture.subscribe_status()
       Presence.subscribe()
+      Capture.track_host()
     end
 
     url = review_url()
