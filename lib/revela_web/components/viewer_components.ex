@@ -112,7 +112,7 @@ defmodule RevelaWeb.ViewerComponents do
             phx-value-color={color.value}
             aria-label={"#{color.name} (#{color.value + 1})"}
             class={[
-              "relative h-12 w-12 rounded-full transition-transform active:scale-90 ring-offset-2 ring-offset-neutral-900 touch-manipulation",
+              "h-12 w-12 rounded-full transition-transform active:scale-90 ring-offset-2 ring-offset-neutral-900 touch-manipulation",
               @labels[@photo.id] == color.value && "ring-4 ring-white scale-110",
               @labels[@photo.id] != color.value && "ring-0 opacity-80"
             ]}
@@ -121,7 +121,7 @@ defmodule RevelaWeb.ViewerComponents do
           <button
             phx-click="clear"
             aria-label="Limpar cor (0)"
-            class="relative h-12 w-12 rounded-full border-2 border-neutral-600 text-neutral-400 flex items-center justify-center active:scale-90 touch-manipulation"
+            class="h-12 w-12 rounded-full border-2 border-neutral-600 active:scale-90 touch-manipulation"
           ></button>
         </div>
       </footer>
