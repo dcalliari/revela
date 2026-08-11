@@ -23,18 +23,43 @@ defmodule Revela.Delivery.LocalShare do
           {:error, :empty_selection}
         else
           ids = Enum.map(photos, & &1.id)
-          token = generate_token()
 
-          case Capture.create_brand_share(%{
-                 token: token,
-                 editorial_id: editorial_id,
-                 photo_ids: BrandShare.encode_photo_ids(ids),
-                 label: label
-               }) do
-            {:ok, share} -> {:ok, share, "/share/#{share.token}"}
-            error -> error
+          case reuse_matching_share(editorial_id, ids) do
+            {:ok, share} ->
+              {:ok, share, "/share/#{share.token}"}
+
+            :new ->
+              token = generate_token()
+
+              case Capture.create_brand_share(%{
+                     token: token,
+                     editorial_id: editorial_id,
+                     photo_ids: BrandShare.encode_photo_ids(ids),
+                     label: label
+                   }) do
+                {:ok, share} -> {:ok, share, "/share/#{share.token}"}
+                error -> error
+              end
           end
         end
+    end
+  end
+
+  defp reuse_matching_share(editorial_id, ids) do
+    wanted = MapSet.new(ids)
+
+    case Capture.list_brand_shares_for_editorial(editorial_id) do
+      [latest | _] ->
+        existing = MapSet.new(BrandShare.decode_photo_ids(latest))
+
+        if MapSet.equal?(existing, wanted) do
+          {:ok, latest}
+        else
+          :new
+        end
+
+      [] ->
+        :new
     end
   end
 

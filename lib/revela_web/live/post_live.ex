@@ -287,7 +287,7 @@ defmodule RevelaWeb.PostLive do
   end
 
   def handle_info({:label_changed, _photo_id}, socket) do
-    {:noreply, refresh_editorial_data(socket)}
+    {:noreply, refresh_labels_and_tallies(socket)}
   end
 
   def handle_info(:session_reset, socket) do
@@ -344,6 +344,17 @@ defmodule RevelaWeb.PostLive do
       editorial ->
         socket
         |> assign(:photos, Capture.list_photos_for_editorial(editorial.id))
+        |> refresh_labels_and_tallies()
+    end
+  end
+
+  defp refresh_labels_and_tallies(socket) do
+    case socket.assigns.editorial do
+      nil ->
+        socket
+
+      editorial ->
+        socket
         |> assign(:labels, Capture.labels_for_reviewer_in_editorial(@host_id, editorial.id))
         |> assign(:tallies, Capture.tallies_for_editorial(editorial.id))
     end
