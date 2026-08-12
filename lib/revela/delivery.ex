@@ -87,10 +87,9 @@ defmodule Revela.Delivery do
             if String.starts_with?(entry, "revela-raw-") and String.ends_with?(entry, ".zip") do
               path = Path.join(root, entry)
 
-              with {:ok, stat} <- File.stat(path),
-                   {:ok, modified} <- NaiveDateTime.from_erl(stat.mtime),
-                   {:ok, modified} <- DateTime.from_naive(modified, "Etc/UTC"),
-                   true <- DateTime.compare(modified, cutoff) == :lt do
+              with {:ok, modified} <- File.stat(path, time: :posix),
+                   cutoff_posix <- DateTime.to_unix(cutoff),
+                   true <- modified < cutoff_posix do
                 _ = File.rm(path)
               end
             end
