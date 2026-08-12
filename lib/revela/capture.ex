@@ -13,7 +13,7 @@ defmodule Revela.Capture do
 
   import Ecto.Query, warn: false
   alias Revela.Repo
-  alias Revela.Capture.{Photo, Label, Editorial}
+  alias Revela.Capture.{BrandShare, Editorial, Label, Photo}
   alias Phoenix.PubSub
 
   @photos_topic "photos"
@@ -145,6 +145,38 @@ defmodule Revela.Capture do
   end
 
   def get_photo!(id), do: Repo.get!(Photo, id)
+
+  @doc "Fotos de um editorial, em ordem de captura."
+  def list_photos_for_editorial(editorial_id) when is_integer(editorial_id) do
+    from(p in Photo,
+      where: p.editorial_id == ^editorial_id,
+      order_by: [asc: p.seq]
+    )
+    |> Repo.all()
+  end
+
+  def list_photos_for_editorial(_editorial_id), do: []
+
+  @doc "Fotos pelos ids informados, em ordem de captura."
+  def get_photos(photo_ids) when is_list(photo_ids) do
+    from(p in Photo,
+      where: p.id in ^photo_ids,
+      order_by: [asc: p.seq]
+    )
+    |> Repo.all()
+  end
+
+  @doc "Fotos pelos ids, restritas ao editorial informado e em ordem de captura."
+  def get_photos_in_editorial(editorial_id, photo_ids)
+      when is_integer(editorial_id) and is_list(photo_ids) do
+    from(p in Photo,
+      where: p.editorial_id == ^editorial_id and p.id in ^photo_ids,
+      order_by: [asc: p.seq]
+    )
+    |> Repo.all()
+  end
+
+  def get_photos_in_editorial(_editorial_id, _photo_ids), do: []
 
   defp photos_query(opts) do
     colors = normalize_colors(Keyword.get(opts, :colors))
@@ -482,6 +514,13 @@ defmodule Revela.Capture do
     changes =
       if Keyword.has_key?(opts, :label) do
         Map.put(changes, :label, Keyword.get(opts, :label))
+      else
+        changes
+      end
+
+    changes =
+      if Keyword.has_key?(opts, :photo_ids) do
+        Map.put(changes, :photo_ids, Keyword.fetch!(opts, :photo_ids))
       else
         changes
       end

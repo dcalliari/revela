@@ -256,12 +256,29 @@ defmodule RevelaWeb.PostLive do
     end
   end
 
+  def handle_event("prepare_raw", _params, %{assigns: %{editorial: nil}} = socket) do
+    {:noreply, socket}
+  end
+
   def handle_event("prepare_raw", _params, socket) do
-    ids = MapSet.to_list(socket.assigns.selected_ids)
+    ids = Capture.brand_labeled_photo_ids(socket.assigns.editorial.id)
+
+    socket =
+      assign(socket,
+        tallies: Capture.tallies_for_editorial(socket.assigns.editorial.id),
+        filter: :all,
+        selected_ids: MapSet.new(ids),
+        anchor_id: List.first(ids),
+        raw_error: nil,
+        raw_href: nil
+      )
 
     if ids == [] do
       {:noreply,
-       assign(socket, raw_error: "Selecione um intervalo para baixar RAW.", raw_href: nil)}
+       assign(socket,
+         raw_error: "A marca ainda nao marcou fotos neste editorial.",
+         raw_href: nil
+       )}
     else
       pull = Delivery.raw_pull(ids)
 
@@ -679,7 +696,7 @@ defmodule RevelaWeb.PostLive do
                     phx-click="prepare_raw"
                     class="btn btn-outline btn-sm"
                   >
-                    Preparar download RAW
+                    Preparar RAW da marca
                   </button>
                   <a
                     :if={@raw_href}

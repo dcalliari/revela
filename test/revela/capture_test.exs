@@ -1,7 +1,7 @@
 defmodule Revela.CaptureTest do
   use Revela.DataCase, async: false
 
-  alias Revela.Capture
+  alias Revela.{Capture, Delivery}
 
   describe "editorial lifecycle preserva classificacoes" do
     test "iniciar um novo editorial nao apaga as classificacoes do editorial anterior" do
@@ -67,6 +67,27 @@ defmodule Revela.CaptureTest do
     end
   end
 
+  describe "consultas de fotos por editorial" do
+    test "restringe o editorial e preserva a ordem de captura" do
+      {:ok, editorial_a} = Capture.start_editorial("Consulta A", "/tmp/consulta-a")
+      {:ok, a1} = Capture.create_photo(%{web_path: "/uploads/consulta-a1.jpg"})
+      {:ok, a2} = Capture.create_photo(%{web_path: "/uploads/consulta-a2.jpg"})
+      {:ok, editorial_b} = Capture.start_editorial("Consulta B", "/tmp/consulta-b")
+      {:ok, b1} = Capture.create_photo(%{web_path: "/uploads/consulta-b1.jpg"})
+
+      assert Enum.map(Capture.list_photos_for_editorial(editorial_a.id), & &1.id) ==
+               [a1.id, a2.id]
+
+      assert Enum.map(
+               Capture.get_photos_in_editorial(editorial_a.id, [b1.id, a2.id, a1.id]),
+               & &1.id
+             ) == [a1.id, a2.id]
+
+      assert Enum.map(Capture.list_photos_for_editorial(editorial_b.id), & &1.id) == [b1.id]
+      assert Enum.map(Capture.get_photos([b1.id, a2.id]), & &1.id) == [a2.id, b1.id]
+    end
+  end
+
   describe "paginacao e filtro por cor" do
     setup do
       {:ok, _editorial} = Capture.start_editorial("Grade", "/tmp/grade")
@@ -127,7 +148,9 @@ defmodule Revela.CaptureTest do
 
   describe "tallies_for_editorial/1" do
     test "ignora votos brand-* de shares supersedidos" do
-      {:ok, editorial} = Capture.start_editorial("Tallies", "/tmp/tallies-#{System.unique_integer()}")
+      {:ok, editorial} =
+        Capture.start_editorial("Tallies", "/tmp/tallies-#{System.unique_integer()}")
+
       {:ok, a} = Capture.create_photo(%{web_path: "/uploads/tally-a.jpg"})
       {:ok, b} = Capture.create_photo(%{web_path: "/uploads/tally-b.jpg"})
 
@@ -148,7 +171,9 @@ defmodule Revela.CaptureTest do
 
   describe "tallies/0" do
     test "ignora votos brand-* de shares supersedidos no editorial ativo" do
-      {:ok, editorial} = Capture.start_editorial("HostTallies", "/tmp/host-tallies-#{System.unique_integer()}")
+      {:ok, editorial} =
+        Capture.start_editorial("HostTallies", "/tmp/host-tallies-#{System.unique_integer()}")
+
       {:ok, a} = Capture.create_photo(%{web_path: "/uploads/host-tally-a.jpg"})
       {:ok, b} = Capture.create_photo(%{web_path: "/uploads/host-tally-b.jpg"})
 

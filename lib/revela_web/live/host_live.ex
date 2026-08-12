@@ -5,8 +5,7 @@ defmodule RevelaWeb.HostLive do
   retomar apos stop, ingestao degradada), estimativa de fotos restantes no
   disco, quem esta online e a agregacao de cores (consenso) de cada foto entre
   todos os revisores. Sem `:os_mon`, a estimativa de fotos nao aparece e o
-  help pede vinculo manual quando ha camera; o console do browser tambem
-  recebe um aviso via `push_event("disk-awareness", ...)`.
+  help exibe um aviso de monitoramento indisponivel.
 
   **Importar do cartao** (`#card-import`): pasta sob raizes allowlisted
   (`:card_import_allowed_roots` / `REVELA_CARD_IMPORT_ROOTS`; padrao
@@ -64,7 +63,6 @@ defmodule RevelaWeb.HostLive do
       |> assign(:url, url)
       |> assign(:qr, qr_svg(url))
       |> assign(:capture, capture)
-      |> assign(:disk_warn_pushed, false)
       |> assign(:reviewers, Presence.list_reviewers())
       |> assign(:open, false)
       |> assign(:idx, 0)
@@ -77,7 +75,6 @@ defmodule RevelaWeb.HostLive do
       |> assign(:filter_colors, MapSet.new())
       |> stream_configure(:grid_photos, dom_id: &"grid-photo-#{&1.id}")
       |> load_photos()
-      |> maybe_warn_disk(capture)
 
     socket =
       if connected?(socket) do
@@ -353,10 +350,7 @@ defmodule RevelaWeb.HostLive do
 
   @impl true
   def handle_info({:capture_status, status}, socket) do
-    {:noreply,
-     socket
-     |> assign(:capture, status)
-     |> maybe_warn_disk(status)}
+    {:noreply, assign(socket, :capture, status)}
   end
 
   def handle_info({:new_photo, _photo}, socket) do
@@ -374,7 +368,7 @@ defmodule RevelaWeb.HostLive do
 
   def handle_info({:brand_round_changed, editorial_id}, socket) do
     if Capture.current_editorial_id() == editorial_id do
-      {:noreply, load_photos(socket)
+      {:noreply, load_photos(socket)}
     else
       {:noreply, socket}
     end
@@ -976,9 +970,7 @@ defmodule RevelaWeb.HostLive do
 
   # traduz espaco livre para o que o fotografo entende: quantas fotos ainda
   # cabem, calculado a partir da media real de bytes por disparo do editorial.
-  # Sem os_mon (:disk_awareness :unavailable) esta dica some; o aviso de
-  # monitoramento vai ao help (camera presente) e ao console via push_event
-  # "disk-awareness" (ver maybe_warn_disk/1).
+  # Sem os_mon (:disk_awareness :unavailable), mostra o aviso de monitoramento.
   defp free_space_hint(%{estimated_shots_left: n}) when is_integer(n),
     do: "Espaço livre: cabem ~#{n} fotos."
 

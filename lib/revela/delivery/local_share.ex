@@ -17,64 +17,64 @@ defmodule Revela.Delivery.LocalShare do
         {:error, :editorial_not_found}
 
       _editorial ->
-        requested_ids = photo_ids |> Enum.uniq() |> Enum.sort()
-        photos = Capture.get_photos_in_editorial(editorial_id, requested_ids)
+        requested_photos = Capture.get_photos_in_editorial(editorial_id, Enum.uniq(photo_ids))
+        requested_ids = Enum.map(requested_photos, & &1.id)
+        preview_photos = Enum.filter(requested_photos, &preview_available?/1)
 
-        photos = Enum.filter(photos, &(is_binary(&1.web_path) and &1.web_path != ""))
-
-        if photos == [] do
-          if Capture.get_photos_in_editorial(editorial_id, photo_ids) == [] do
+        cond do
+          requested_photos == [] ->
             {:error, :empty_selection}
-          else
+
+          preview_photos == [] ->
             {:error, :no_previews}
-          end
-        else
-          ids = Enum.map(photos, & &1.id)
 
-          case reuse_matching_share(editorial_id, requested_ids, ids, label) do
-            {:ok, share} ->
-              {:ok, share, "/share/#{share.token}"}
+          true ->
+            ids = Enum.map(preview_photos, & &1.id)
 
-            :new ->
-              token = generate_token()
+            case reuse_matching_share(editorial_id, requested_ids, ids, label) do
+              {:ok, share} ->
+                {:ok, share, "/share/#{share.token}"}
 
-              case Capture.create_brand_share(%{
-                     token: token,
-                     editorial_id: editorial_id,
-                     photo_ids: BrandShare.encode_photo_ids(ids),
-                     requested_photo_ids: BrandShare.encode_photo_ids(requested_ids),
-                     label: label
-                   }) do
-                {:ok, share} -> {:ok, share, "/share/#{share.token}"}
-                error -> error
-              end
+              :new ->
+                token = generate_token()
 
-            {:error, _} = error ->
-              error
-          end
+                case Capture.create_brand_share(%{
+                       token: token,
+                       editorial_id: editorial_id,
+                       photo_ids: BrandShare.encode_photo_ids(ids),
+                       requested_photo_ids: BrandShare.encode_photo_ids(requested_ids),
+                       label: label
+                     }) do
+                  {:ok, share} -> {:ok, share, "/share/#{share.token}"}
+                  error -> error
+                end
+
+              {:error, _} = error ->
+                error
+            end
         end
     end
   end
 
-  defp reuse_matching_share(editorial_id, requested_ids, _ids, label) do
+  defp reuse_matching_share(editorial_id, requested_ids, ids, label) do
     wanted = MapSet.new(requested_ids)
 
     match =
       editorial_id
       |> Capture.list_brand_shares_for_editorial()
-      |> List.first()
-      |> case do
-        nil -> nil
-        share ->
-          if MapSet.equal?(MapSet.new(decode_requested_ids(share)), wanted), do: share, else: nil
-      end
+      |> Enum.find(fn share ->
+        MapSet.equal?(MapSet.new(decode_requested_ids(share)), wanted)
+      end)
 
     case match do
       nil ->
         :new
 
       share ->
-        case Capture.touch_brand_share(share, label: label) do
+        case Capture.touch_brand_share(share,
+               label: label,
+               photo_ids: BrandShare.encode_photo_ids(ids)
+             ) do
           {:ok, touched} -> {:ok, touched}
           {:error, _} = error -> error
         end
@@ -89,6 +89,9 @@ defmodule Revela.Delivery.LocalShare do
   end
 
   defp decode_requested_ids(_share), do: []
+
+  defp preview_available?(photo),
+    do: is_binary(photo.web_path) and photo.web_path != ""
 
   defp generate_token do
     :crypto.strong_rand_bytes(12) |> Base.url_encode64(padding: false)

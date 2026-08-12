@@ -83,6 +83,26 @@ defmodule Revela.DeliveryTest do
     assert Capture.brand_labeled_photo_ids(editorial.id) == [p1.id]
   end
 
+  test "create_brand_share atualiza previews ao promover share existente", %{
+    editorial: editorial,
+    p1: p1,
+    p2: p2
+  } do
+    {:ok, p2} = p2 |> Ecto.Changeset.change(web_path: nil) |> Repo.update()
+
+    assert {:ok, share, _} = Delivery.create_brand_share(editorial.id, [p1.id, p2.id])
+    assert BrandShare.decode_photo_ids(share) == [p1.id]
+
+    {:ok, _p2} =
+      p2
+      |> Ecto.Changeset.change(web_path: "/uploads/b-disponivel.jpg")
+      |> Repo.update()
+
+    assert {:ok, promoted, _} = Delivery.create_brand_share(editorial.id, [p2.id, p1.id])
+    assert promoted.id == share.id
+    assert BrandShare.decode_photo_ids(promoted) == [p1.id, p2.id]
+  end
+
   test "create_brand_share rejeita selecao vazia", %{editorial: editorial} do
     assert {:error, :empty_selection} = Delivery.create_brand_share(editorial.id, [])
   end
