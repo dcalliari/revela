@@ -198,13 +198,20 @@ defmodule RevelaWeb.ViewerComponents do
           <p class="text-sm mt-3 tracking-wide uppercase">Aguardando fotos</p>
         </div>
 
-        <img
-          :if={@photo}
-          id={"tv-photo-#{@photo.id}"}
-          src={@photo.web_path}
-          class="max-h-full max-w-full object-contain transition-opacity duration-200"
-          draggable="false"
-        />
+        <%= if @photo do %>
+          <%= if @photo.web_path do %>
+            <img
+              id={"tv-photo-#{@photo.id}"}
+              src={@photo.web_path}
+              class="max-h-full max-w-full object-contain transition-opacity duration-200"
+              draggable="false"
+            />
+          <% else %>
+            <div id={"tv-photo-#{@photo.id}"} class="text-sm text-white/60">
+              RAW sem preview
+            </div>
+          <% end %>
+        <% end %>
       </main>
     </div>
     """

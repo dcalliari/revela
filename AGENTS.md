@@ -73,11 +73,11 @@ abrupt shutdown never announce; Registry drops the Host on process death and
 `host_viewer_mirror_state/0` falls back to closed on its next read. That
 fallback is read-triggered, not push-triggered: `/tv`'s on-screen display
 does not update the instant the Host dies, only when `resync/1` next runs
-(the TV's own idle timeout, ~30s, or local activity/remount) — there is no
+(the TV's own idle timeout, ~10s, or local activity/remount) — there is no
 `Process.monitor`/Registry-watch pushing an immediate correction, and this
 lag is an accepted tradeoff (captain decision 2026-08-11), not a bug to fix
 by adding presence monitoring. `broadcast_host_viewer/1` dedupes: an
-unchanged Host state produces no new PubSub event. Idle auto-return (~30s,
+unchanged Host state produces no new PubSub event. Idle auto-return (~10s,
 `Application.get_env(:revela, :tv_idle_ms)`) exists **only** on `/tv` — do
 not add the same timeout to `HostLive` / `ReviewLive` without an explicit
 product decision. That idle return is unconditional and does not consult the

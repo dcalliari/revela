@@ -222,7 +222,7 @@ de pós-produção dedicada ainda aberta).
 
 ### 6. Modo apresentação em janela separada
 
-**Status**: FEITO nesta branch `fm/revela-tv-modo-apresentacao-v3` (PR
+**Status**: FEITO (PR
 https://github.com/dcalliari/revela/pull/9). Rota `/tv` display-only espelha o
 visualizador do Host via PubSub (`Capture.broadcast_host_viewer/1`); sem
 classificação e sem Presence. Inclui a correção do espelho ao voltar do
@@ -264,8 +264,8 @@ decisão, e 10s é pouco para olhar uma foto. Onde ele é claramente certo é no
 modo apresentação do item 6, que é só exibição e onde ninguém está decidindo
 nada.
 
-**O que entrou**: em `/tv`, ~30s fora do ao vivo (`:tv_idle_ms`, padrão
-`30_000`), reiniciado a cada interação local (`tv_activity`), com indicação
+**O que entrou**: em `/tv`, ~10s fora do ao vivo (`:tv_idle_ms`, padrão
+`10_000`), reiniciado a cada interação local (`tv_activity`), com indicação
 visível ("volta ao vivo em Ns"). Não aplicado em `HostLive` / `ReviewLive`.
 
 ### 8. `raw_path` vazio para todas as fotos

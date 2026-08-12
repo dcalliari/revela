@@ -6,7 +6,7 @@ defmodule RevelaWeb.TvLive do
   sem Presence. Quando o Host esta ao vivo (ou com o viewer fechado), acompanha
   a foto mais recente; quando o Host folheia, segue a foto atual do Host.
 
-  Item 7 so nesta superficie: apos ~30s parado fora do ao vivo, volta sozinho
+  Item 7 so nesta superficie: apos ~10s parado fora do ao vivo, volta sozinho
   para a foto mais recente (com contagem visivel), sem consultar o Host —
   ninguem decide nesta tela, entao o timeout e incondicional. Host e
   celulares de revisores nao tem esse timeout.
@@ -28,7 +28,7 @@ defmodule RevelaWeb.TvLive do
   alias Revela.Capture
   alias RevelaWeb.ViewerComponents
 
-  @default_idle_ms 30_000
+  @default_idle_ms 10_000
   @tick_ms 250
 
   @impl true
