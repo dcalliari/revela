@@ -17,7 +17,8 @@ defmodule Revela.Delivery.LocalShare do
         {:error, :editorial_not_found}
 
       _editorial ->
-        photos = Capture.get_photos_in_editorial(editorial_id, photo_ids)
+        requested_ids = photo_ids |> Enum.uniq() |> Enum.sort()
+        photos = Capture.get_photos_in_editorial(editorial_id, requested_ids)
 
         photos = Enum.filter(photos, &(is_binary(&1.web_path) and &1.web_path != ""))
 
@@ -30,7 +31,7 @@ defmodule Revela.Delivery.LocalShare do
         else
           ids = Enum.map(photos, & &1.id)
 
-          case reuse_matching_share(editorial_id, ids, label) do
+          case reuse_matching_share(editorial_id, requested_ids, ids, label) do
             {:ok, share} ->
               {:ok, share, "/share/#{share.token}"}
 
@@ -41,6 +42,7 @@ defmodule Revela.Delivery.LocalShare do
                      token: token,
                      editorial_id: editorial_id,
                      photo_ids: BrandShare.encode_photo_ids(ids),
+                     requested_photo_ids: BrandShare.encode_photo_ids(requested_ids),
                      label: label
                    }) do
                 {:ok, share} -> {:ok, share, "/share/#{share.token}"}
@@ -54,15 +56,18 @@ defmodule Revela.Delivery.LocalShare do
     end
   end
 
-  defp reuse_matching_share(editorial_id, ids, label) do
-    wanted = MapSet.new(ids)
+  defp reuse_matching_share(editorial_id, requested_ids, _ids, label) do
+    wanted = MapSet.new(requested_ids)
 
     match =
       editorial_id
       |> Capture.list_brand_shares_for_editorial()
-      |> Enum.find(fn share ->
-        MapSet.equal?(MapSet.new(BrandShare.decode_photo_ids(share)), wanted)
-      end)
+      |> List.first()
+      |> case do
+        nil -> nil
+        share ->
+          if MapSet.equal?(MapSet.new(decode_requested_ids(share)), wanted), do: share, else: nil
+      end
 
     case match do
       nil ->
@@ -75,6 +80,15 @@ defmodule Revela.Delivery.LocalShare do
         end
     end
   end
+
+  defp decode_requested_ids(%BrandShare{requested_photo_ids: raw}) when is_binary(raw) do
+    case Jason.decode(raw) do
+      {:ok, ids} when is_list(ids) -> ids
+      _ -> []
+    end
+  end
+
+  defp decode_requested_ids(_share), do: []
 
   defp generate_token do
     :crypto.strong_rand_bytes(12) |> Base.url_encode64(padding: false)

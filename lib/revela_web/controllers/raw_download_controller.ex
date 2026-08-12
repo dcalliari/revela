@@ -30,7 +30,7 @@ defmodule RevelaWeb.RawDownloadController do
             )
 
           true ->
-            case build_zip(pull.files) do
+            case build_zip(pull.files, token) do
               {:ok, zip_path} ->
                 name = "revela-raw-e#{editorial_id}.zip"
 
@@ -83,31 +83,34 @@ defmodule RevelaWeb.RawDownloadController do
       "O casamento JPEG↔RAW (item 8) precisa preencher raw_path."
   end
 
-  defp build_zip(files) do
-    id = Ecto.UUID.generate()
+  defp build_zip(files, token) do
+    :global.trans({__MODULE__, token}, fn ->
+      case staging_paths(files, token) do
+        {:ok, nil, zip_path} ->
+          {:ok, zip_path}
 
-    case staging_paths(files, id) do
-      {:ok, work_dir, zip_path} ->
-        try do
-          with :ok <- stage_files(files, work_dir),
-               {:ok, _} <- create_zip_file(work_dir, zip_path) do
-            {:ok, zip_path}
-          else
-            {:error, _} = err ->
-              _ = File.rm(zip_path)
-              err
+        {:ok, work_dir, zip_path} ->
+          try do
+            with :ok <- stage_files(files, work_dir),
+                 {:ok, _} <- create_zip_file(work_dir, zip_path) do
+              {:ok, zip_path}
+            else
+              {:error, _} = err ->
+                _ = File.rm(zip_path)
+                err
 
-            other ->
-              _ = File.rm(zip_path)
-              {:error, other}
+              other ->
+                _ = File.rm(zip_path)
+                {:error, other}
+            end
+          after
+            File.rm_rf(work_dir)
           end
-        after
-          File.rm_rf(work_dir)
-        end
 
-      {:error, _} = err ->
-        err
-    end
+        {:error, _} = err ->
+          err
+      end
+    end)
   end
 
   defp staging_paths(files, id) do
@@ -117,12 +120,15 @@ defmodule RevelaWeb.RawDownloadController do
       work_dir = Path.join(root, name)
       zip_path = Path.join(root, "#{name}.zip")
 
-      _ = File.rm_rf(work_dir)
-      _ = File.rm(zip_path)
+      if File.exists?(zip_path) do
+        {:ok, nil, zip_path}
+      else
+        _ = File.rm_rf(work_dir)
 
-      case File.mkdir_p(work_dir) do
-        :ok -> {:ok, work_dir, zip_path}
-        {:error, _} -> nil
+        case File.mkdir_p(work_dir) do
+          :ok -> {:ok, work_dir, zip_path}
+          {:error, _} -> nil
+        end
       end
     end) || {:error, :no_staging_root}
   end

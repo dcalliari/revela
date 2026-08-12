@@ -373,8 +373,8 @@ defmodule RevelaWeb.HostLive do
   end
 
   def handle_info({:brand_round_changed, editorial_id}, socket) do
-    if socket.assigns.editorial && socket.assigns.editorial.id == editorial_id do
-      {:noreply, load_photos(socket)}
+    if Capture.current_editorial_id() == editorial_id do
+      {:noreply, load_photos(socket)
     else
       {:noreply, socket}
     end

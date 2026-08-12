@@ -203,7 +203,9 @@ defmodule Revela.Capture do
   Registra uma foto recem baixada, associada ao editorial ativo (se houver).
   Calcula o proximo `seq` e transmite o evento para todos os LiveViews conectados.
   """
-  def create_photo(attrs) do
+  def create_photo(attrs), do: create_photo(attrs, 3)
+
+  defp create_photo(attrs, attempts) do
     seq = (Repo.one(from p in Photo, select: max(p.seq)) || 0) + 1
 
     attrs =
@@ -211,13 +213,19 @@ defmodule Revela.Capture do
       |> Map.put(:seq, seq)
       |> Map.put_new(:editorial_id, current_editorial_id())
 
-    %Photo{}
-    |> Photo.changeset(attrs)
-    |> Repo.insert()
-    |> case do
+    case Repo.insert(Photo.changeset(%Photo{}, attrs)) do
       {:ok, photo} ->
         broadcast_photo(photo)
         {:ok, photo}
+
+      {:error, %Ecto.Changeset{} = changeset} = error when attempts > 0 ->
+        if Enum.any?(changeset.errors, fn {field, {_message, opts}} ->
+             field == :seq and Keyword.get(opts, :constraint) == :unique
+           end) do
+          create_photo(attrs, attempts - 1)
+        else
+          error
+        end
 
       error ->
         error

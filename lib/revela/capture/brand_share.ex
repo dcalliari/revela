@@ -10,6 +10,7 @@ defmodule Revela.Capture.BrandShare do
   schema "brand_shares" do
     field :token, :string
     field :photo_ids, :string
+    field :requested_photo_ids, :string
     field :label, :string
 
     belongs_to :editorial, Revela.Capture.Editorial
@@ -19,8 +20,8 @@ defmodule Revela.Capture.BrandShare do
 
   def changeset(share, attrs) do
     share
-    |> cast(attrs, [:token, :editorial_id, :photo_ids, :label])
-    |> validate_required([:token, :editorial_id, :photo_ids])
+    |> cast(attrs, [:token, :editorial_id, :photo_ids, :requested_photo_ids, :label])
+    |> validate_required([:token, :editorial_id, :photo_ids, :requested_photo_ids])
     |> unique_constraint(:token)
     |> foreign_key_constraint(:editorial_id)
   end
