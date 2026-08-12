@@ -222,9 +222,9 @@ de pós-produção dedicada ainda aberta).
 
 ### 6. Modo apresentação em janela separada
 
-**Status**: FEITO; URL do PR preenchida na entrega no-mistakes. Rota `/tv`
-display-only espelha o
-visualizador do Host via PubSub (`Capture.broadcast_host_viewer/1`); sem
+**Status**: FEITO; PR https://github.com/dcalliari/revela/pull/9. Rota `/tv`
+display-only espelha o visualizador do Host via PubSub
+(`Capture.broadcast_host_viewer/1`); sem
 classificação e sem Presence. Inclui a correção do espelho ao voltar do
 ocioso e a regra de só espelhar Host presente (decisão do captain em
 2026-08-11). Limitação aceita: o estado espelhado é um slot único (não por
