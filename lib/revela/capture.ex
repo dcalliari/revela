@@ -112,6 +112,9 @@ defmodule Revela.Capture do
   defp broadcast_label(photo_id),
     do: PubSub.broadcast(Revela.PubSub, @labels_topic, {:label_changed, photo_id})
 
+  defp broadcast_brand_round(editorial_id),
+    do: PubSub.broadcast(Revela.PubSub, @labels_topic, {:brand_round_changed, editorial_id})
+
   # ── Fotos ─────────────────────────────────────────────────────────────────
 
   @doc """
@@ -455,9 +458,14 @@ defmodule Revela.Capture do
   # ── Brand shares (URL de previews para a marca) ─────────────────────────────
 
   def create_brand_share(attrs) do
-    %BrandShare{}
-    |> BrandShare.changeset(attrs)
-    |> Repo.insert()
+    case %BrandShare{} |> BrandShare.changeset(attrs) |> Repo.insert() do
+      {:ok, share} = result ->
+        broadcast_brand_round(share.editorial_id)
+        result
+
+      error ->
+        error
+    end
   end
 
   def touch_brand_share(%BrandShare{} = share, opts \\ []) when is_list(opts) do
@@ -470,9 +478,14 @@ defmodule Revela.Capture do
         changes
       end
 
-    share
-    |> Ecto.Changeset.change(changes)
-    |> Repo.update()
+    case share |> Ecto.Changeset.change(changes) |> Repo.update() do
+      {:ok, touched} = result ->
+        broadcast_brand_round(touched.editorial_id)
+        result
+
+      error ->
+        error
+    end
   end
 
   def get_brand_share_by_token(token) when is_binary(token) do

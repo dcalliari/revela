@@ -371,6 +371,14 @@ defmodule RevelaWeb.HostLive do
     {:noreply, refresh_grid_for_label(socket, photo_id)}
   end
 
+  def handle_info({:brand_round_changed, editorial_id}, socket) do
+    if socket.assigns.editorial && socket.assigns.editorial.id == editorial_id do
+      {:noreply, load_photos(socket)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_info(%{event: "presence_diff"}, socket) do
     {:noreply, assign(socket, :reviewers, Presence.list_reviewers())}
   end

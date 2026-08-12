@@ -315,6 +315,14 @@ defmodule RevelaWeb.PostLive do
     {:noreply, refresh_labels_and_tallies(socket)}
   end
 
+  def handle_info({:brand_round_changed, editorial_id}, socket) do
+    if socket.assigns.editorial && socket.assigns.editorial.id == editorial_id do
+      {:noreply, refresh_editorial_data(socket)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_info(:session_reset, socket) do
     socket = assign(socket, :editorials, Capture.list_editorials())
 
