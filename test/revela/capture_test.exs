@@ -1,5 +1,5 @@
 defmodule Revela.CaptureTest do
-  use Revela.DataCase, async: true
+  use Revela.DataCase, async: false
 
   alias Revela.Capture
 

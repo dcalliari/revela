@@ -222,9 +222,15 @@ de pós-produção dedicada ainda aberta).
 
 ### 6. Modo apresentação em janela separada
 
-**Status**: EM ANDAMENTO. PR aberto: https://github.com/dcalliari/revela/pull/9. Inclui a
-correção do espelho ao voltar do ocioso e a regra de só espelhar Host presente
-(decisão do captain em 2026-08-11). Topologia suportada: uma aba de Host por vez.
+**Status**: FEITO; PR https://github.com/dcalliari/revela/pull/9. Rota `/tv`
+display-only espelha o visualizador do Host via PubSub
+(`Capture.broadcast_host_viewer/1`); sem
+classificação e sem Presence. Inclui a correção do espelho ao voltar do
+ocioso e a regra de só espelhar Host presente (decisão do captain em
+2026-08-11). Limitação aceita: o estado espelhado é um slot único (não por
+conexão), então uma segunda aba do Host aberta ao mesmo tempo sobrescreve o
+que a TV vê — uma aba do Host por vez é a topologia suportada (ver AGENTS.md
+"Domain: TV presentation (`/tv`)").
 
 **Observado**: para mostrar as fotos na TV, a tela do notebook foi espelhada via
 HDMI. Enquanto isso o notebook fica preso: não dá para usar o host para outra
@@ -233,19 +239,22 @@ coisa sem que apareça na TV.
 **Ideia original descartada**: entrar no sistema como um revisor chamado "tv".
 Traz identidade e classificação que não fazem sentido para um telão.
 
-**Proposta**: rota nova (ex.: `/tv`) que abre em aba ou janela separada,
-arrastável para o monitor da TV em tela cheia. Só exibe, não classifica, não
-entra no Presence. Segue o ao vivo por padrão e aceita ser controlada pelo host
-via PubSub, de modo que folhear no host mude o que está na TV enquanto o
-notebook continua livre para outras coisas.
-
 **Ponto de decisão**: a TV espelha o que o host está vendo, ou tem navegação
-própria? A primeira é mais simples e cobre o caso relatado.
+própria? A primeira é mais simples e cobre o caso relatado. **Decisão
+aceita (2026-08-07)**: espelhar o Host; sem navegação própria neste ship.
+
+**O que entrou**: rota `/tv` (`TvLive`) display-only; `ViewerComponents.presentation/1`;
+`Capture.broadcast_host_viewer/1` + `host_viewer_state/0` (PubSub +
+`Capture.HostViewerState`, um `Agent`); link no `/host`; sem classificação e
+sem Presence.
+
+**Retorno ao vivo na TV**: em `/tv`, ~10s fora do ao vivo (`:tv_idle_ms`, padrão
+`10_000`), reiniciado a cada interação local (`tv_activity`), com indicação
+visível ("volta ao vivo em Ns"). Não aplicado em `HostLive` / `ReviewLive`.
 
 ### 7. Retorno automático ao vivo por inatividade
 
-**Status**: EM ANDAMENTO, entregue junto do item 6 e **só em `/tv`** (Host e Review
-seguem sem tempo ocioso). Valor efetivo no código: 30s.
+**Status**: DIFERIDO para Host e Review.
 
 **Ideia levantada**: se a pessoa para de folhear e esquece de voltar ao vivo,
 retornar sozinho à foto mais recente depois de ~10s.
@@ -257,10 +266,10 @@ decisão, e 10s é pouco para olhar uma foto. Onde ele é claramente certo é no
 modo apresentação do item 6, que é só exibição e onde ninguém está decidindo
 nada.
 
-**Proposta**: implementar o timeout **apenas** no modo apresentação. Reavaliar
-para o host depois que 1 e 2 estiverem em uso, e se for adiante, usar janela
-maior (~30s), reiniciada a cada interação e com indicação visível de que vai
-voltar. Nos celulares dos revisores, não aplicar.
+**Proposta adiada**: implementar o timeout **apenas** no modo apresentação.
+Reavaliar para o Host depois que os itens 1 e 2 estiverem em uso e, se for
+adiante, usar uma janela maior (~30s), reiniciada a cada interação e com
+indicação visível de que vai voltar. Nos celulares dos revisores, não aplicar.
 
 ### 8. `raw_path` vazio para todas as fotos
 

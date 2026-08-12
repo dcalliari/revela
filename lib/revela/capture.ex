@@ -6,6 +6,9 @@ defmodule Revela.Capture do
   qual sessao esta ativa. Sem editorial ativo, listagens ficam vazias (fotos com
   `editorial_id` nulo nao entram na UI). Cada revisor tem o seu proprio conjunto
   de cores para cada foto (classificacao por pessoa).
+
+  Tambem publica o estado do visualizador do Host (`broadcast_host_viewer/1`)
+  para `TvLive` (`/tv`); start/finish de editorial zera esse estado.
   """
 
   import Ecto.Query, warn: false
@@ -16,15 +19,89 @@ defmodule Revela.Capture do
   @photos_topic "photos"
   @labels_topic "labels"
   @status_topic "capture_status"
+  alias Revela.Capture.HostViewerState
+
+  @host_viewer_topic "host_viewer"
+  @host_registry __MODULE__.HostRegistry
+  @host_registry_key :host
+  @default_host_viewer HostViewerState.default()
 
   # ── PubSub ────────────────────────────────────────────────────────────────
 
   def subscribe_photos, do: PubSub.subscribe(Revela.PubSub, @photos_topic)
   def subscribe_labels, do: PubSub.subscribe(Revela.PubSub, @labels_topic)
   def subscribe_status, do: PubSub.subscribe(Revela.PubSub, @status_topic)
+  def subscribe_host_viewer, do: PubSub.subscribe(Revela.PubSub, @host_viewer_topic)
 
   def broadcast_status(status),
     do: PubSub.broadcast(Revela.PubSub, @status_topic, {:capture_status, status})
+
+  @doc """
+  Registra o processo `HostLive` atual como Host presente. O Registry remove
+  a entrada automaticamente quando o processo morre (aba fechada, crash,
+  queda de rede) — nao depende de `terminate/2` nem de um broadcast
+  `open: false`.
+  """
+  def track_host do
+    case Registry.register(@host_registry, @host_registry_key, true) do
+      {:ok, _} -> :ok
+      {:error, {:already_registered, _}} -> :ok
+    end
+  end
+
+  @doc "True se pelo menos um `HostLive` conectado ainda esta vivo."
+  def host_present? do
+    Registry.lookup(@host_registry, @host_registry_key) != []
+  end
+
+  @doc """
+  Publica o estado do visualizador do Host para a superficie `/tv`.
+  Mantem o ultimo estado (slot unico, nao por conexao — uma segunda aba do
+  Host sobrescreve; ver AGENTS.md "Domain: TV presentation (`/tv`)") para
+  LiveViews que entram no meio da sessao. Deduplica: estado igual ao ja
+  persistido nao gera novo evento PubSub, entao consumidores que precisam
+  resincronizar sem depender de uma mudanca real devem ler
+  `host_viewer_mirror_state/0` direto em vez de esperar por um broadcast.
+  """
+  def broadcast_host_viewer(state) when is_map(state) do
+    normalized = %{
+      photo_id: Map.get(state, :photo_id),
+      follow: Map.get(state, :follow, true) == true,
+      open: Map.get(state, :open, false) == true
+    }
+
+    if host_viewer_state() == normalized do
+      :ok
+    else
+      HostViewerState.put(normalized)
+      PubSub.broadcast(Revela.PubSub, @host_viewer_topic, {:host_viewer, normalized})
+      :ok
+    end
+  end
+
+  @doc "Ultimo estado bruto do visualizador do Host (ou follow ao vivo se ainda nao houve broadcast)."
+  def host_viewer_state do
+    HostViewerState.get()
+  end
+
+  @doc """
+  Estado do Host para espelhamento pela TV. Sem Host vivo, trata como viewer
+  fechado (ao vivo) — o slot pode ficar com `open: true` apos crash/queda sem
+  anuncio.
+  """
+  def host_viewer_mirror_state do
+    if host_present?() do
+      host_viewer_state()
+    else
+      @default_host_viewer
+    end
+  end
+
+  @doc false
+  def reset_host_viewer_state do
+    HostViewerState.reset()
+    :ok
+  end
 
   defp broadcast_photo(photo),
     do: PubSub.broadcast(Revela.PubSub, @photos_topic, {:new_photo, photo})
@@ -270,6 +347,7 @@ defmodule Revela.Capture do
     end)
     |> case do
       {:ok, editorial} ->
+        reset_host_viewer_state()
         PubSub.broadcast(Revela.PubSub, @photos_topic, :session_reset)
         {:ok, editorial}
 
@@ -284,6 +362,7 @@ defmodule Revela.Capture do
   """
   def finish_editorial do
     finish_active_editorial()
+    reset_host_viewer_state()
     PubSub.broadcast(Revela.PubSub, @photos_topic, :session_reset)
     :ok
   end

@@ -27,6 +27,9 @@ defmodule RevelaWeb.HostLive do
   `ViewerComponents` nao exibe legenda ou numeros visiveis — so `aria-label`
   por botao.
 
+  O estado do viewer (`photo_id`, `follow`, `open`) e publicado via
+  `Capture.broadcast_host_viewer/1` para a superficie `/tv` (`TvLive`).
+
   Com `REVELA_DEMO=1`, o Host mostra badge DEMO e, com a captura armada,
   **Disparar (demo)** (caminho real de ingest via arquivo). A tecla `D`/`d`
   só liga com editorial ativo; antes disso use o botão `#demo-fire`.
@@ -54,28 +57,42 @@ defmodule RevelaWeb.HostLive do
     end
 
     url = review_url()
-
     capture = CameraServer.status()
 
-    {:ok,
-     socket
-     |> assign(:url, url)
-     |> assign(:qr, qr_svg(url))
-     |> assign(:capture, capture)
-     |> assign(:disk_warn_pushed, false)
-     |> assign(:reviewers, Presence.list_reviewers())
-     |> assign(:open, false)
-     |> assign(:idx, 0)
-     |> assign(:follow, true)
-     |> assign(:notice, nil)
-     |> assign(:import_path, "")
-     |> assign(:labels, Capture.labels_for_reviewer(@host_id))
-     |> assign(:page, 0)
-     |> assign(:page_size, @page_size)
-     |> assign(:filter_colors, MapSet.new())
-     |> stream_configure(:grid_photos, dom_id: &"grid-photo-#{&1.id}")
-     |> load_photos()
-     |> maybe_warn_disk(capture)}
+    socket =
+      socket
+      |> assign(:url, url)
+      |> assign(:qr, qr_svg(url))
+      |> assign(:capture, capture)
+      |> assign(:disk_warn_pushed, false)
+      |> assign(:reviewers, Presence.list_reviewers())
+      |> assign(:open, false)
+      |> assign(:idx, 0)
+      |> assign(:follow, true)
+      |> assign(:notice, nil)
+      |> assign(:import_path, "")
+      |> assign(:labels, Capture.labels_for_reviewer(@host_id))
+      |> assign(:page, 0)
+      |> assign(:page_size, @page_size)
+      |> assign(:filter_colors, MapSet.new())
+      |> stream_configure(:grid_photos, dom_id: &"grid-photo-#{&1.id}")
+      |> load_photos()
+      |> maybe_warn_disk(capture)
+
+    socket =
+      if connected?(socket) do
+        # Publish this Host's fresh viewer state before registering presence:
+        # host_present?/0 flips true the instant track_host/0 runs, and until
+        # then /tv could reanimate a dead Host's stale mirrored photo via
+        # host_viewer_mirror_state/0.
+        socket = broadcast_host_viewer(socket)
+        Capture.track_host()
+        socket
+      else
+        socket
+      end
+
+    {:ok, socket}
   end
 
   @impl true
@@ -110,7 +127,7 @@ defmodule RevelaWeb.HostLive do
   end
 
   def handle_event("close", _params, socket) do
-    {:noreply, assign(socket, open: false)}
+    {:noreply, socket |> assign(open: false) |> broadcast_host_viewer()}
   end
 
   # inicia um editorial: cria pasta unica da sessao, aponta a captura pra la
@@ -135,7 +152,8 @@ defmodule RevelaWeb.HostLive do
          |> assign(:page, 0)
          |> assign(:filter_colors, MapSet.new())
          |> assign(:notice, "Editorial \"#{name}\" iniciado. Originais em: #{folder}")
-         |> load_photos()}
+         |> load_photos()
+         |> broadcast_host_viewer()}
     end
   end
 
@@ -154,7 +172,8 @@ defmodule RevelaWeb.HostLive do
      |> assign(:page, 0)
      |> assign(:filter_colors, MapSet.new())
      |> assign(:notice, "Editorial finalizado. Os originais ficam salvos na pasta.")
-     |> load_photos()}
+     |> load_photos()
+     |> broadcast_host_viewer()}
   end
 
   def handle_event("toggle_color_filter", %{"color" => color}, socket) do
@@ -367,7 +386,8 @@ defmodule RevelaWeb.HostLive do
        page: 0,
        filter_colors: MapSet.new()
      )
-     |> load_photos()}
+     |> load_photos()
+     |> broadcast_host_viewer()}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
@@ -502,13 +522,28 @@ defmodule RevelaWeb.HostLive do
     end
   end
 
+  defp broadcast_host_viewer(socket) do
+    photo = current_photo(socket.assigns)
+
+    Capture.broadcast_host_viewer(%{
+      photo_id: photo && photo.id,
+      follow: socket.assigns.follow,
+      open: socket.assigns.open
+    })
+
+    socket
+  end
+
   defp current_photo(%{photos: photos, idx: idx}), do: Enum.at(photos, idx)
 
   # follow e derivado do indice: estar na ultima foto e estar ao vivo
   defp navigate(socket, idx) do
     last = max(length(socket.assigns.photos) - 1, 0)
     idx = idx |> max(0) |> min(last)
-    assign(socket, idx: idx, follow: idx == last)
+
+    socket
+    |> assign(idx: idx, follow: idx == last)
+    |> broadcast_host_viewer()
   end
 
   defp review_url do
@@ -673,6 +708,14 @@ defmodule RevelaWeb.HostLive do
                 <p class="text-xs opacity-60">
                   Mesma rede Wi-Fi. Aponte a camera do celular para o QR.
                 </p>
+                <.link
+                  id="tv-open-link"
+                  navigate={~p"/tv"}
+                  target="_blank"
+                  class="link link-hover text-xs opacity-70"
+                >
+                  Abrir modo apresentação (/tv)
+                </.link>
               </div>
             </div>
 

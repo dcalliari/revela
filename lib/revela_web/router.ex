@@ -19,6 +19,7 @@ defmodule RevelaWeb.Router do
 
     live "/", ReviewLive
     live "/host", HostLive
+    live "/tv", TvLive
   end
 
   # Other scopes may use custom stacks.
