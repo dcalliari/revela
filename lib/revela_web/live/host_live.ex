@@ -8,12 +8,18 @@ defmodule RevelaWeb.HostLive do
   help pede vinculo manual quando ha camera; o console do browser tambem
   recebe um aviso via `push_event("disk-awareness", ...)`.
 
+  **Importar do cartao** (`#card-import`): pasta sob raizes allowlisted
+  (`:card_import_allowed_roots` / `REVELA_CARD_IMPORT_ROOTS`; padrao
+  `/run/media` e `/media`) via `Capture.import_from_folder/1`. Exige editorial
+  ativo; contrato e limites em `Revela.Capture.CardImport` e no README.
+
   A grade do editorial e paginada (24/pagina, prev/next) e filtravel por
   bolinhas de cor (multi-select; vazio = todas; mudar filtro volta a pagina 1).
   Listagem e contagem vao ao banco via `Capture.list_photos/1` e
   `count_photos/1`; a pagina corrente e um LiveView stream (`:grid_photos`).
   O viewer imersivo continua com a lista completa (`list_photos/0`) para
-  idx/follow — nao reusar a pagina da grade.
+  idx/follow — nao reusar a pagina da grade. Fotos sem `web_path` (RAW
+  importado sem preview) renderizam placeholder, nao quebram a grade.
 
   No viewer imersivo, `follow` segue a mesma invariante que em `ReviewLive`
   (`follow == (idx == last)`); tecla `L`/`l` chama `go_live`. Demais atalhos
@@ -62,6 +68,7 @@ defmodule RevelaWeb.HostLive do
      |> assign(:idx, 0)
      |> assign(:follow, true)
      |> assign(:notice, nil)
+     |> assign(:import_path, "")
      |> assign(:labels, Capture.labels_for_reviewer(@host_id))
      |> assign(:page, 0)
      |> assign(:page_size, @page_size)
@@ -176,6 +183,70 @@ defmodule RevelaWeb.HostLive do
     last_page = max(socket.assigns.total_pages - 1, 0)
     page = min(socket.assigns.page + 1, last_page)
     {:noreply, socket |> assign(:page, page) |> load_grid()}
+  end
+
+  # importa pasta do cartao (JPEG/RAW) para o editorial ativo; recusa sem editorial
+  def handle_event("import_card", %{"path" => path}, socket) do
+    path = String.trim(path)
+
+    socket = assign(socket, :import_path, path)
+
+    cond do
+      path == "" ->
+        {:noreply, assign(socket, :notice, "Informe o caminho da pasta do cartão.")}
+
+      not allowed_import_path?(path) ->
+        {:noreply,
+         assign(
+           socket,
+           :notice,
+           "Pasta fora das raízes de mídia permitidas (ex.: /run/media, /media)."
+         )}
+
+      true ->
+        case Capture.import_from_folder(path) do
+          {:ok, %{imported: imported, skipped: skipped, errors: errors}} ->
+            notice =
+              cond do
+                errors != [] ->
+                  "Importação parcial: #{imported} novas, #{skipped} já existentes, " <>
+                    "#{length(errors)} com erro."
+
+                imported == 0 and skipped > 0 ->
+                  "Nenhuma foto nova (#{skipped} já estavam no editorial)."
+
+                imported == 0 ->
+                  "Nenhum JPEG/RAW suportado na pasta."
+
+                true ->
+                  "Importadas #{imported} foto(s)" <>
+                    if(skipped > 0, do: " (#{skipped} já existentes).", else: ".")
+              end
+
+            socket =
+              socket
+              |> assign(:notice, notice)
+              |> load_photos()
+
+            last = max(length(socket.assigns.photos) - 1, 0)
+            idx = if socket.assigns.follow, do: last, else: socket.assigns.idx
+            {:noreply, navigate(socket, idx)}
+
+          {:error, :no_active_editorial} ->
+            {:noreply,
+             assign(socket, :notice, "Abra um editorial antes de importar fotos do cartão.")}
+
+          {:error, :not_a_directory} ->
+            {:noreply, assign(socket, :notice, "Pasta não encontrada: #{path}")}
+
+          {:error, :empty_path} ->
+            {:noreply, assign(socket, :notice, "Informe o caminho da pasta do cartão.")}
+
+          {:error, {:source_directory, reason}} ->
+            {:noreply,
+             assign(socket, :notice, "Não foi possível ler a pasta do cartão: #{inspect(reason)}")}
+        end
+    end
   end
 
   def handle_event("pick", %{"color" => c}, socket) do
@@ -302,6 +373,83 @@ defmodule RevelaWeb.HostLive do
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   # ── helpers ──────────────────────────────────────────────────────────────────
+
+  # Host so importa de raizes de midia removivel (padrao /run/media e /media;
+  # override via config :card_import_allowed_roots / REVELA_CARD_IMPORT_ROOTS).
+  # Resolve symlinks before the prefix check so a path under an allowed root
+  # that links outside those roots is refused.
+  defp allowed_import_path?(path) when is_binary(path) do
+    case resolve_real_path(path) do
+      {:ok, real} -> under_allowed_import_root?(real)
+      {:error, _} -> false
+    end
+  end
+
+  defp under_allowed_import_root?(real_path) do
+    :revela
+    |> Application.get_env(:card_import_allowed_roots, ["/run/media", "/media"])
+    |> List.wrap()
+    |> Enum.any?(fn root ->
+      root_path =
+        case resolve_real_path(to_string(root)) do
+          {:ok, resolved} -> resolved
+          {:error, _} -> Path.expand(to_string(root))
+        end
+
+      real_path == root_path or String.starts_with?(real_path, root_path <> "/")
+    end)
+  end
+
+  defp resolve_real_path(path) when is_binary(path) do
+    abs = Path.expand(path)
+    resolve_real_path_components(Path.split(abs), [], MapSet.new())
+  end
+
+  defp resolve_real_path_components([], acc, _seen) do
+    {:ok, Path.join(Enum.reverse(acc))}
+  end
+
+  defp resolve_real_path_components([comp | rest], [], seen) do
+    resolve_real_path_components(rest, [comp], seen)
+  end
+
+  defp resolve_real_path_components([comp | rest], acc, seen) do
+    current = Path.join(Enum.reverse([comp | acc]))
+
+    if MapSet.member?(seen, current) do
+      {:error, :symlink_loop}
+    else
+      case File.lstat(current) do
+        {:ok, %{type: :symlink}} ->
+          case File.read_link(current) do
+            {:ok, target} ->
+              parent = Path.join(Enum.reverse(acc))
+
+              resolved =
+                if Path.type(target) == :absolute do
+                  Path.expand(target)
+                else
+                  Path.expand(target, parent)
+                end
+
+              resolve_real_path_components(
+                Path.split(resolved) ++ rest,
+                [],
+                MapSet.put(seen, current)
+              )
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+
+        {:ok, _} ->
+          resolve_real_path_components(rest, [comp | acc], seen)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
 
   # lista completa para o viewer (follow/atalhos); grade usa pagina filtrada via stream
   defp load_photos(socket) do
@@ -482,6 +630,37 @@ defmodule RevelaWeb.HostLive do
               </div>
             </div>
 
+            <div id="card-import" class="card bg-base-100 shadow">
+              <div class="card-body gap-2">
+                <h2 class="card-title text-base">Importar do cartão</h2>
+                <p class="text-xs opacity-60 leading-relaxed">
+                  Quando a captura tethered cair, copie a pasta do microSD e importe
+                  JPEG/RAW (.jpg/.jpeg/.cr2/.cr3) para o editorial aberto.
+                </p>
+                <form id="card-import-form" phx-submit="import_card" class="flex flex-col gap-2">
+                  <input
+                    id="card-import-path"
+                    name="path"
+                    value={@import_path}
+                    placeholder="/caminho/para/DCIM/..."
+                    autocomplete="off"
+                    class="input input-bordered input-sm w-full font-mono text-xs"
+                  />
+                  <button
+                    id="card-import-submit"
+                    type="submit"
+                    disabled={!@capture.editorial}
+                    class="btn btn-secondary btn-sm"
+                  >
+                    Importar pasta
+                  </button>
+                </form>
+                <p :if={!@capture.editorial} id="card-import-hint" class="text-xs text-warning">
+                  Inicie um editorial para habilitar a importação.
+                </p>
+              </div>
+            </div>
+
             <div class="card bg-base-100 shadow">
               <div class="card-body items-center text-center gap-2">
                 <h2 class="card-title">Entrar no estudio</h2>
@@ -564,7 +743,13 @@ defmodule RevelaWeb.HostLive do
                   phx-click="open"
                   phx-value-id={photo.id}
                 >
-                  <img src={photo.web_path} class="w-full aspect-[3/2] object-cover rounded-lg" />
+                  <%= if photo.web_path do %>
+                    <img src={photo.web_path} class="w-full aspect-[3/2] object-cover rounded-lg" />
+                  <% else %>
+                    <div class="w-full aspect-[3/2] rounded-lg bg-slate-900 flex items-center justify-center text-xs text-slate-400">
+                      RAW sem preview
+                    </div>
+                  <% end %>
                   <div class="absolute bottom-1 left-1 right-1 flex gap-1 flex-wrap">
                     <span
                       :for={{color, count} <- Map.get(@tallies, photo.id, %{}) |> Enum.sort()}

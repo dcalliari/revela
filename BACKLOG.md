@@ -390,8 +390,7 @@ preenchido — não precisa reconstruir o par na mão.
 
 ### 13. Fotos capturadas com a câmera desconectada
 
-**Status**: EM ANDAMENTO (ship import pasta → editorial ativo). Parado numa decisão
-pendente sobre o preenchimento do endereço do PR neste item.
+**Status**: FEITO (import pasta → editorial ativo; PR URL ao shipar).
 
 **Observado**: quando o disco encheu, a saída foi desconectar a câmera e seguir
 fotografando no cartão microSD, para não interromper o editorial. Essas fotos
@@ -399,10 +398,10 @@ depois foram juntadas à pasta na mão. Elas nunca passaram pelo Revela, então 
 têm classificação nenhuma e têm nomenclatura própria da câmera (`IMG_*.CR2`, 142
 arquivos no editorial de 2026-08-04).
 
-**Proposta**: importar uma pasta de fotos avulsas para o editorial atual,
-gerando preview e registro como se tivessem chegado pela captura. Isso
-transforma o contorno de emergência num caminho suportado, útil sempre que a
-captura tethered cair no meio da produção.
+**Feito**: `Revela.Capture.CardImport` + Host **Importar do cartão** copiam
+JPEG/RAW da pasta do cartão para o editorial ativo (recusa sem editorial; sem
+escrita em `_sem-editorial`). Detalhe de uso e env `REVELA_CARD_IMPORT_ROOTS`
+no README; contrato do módulo em `lib/revela/capture/card_import.ex`.
 
 **Contexto relacionado**: conectar a câmera direto na TV por HDMI foi testado
 como alternativa para ter o feed, mas a experiência é bem inferior à do Revela,

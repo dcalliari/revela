@@ -28,21 +28,25 @@ Canon (USB) -> gphoto2 --capture-tethered -> pasta observada (inotify)
   a foto e associa o RAW irmao (`.cr2`/`.cr3`): basename exato ou indice
   gphoto2 N+1 com carimbo ate 2s; se o RAW chegar depois do JPEG,
   `attach_raw/1` preenche `raw_path` sem criar foto nova.
+- `Revela.Capture.CardImport` importa pasta do cartao (JPEG/RAW) para o
+  editorial ativo; ver secao **Importar do cartão** em Rodar.
 - `Revela.Capture.Export` (+ `mix revela.export_colors`) copia/move arquivos
   classificados para pastas por cor (`vermelho`…`roxo`); ver secao abaixo.
 - `RevelaWeb.ReviewLive` (`/`) tela de revisao mobile, botoes de cor,
   navegacao e modo ao vivo (`follow == (idx == last)`). Identidade leve por
   `localStorage`.
 - `RevelaWeb.HostLive` (`/host`) QR + URL da LAN, status honesto do tether
-  (auto-arm / retomar / stop), iniciar/finalizar editorial, estimativa de
-  fotos restantes no disco, quem esta online e o consenso de cores; grade de
-  fotos com paginacao (24/pagina) e filtro multi-select pelas bolinhas de cor
-  (`Capture.list_photos/1` + stream LiveView); o viewer imersivo reusa os
-  mesmos atalhos e a lista completa (nao a pagina filtrada).
-  Com `REVELA_DEMO=1`, badge **DEMO** e **Disparar (demo)** / `D` (ver abaixo).
+  (auto-arm / retomar / stop), **Importar do cartão**, iniciar/finalizar
+  editorial, estimativa de fotos restantes no disco, quem esta online e o
+  consenso de cores; grade de fotos com paginacao (24/pagina) e filtro
+  multi-select pelas bolinhas de cor (`Capture.list_photos/1` + stream
+  LiveView); o viewer imersivo reusa os mesmos atalhos e a lista completa
+  (nao a pagina filtrada). Com `REVELA_DEMO=1`, badge **DEMO** e
+  **Disparar (demo)** / `D` (ver abaixo).
 - `RevelaWeb.ViewerComponents` visualizador compartilhado: botoes de cor e
   limpar sem legenda ou numeros visiveis (so `aria-label`, atalhos abaixo
-  continuam ativos), e pinch-zoom no celular (hook `PinchZoom`).
+  continuam ativos), placeholder para RAW sem preview, e pinch-zoom no
+  celular (hook `PinchZoom`).
 
 As cores no banco usam o mesmo mapeamento do darktable: `0` vermelho,
 `1` amarelo, `2` verde, `3` azul, `4` roxo. No teclado/UI as teclas `1`–`5`
@@ -77,6 +81,20 @@ mix phx.server       # sobe em 0.0.0.0:4000
 
 - Host/controle (no laptop): http://localhost:4000/host
 - Revisao (celulares na LAN): a URL/QR que aparece na tela do host.
+
+### Importar do cartão
+
+Quando a captura tethered cair, o Host oferece **Importar do cartão**. Informe o
+caminho de uma pasta sob as raízes de mídia removível permitidas (padrão
+`/run/media` e `/media`; override com `REVELA_CARD_IMPORT_ROOTS`, lista
+separada por vírgula). A importação aceita JPEG e RAW, percorre a pasta
+escolhida e um nível de subpasta imediata (ex. `DCIM/CAMFOLDER`; não segue
+symlink de pasta), copia para o editorial ativo e reusa o matching de irmãos
+do ingest. Reimportar é idempotente (hash de conteúdo / `source_hash`); RAW ou
+JPEG que chega depois faz merge na Photo já existente. Se o ImageMagick não
+decodificar um RAW, o arquivo ainda entra com `raw_path` e a grade/viewer
+mostram **RAW sem preview**. O fluxo é síncrono no MVP — use pasta pequena ou
+selecionada. Sem editorial aberto, nenhum arquivo é copiado.
 
 Se o IP da LAN detectado estiver errado (varias interfaces), fixe manualmente:
 

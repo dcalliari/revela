@@ -29,6 +29,9 @@ defmodule Revela.Capture do
   defp broadcast_photo(photo),
     do: PubSub.broadcast(Revela.PubSub, @photos_topic, {:new_photo, photo})
 
+  @doc false
+  def broadcast_photo_update(photo), do: broadcast_photo(photo)
+
   defp broadcast_label(photo_id),
     do: PubSub.broadcast(Revela.PubSub, @labels_topic, {:label_changed, photo_id})
 
@@ -119,7 +122,11 @@ defmodule Revela.Capture do
   """
   def create_photo(attrs) do
     seq = (Repo.one(from p in Photo, select: max(p.seq)) || 0) + 1
-    attrs = attrs |> Map.put(:seq, seq) |> Map.put(:editorial_id, current_editorial_id())
+
+    attrs =
+      attrs
+      |> Map.put(:seq, seq)
+      |> Map.put_new(:editorial_id, current_editorial_id())
 
     %Photo{}
     |> Photo.changeset(attrs)
@@ -232,6 +239,14 @@ defmodule Revela.Capture do
   end
 
   defp present_raw_path?(path), do: is_binary(path) and path != ""
+
+  @doc """
+  Importa uma pasta de fotos do cartao (JPEG/RAW) para o editorial ativo.
+  Ver `Revela.Capture.CardImport`.
+  """
+  def import_from_folder(source_dir, opts \\ []) do
+    Revela.Capture.CardImport.import_folder(source_dir, opts)
+  end
 
   # ── Editoriais ───────────────────────────────────────────────────────────────
 

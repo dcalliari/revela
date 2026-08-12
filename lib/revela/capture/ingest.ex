@@ -126,18 +126,17 @@ defmodule Revela.Capture.Ingest do
   end
 
   @doc false
-  def preview_paths(stem) do
-    scope = preview_scope()
+  def preview_paths(stem), do: preview_paths(stem, Capture.current_editorial_id())
+
+  @doc false
+  def preview_paths(stem, editorial_id) when is_integer(editorial_id) or is_nil(editorial_id) do
+    scope = preview_scope(editorial_id)
     web_name = stem <> ".jpg"
     {Path.join(scope, web_name), "/uploads/#{scope}/#{web_name}"}
   end
 
-  defp preview_scope do
-    case Capture.current_editorial_id() do
-      nil -> "_sem-editorial"
-      id -> Integer.to_string(id)
-    end
-  end
+  defp preview_scope(nil), do: "_sem-editorial"
+  defp preview_scope(id) when is_integer(id), do: Integer.to_string(id)
 
   # Reduz o JPEG da camera para um preview web (so encolhe, nunca amplia).
   #
@@ -145,7 +144,10 @@ defmodule Revela.Capture.Ingest do
   # libjpeg decodifica direto numa escala DCT reduzida em vez de abrir os 17.9 MP
   # da T6 para so entao encolher. `-auto-orient` precisa continuar antes do
   # `-thumbnail`, que descarta o EXIF junto com a tag de orientacao.
-  defp make_preview(src, dest) do
+  @doc """
+  Gera o JPEG de preview web em `dest` a partir de `src` (ImageMagick `magick`).
+  """
+  def make_preview(src, dest) do
     File.mkdir_p!(Path.dirname(dest))
 
     case System.cmd(
@@ -279,7 +281,8 @@ defmodule Revela.Capture.Ingest do
         true
 
       true ->
-        with {:ok, jpeg_meta} <- parse_capture_path(jpeg_path),
+        with true <- raw?(raw_path),
+             {:ok, jpeg_meta} <- parse_capture_path(jpeg_path),
              {:ok, raw_meta} <- parse_capture_path(raw_path) do
           jpeg_to_raw_sibling?(jpeg_meta, raw_meta)
         else
@@ -494,15 +497,20 @@ defmodule Revela.Capture.Ingest do
 
   defp parse_name_datetime(_, _), do: :error
 
-  defp jpeg?(path) do
+  @doc "True se a extensao for JPEG (`.jpg`/`.jpeg`)."
+  def jpeg?(path) do
     ext = path |> Path.extname() |> String.downcase()
     ext in @jpeg_exts
   end
 
-  defp raw?(path) do
+  @doc "True se a extensao for RAW Canon (`.cr2`/`.cr3`)."
+  def raw?(path) do
     ext = path |> Path.extname() |> String.downcase()
     ext in @raw_exts
   end
+
+  @doc "True se o arquivo for JPEG ou RAW suportado para import/ingest."
+  def supported_photo?(path), do: jpeg?(path) or raw?(path)
 
   defp raw_filename?(name) do
     ext = name |> Path.extname() |> String.downcase()
