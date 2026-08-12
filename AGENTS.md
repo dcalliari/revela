@@ -89,7 +89,7 @@ resync on whether the state differs from what `/tv` last displayed.
 `start_editorial` / `finish_editorial` reset host-viewer state. UI:
 `ViewerComponents.presentation/1` (only `phx-click` + `phx-window-keyup` bind
 `tv_activity` — no `phx-window-keydown`, so holding a key does not flood
-`resync/1` with repeat events). See `README.md` ("Modo apresentacao") and
+`resync/1` with repeat events). See `README.md` ("Arquitetura" and "Rodar") and
 `test/revela_web/live/tv_live_test.exs`.
 
 ## Domain: color-folder export
