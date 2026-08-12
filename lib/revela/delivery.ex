@@ -72,6 +72,43 @@ defmodule Revela.Delivery do
       where: not is_nil(d.expires_at) and d.expires_at <= ^DateTime.utc_now()
     )
     |> Repo.delete_all()
+
+    sweep_stale_raw_archives()
+  end
+
+  defp sweep_stale_raw_archives do
+    cutoff = DateTime.add(DateTime.utc_now(), -@raw_download_ttl, :second)
+
+    raw_archive_roots()
+    |> Enum.each(fn root ->
+      case File.ls(root) do
+        {:ok, entries} ->
+          Enum.each(entries, fn entry ->
+            if String.starts_with?(entry, "revela-raw-") and String.ends_with?(entry, ".zip") do
+              path = Path.join(root, entry)
+
+              with {:ok, stat} <- File.stat(path),
+                   {:ok, modified} <- NaiveDateTime.from_erl(stat.mtime),
+                   {:ok, modified} <- DateTime.from_naive(modified, "Etc/UTC"),
+                   true <- DateTime.compare(modified, cutoff) == :lt do
+                _ = File.rm(path)
+              end
+            end
+          end)
+
+        {:error, _} ->
+          :ok
+      end
+    end)
+  end
+
+  defp raw_archive_roots do
+    editorials =
+      Application.get_env(:revela, :editorials_dir) ||
+        Path.join(File.cwd!(), "editorials")
+
+    [Path.join(editorials, ".raw-pulls"), "/var/tmp"]
+    |> Enum.uniq()
   end
 
   @doc """
