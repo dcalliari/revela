@@ -182,11 +182,14 @@ defmodule Revela.Capture do
   defp apply_color_filter(query, []), do: query
 
   defp apply_color_filter(query, colors) do
+    brand_scope = brand_label_scope(current_editorial_id())
+
     from(p in query,
       where:
         exists(
           from(l in Label,
             where: l.photo_id == parent_as(:photo).id and l.color in ^colors,
+            where: ^brand_scope,
             select: 1
           )
         )
