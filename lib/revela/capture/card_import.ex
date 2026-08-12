@@ -102,12 +102,20 @@ defmodule Revela.Capture.CardImport do
     end
   end
 
+  defp regular_file?(path) do
+    case File.lstat(path) do
+      {:ok, %{type: :regular}} -> true
+      _ -> false
+    end
+  end
+
   defp list_supported_files(dir) do
     case File.ls(dir) do
       {:ok, names} ->
         names
         |> Enum.map(&Path.join(dir, &1))
-        |> Enum.filter(&(File.regular?(&1) and Ingest.supported_photo?(&1)))
+        |> Enum.filter(&regular_file?(&1))
+        |> Enum.filter(&Ingest.supported_photo?/1)
 
       {:error, _} ->
         []

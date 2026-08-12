@@ -368,6 +368,7 @@ defmodule RevelaWeb.HostLive do
   end
 
   def handle_info({:label_changed, photo_id}, socket) do
+    socket = assign(socket, :labels, Capture.labels_for_reviewer(@host_id))
     {:noreply, refresh_grid_for_label(socket, photo_id)}
   end
 
