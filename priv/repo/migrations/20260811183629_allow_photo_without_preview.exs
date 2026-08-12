@@ -1,6 +1,8 @@
 defmodule Revela.Repo.Migrations.AllowPhotoWithoutPreview do
   use Ecto.Migration
 
+  @disable_ddl_transaction true
+
   def up do
     execute "PRAGMA foreign_keys = OFF"
 
