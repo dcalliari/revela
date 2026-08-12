@@ -118,11 +118,17 @@ defmodule RevelaWeb.BrandShareLive do
               phx-value-id={photo.id}
               class="block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded-sm overflow-hidden"
             >
-              <img
-                src={photo.web_path}
-                alt=""
-                class="w-full aspect-[3/2] object-cover bg-neutral-900 transition duration-200 group-hover:brightness-110"
-              />
+              <%= if photo.web_path do %>
+                <img
+                  src={photo.web_path}
+                  alt=""
+                  class="w-full aspect-[3/2] object-cover bg-neutral-900 transition duration-200 group-hover:brightness-110"
+                />
+              <% else %>
+                <span class="flex w-full aspect-[3/2] items-center justify-center bg-neutral-900 text-xs text-neutral-500">
+                  RAW sem preview
+                </span>
+              <% end %>
             </button>
             <div class="mt-2 flex items-center justify-center gap-1.5">
               <button
@@ -166,7 +172,11 @@ defmodule RevelaWeb.BrandShareLive do
           <button type="button" phx-click="close" class="btn btn-sm btn-ghost text-white">Fechar</button>
         </div>
         <div :if={photo} class="flex-1 flex items-center justify-center p-4">
-          <img src={photo.web_path} class="max-h-full max-w-full object-contain" />
+          <%= if photo.web_path do %>
+            <img src={photo.web_path} class="max-h-full max-w-full object-contain" />
+          <% else %>
+            <span class="text-neutral-500">RAW sem preview</span>
+          <% end %>
         </div>
       </div>
     </div>

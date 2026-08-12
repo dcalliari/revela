@@ -1,7 +1,8 @@
 defmodule RevelaWeb.RawDownloadController do
   @moduledoc """
-  Download de RAW da selecao (pos-producao). Usa token assinado com os ids;
-  so inclui arquivos com `raw_path` presente e legivel em disco.
+  Download de RAW da selecao (pos-producao). Usa token curto persistido
+  server-side, com validade de uma hora; so inclui arquivos com `raw_path`
+  presente e legivel em disco.
   """
   use RevelaWeb, :controller
 

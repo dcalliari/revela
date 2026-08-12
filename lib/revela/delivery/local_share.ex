@@ -19,6 +19,8 @@ defmodule Revela.Delivery.LocalShare do
       _editorial ->
         photos = Capture.get_photos_in_editorial(editorial_id, photo_ids)
 
+        photos = Enum.filter(photos, &(is_binary(&1.web_path) and &1.web_path != ""))
+
         if photos == [] do
           {:error, :empty_selection}
         else

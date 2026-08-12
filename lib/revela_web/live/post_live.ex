@@ -706,12 +706,18 @@ defmodule RevelaWeb.PostLive do
                         "ring-0 hover:ring-1 hover:ring-base-content/30"
                     ]}
                   >
-                    <img
-                      src={photo.web_path}
-                      alt=""
-                      class="w-full aspect-[3/2] object-cover pointer-events-none"
-                      draggable="false"
-                    />
+                    <%= if photo.web_path do %>
+                      <img
+                        src={photo.web_path}
+                        alt=""
+                        class="w-full aspect-[3/2] object-cover pointer-events-none"
+                        draggable="false"
+                      />
+                    <% else %>
+                      <span class="flex w-full aspect-[3/2] items-center justify-center bg-base-300 text-xs opacity-70">
+                        RAW sem preview
+                      </span>
+                    <% end %>
                     <div class="absolute bottom-1 left-1 right-1 flex gap-0.5 flex-wrap pointer-events-none">
                       <span
                         :if={Map.get(@labels, photo.id)}

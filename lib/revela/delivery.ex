@@ -7,6 +7,8 @@ defmodule Revela.Delivery do
   `{:error, :not_configured}` ate existirem credenciais — nao bloqueiam o ship.
   """
 
+  import Ecto.Query
+
   alias Revela.Capture
   alias Revela.Capture.BrandShare
   alias Revela.Delivery.RawDownload
@@ -35,17 +37,37 @@ defmodule Revela.Delivery do
   def get_brand_share(token), do: Capture.get_brand_share_by_token(token)
 
   @doc "Cria um token curto e persistido para uma selecao de RAW."
+  @raw_download_ttl 3600
+
   def create_raw_download(editorial_id, photo_ids) when is_list(photo_ids) do
+    cleanup_expired_raw_downloads()
+
     %RawDownload{}
     |> RawDownload.changeset(%{
       token: Ecto.UUID.generate(),
       editorial_id: editorial_id,
-      photo_ids: RawDownload.encode_photo_ids(photo_ids)
+      photo_ids: RawDownload.encode_photo_ids(photo_ids),
+      expires_at: DateTime.add(DateTime.utc_now(), @raw_download_ttl, :second)
     })
     |> Repo.insert()
   end
 
-  def get_raw_download(token), do: Repo.get_by(RawDownload, token: token)
+  def get_raw_download(token) do
+    cleanup_expired_raw_downloads()
+
+    case Repo.get_by(RawDownload, token: token) do
+      %RawDownload{expires_at: expires_at} = download ->
+        if DateTime.compare(expires_at, DateTime.utc_now()) == :gt, do: download, else: nil
+
+      nil ->
+        nil
+    end
+  end
+
+  defp cleanup_expired_raw_downloads do
+    from(d in RawDownload, where: d.expires_at <= ^DateTime.utc_now())
+    |> Repo.delete_all()
+  end
 
   @doc """
   Prepara o pull de RAW da selecao. Retorna caminhos existentes e faltantes.

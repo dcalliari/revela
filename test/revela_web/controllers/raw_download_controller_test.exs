@@ -1,7 +1,8 @@
 defmodule RevelaWeb.RawDownloadControllerTest do
   use RevelaWeb.ConnCase, async: false
 
-  alias Revela.Capture
+  alias Revela.{Capture, Repo}
+  alias Revela.Delivery.RawDownload
   alias RevelaWeb.RawDownloadController
 
   test "baixa zip quando raw_path existe", %{conn: conn} do
@@ -31,6 +32,23 @@ defmodule RevelaWeb.RawDownloadControllerTest do
 
     assert conn.status == 422
     assert conn.resp_body =~ "raw_path"
+  end
+
+  test "link expirado nao entrega o arquivo", %{conn: conn} do
+    {:ok, editorial} =
+      Capture.start_editorial("Expirado", "/tmp/expirado-#{System.unique_integer()}")
+
+    dir = Path.join(System.tmp_dir!(), "revela-exp-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    raw = Path.join(dir, "IMG.CR2")
+    File.write!(raw, "RAWDATA")
+    {:ok, photo} = Capture.create_photo(%{web_path: "/uploads/e.jpg", raw_path: raw})
+    {:ok, token} = RawDownloadController.create_token(editorial.id, [photo.id])
+    Repo.update_all(RawDownload, set: [expires_at: DateTime.add(DateTime.utc_now(), -1, :second)])
+
+    conn = get(conn, ~p"/raws/#{token}")
+    assert conn.status == 403
+    refute conn.resp_body =~ "RAWDATA"
   end
 
   test "403 com token invalido", %{conn: conn} do

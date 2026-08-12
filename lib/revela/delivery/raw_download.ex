@@ -5,14 +5,15 @@ defmodule Revela.Delivery.RawDownload do
   schema "raw_downloads" do
     field :token, :string
     field :photo_ids, :string
+    field :expires_at, :utc_datetime
     belongs_to :editorial, Revela.Capture.Editorial
     timestamps(type: :utc_datetime_usec)
   end
 
   def changeset(download, attrs) do
     download
-    |> cast(attrs, [:token, :editorial_id, :photo_ids])
-    |> validate_required([:token, :editorial_id, :photo_ids])
+    |> cast(attrs, [:token, :editorial_id, :photo_ids, :expires_at])
+    |> validate_required([:token, :editorial_id, :photo_ids, :expires_at])
     |> unique_constraint(:token)
   end
 
