@@ -56,8 +56,11 @@ defmodule Revela.Delivery do
     cleanup_expired_raw_downloads()
 
     case Repo.get_by(RawDownload, token: token) do
-      %RawDownload{expires_at: expires_at} = download ->
+      %RawDownload{expires_at: %DateTime{} = expires_at} = download ->
         if DateTime.compare(expires_at, DateTime.utc_now()) == :gt, do: download, else: nil
+
+      %RawDownload{} ->
+        nil
 
       nil ->
         nil
@@ -65,7 +68,9 @@ defmodule Revela.Delivery do
   end
 
   defp cleanup_expired_raw_downloads do
-    from(d in RawDownload, where: d.expires_at <= ^DateTime.utc_now())
+    from(d in RawDownload,
+      where: not is_nil(d.expires_at) and d.expires_at <= ^DateTime.utc_now()
+    )
     |> Repo.delete_all()
   end
 

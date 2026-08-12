@@ -61,7 +61,7 @@ defmodule RevelaWeb.RawDownloadController do
 
   defp schedule_zip_cleanup(zip_path) do
     Task.start(fn ->
-      Process.sleep(60_000)
+      Process.sleep(3_600_000)
       _ = File.rm(zip_path)
     end)
 
