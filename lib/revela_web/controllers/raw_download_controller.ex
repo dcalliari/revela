@@ -40,7 +40,7 @@ defmodule RevelaWeb.RawDownloadController do
                   |> put_resp_header("content-disposition", ~s(attachment; filename="#{name}"))
                   |> send_file(200, zip_path)
 
-                _ = File.rm(zip_path)
+                schedule_zip_cleanup(zip_path)
                 conn
 
               {:error, reason} ->
@@ -57,6 +57,15 @@ defmodule RevelaWeb.RawDownloadController do
         |> put_resp_content_type("text/plain")
         |> send_resp(403, "Link de download invalido ou expirado.")
     end
+  end
+
+  defp schedule_zip_cleanup(zip_path) do
+    Task.start(fn ->
+      Process.sleep(60_000)
+      _ = File.rm(zip_path)
+    end)
+
+    :ok
   end
 
   defp missing_message([]),

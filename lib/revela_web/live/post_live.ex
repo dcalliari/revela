@@ -207,6 +207,13 @@ defmodule RevelaWeb.PostLive do
            share_url: nil
          )}
 
+      {:error, :no_previews} ->
+        {:noreply,
+         assign(socket,
+           share_error: "A selecao nao possui previews JPG disponiveis para compartilhar.",
+           share_url: nil
+         )}
+
       {:error, reason} ->
         {:noreply,
          assign(socket, share_error: "Falha ao criar link: #{inspect(reason)}", share_url: nil)}
@@ -285,7 +292,14 @@ defmodule RevelaWeb.PostLive do
   def handle_info({:new_photo, photo}, socket) do
     case socket.assigns.editorial do
       %{id: id} when photo.editorial_id == id ->
-        photos = Enum.sort_by([photo | socket.assigns.photos], & &1.seq)
+        photos =
+          if Enum.any?(socket.assigns.photos, &(&1.id == photo.id)) do
+            Enum.map(socket.assigns.photos, fn existing ->
+              if existing.id == photo.id, do: photo, else: existing
+            end)
+          else
+            Enum.sort_by([photo | socket.assigns.photos], & &1.seq)
+          end
 
         {:noreply,
          socket

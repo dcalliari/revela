@@ -22,7 +22,11 @@ defmodule Revela.Delivery.LocalShare do
         photos = Enum.filter(photos, &(is_binary(&1.web_path) and &1.web_path != ""))
 
         if photos == [] do
-          {:error, :empty_selection}
+          if Capture.get_photos_in_editorial(editorial_id, photo_ids) == [] do
+            {:error, :empty_selection}
+          else
+            {:error, :no_previews}
+          end
         else
           ids = Enum.map(photos, & &1.id)
 

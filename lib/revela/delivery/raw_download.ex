@@ -5,7 +5,7 @@ defmodule Revela.Delivery.RawDownload do
   schema "raw_downloads" do
     field :token, :string
     field :photo_ids, :string
-    field :expires_at, :utc_datetime
+    field :expires_at, :utc_datetime_usec
     belongs_to :editorial, Revela.Capture.Editorial
     timestamps(type: :utc_datetime_usec)
   end
