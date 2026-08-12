@@ -46,7 +46,9 @@ defmodule Revela.DeliveryTest do
     p2: p2
   } do
     assert {:ok, first, _} = Delivery.create_brand_share(editorial.id, [p1.id], label: "a")
-    assert {:ok, second, path} = Delivery.create_brand_share(editorial.id, [p1.id, p2.id], label: "b")
+
+    assert {:ok, second, path} =
+             Delivery.create_brand_share(editorial.id, [p1.id, p2.id], label: "b")
 
     assert second.id != first.id
     assert second.token != first.token
@@ -91,6 +93,24 @@ defmodule Revela.DeliveryTest do
 
     assert {:error, :not_configured} =
              Delivery.create_brand_share(editorial.id, [p1.id], backend: :google_drive)
+  end
+
+  test "limpa ZIP orfao no staging junto dos RAWs", %{editorial: editorial, p1: p1} do
+    dir = Path.join(System.tmp_dir!(), "revela-raw-root-#{System.unique_integer([:positive])}")
+    raw_dir = Path.join(dir, "editorial")
+    staging = Path.join(raw_dir, ".raw-pulls")
+    orphan = Path.join(staging, "revela-raw-orphan.zip")
+    File.mkdir_p!(staging)
+    File.write!(orphan, "ZIP")
+    File.touch!(orphan, {{2020, 1, 1}, {0, 0, 0}})
+
+    {:ok, raw} =
+      Ecto.Changeset.change(p1, raw_path: Path.join(raw_dir, "shot.cr2")) |> Repo.update()
+
+    assert raw.raw_path == Path.join(raw_dir, "shot.cr2")
+
+    assert {:ok, _download} = Delivery.create_raw_download(editorial.id, [p1.id])
+    refute File.exists?(orphan)
   end
 
   test "raw_pull separa arquivos presentes e ausentes", %{p1: p1, p2: p2} do

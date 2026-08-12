@@ -10,6 +10,7 @@ defmodule Revela.Delivery do
   import Ecto.Query
 
   alias Revela.Capture
+  alias Revela.Capture.Photo
   alias Revela.Capture.BrandShare
   alias Revela.Delivery.RawDownload
   alias Revela.Repo
@@ -87,9 +88,9 @@ defmodule Revela.Delivery do
             if String.starts_with?(entry, "revela-raw-") and String.ends_with?(entry, ".zip") do
               path = Path.join(root, entry)
 
-              with {:ok, modified} <- File.stat(path, time: :posix),
+              with {:ok, stat} <- File.stat(path, time: :posix),
                    cutoff_posix <- DateTime.to_unix(cutoff),
-                   true <- modified < cutoff_posix do
+                   true <- stat.mtime < cutoff_posix do
                 _ = File.rm(path)
               end
             end
@@ -106,7 +107,14 @@ defmodule Revela.Delivery do
       Application.get_env(:revela, :editorials_dir) ||
         Path.join(File.cwd!(), "editorials")
 
-    [Path.join(editorials, ".raw-pulls"), "/var/tmp"]
+    raw_photo_roots =
+      from(p in Photo, where: not is_nil(p.raw_path) and p.raw_path != "", select: p.raw_path)
+      |> Repo.all()
+      |> Enum.map(&Path.join(Path.dirname(Path.expand(&1)), ".raw-pulls"))
+
+    editorial_roots = Path.wildcard(Path.join(editorials, "**/.raw-pulls"))
+
+    [Path.join(editorials, ".raw-pulls"), "/var/tmp" | raw_photo_roots ++ editorial_roots]
     |> Enum.uniq()
   end
 
