@@ -22,6 +22,18 @@ defmodule RevelaWeb.TvLiveTest do
     refute has_element?(view, "#identity-form")
   end
 
+  test "mostra placeholder para foto RAW sem preview", %{conn: conn} do
+    {:ok, raw_photo} = Capture.create_photo(%{raw_path: "/photos/only.cr3"})
+
+    {:ok, tv, _html} = live(conn, ~p"/tv")
+    {:ok, host, _html} = live(conn, ~p"/host")
+
+    open_photo(host, raw_photo)
+
+    assert has_element?(tv, "#tv-photo-#{raw_photo.id}", "RAW sem preview")
+    refute has_element?(tv, "img#tv-photo-#{raw_photo.id}")
+  end
+
   test "espelha mudanca de foto e go_live do Host via PubSub", %{conn: conn} do
     {:ok, photo_a} = Capture.create_photo(%{web_path: "/uploads/a.jpg"})
     {:ok, photo_b} = Capture.create_photo(%{web_path: "/uploads/b.jpg"})

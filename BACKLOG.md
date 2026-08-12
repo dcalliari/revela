@@ -250,9 +250,8 @@ sem Presence.
 
 ### 7. Retorno automático ao vivo por inatividade
 
-**Status**: FEITO **apenas em `/tv`** nesta branch (junto do item 6). Host e
-celulares de revisores **não** têm esse timeout — permanece diferido para o
-Host.
+**Status**: FEITO **apenas em `/tv`** junto do item 6. Host e celulares de
+revisores **não** têm esse timeout — permanece diferido para o Host.
 
 **Ideia levantada**: se a pessoa para de folhear e esquece de voltar ao vivo,
 retornar sozinho à foto mais recente depois de ~10s.
@@ -263,6 +262,11 @@ propósito para corrigir uma classificação seria puxado para longe no meio da
 decisão, e 10s é pouco para olhar uma foto. Onde ele é claramente certo é no
 modo apresentação do item 6, que é só exibição e onde ninguém está decidindo
 nada.
+
+**Proposta adiada**: implementar o timeout **apenas** no modo apresentação.
+Reavaliar para o Host depois que os itens 1 e 2 estiverem em uso e, se for
+adiante, usar uma janela maior (~30s), reiniciada a cada interação e com
+indicação visível de que vai voltar. Nos celulares dos revisores, não aplicar.
 
 **O que entrou**: em `/tv`, ~10s fora do ao vivo (`:tv_idle_ms`, padrão
 `10_000`), reiniciado a cada interação local (`tv_activity`), com indicação
