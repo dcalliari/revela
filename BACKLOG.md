@@ -222,8 +222,8 @@ de pós-produção dedicada ainda aberta).
 
 ### 6. Modo apresentação em janela separada
 
-**Status**: FEITO (PR
-https://github.com/dcalliari/revela/pull/9). Rota `/tv` display-only espelha o
+**Status**: FEITO; URL do PR preenchida na entrega no-mistakes. Rota `/tv`
+display-only espelha o
 visualizador do Host via PubSub (`Capture.broadcast_host_viewer/1`); sem
 classificação e sem Presence. Inclui a correção do espelho ao voltar do
 ocioso e a regra de só espelhar Host presente (decisão do captain em
@@ -248,10 +248,13 @@ aceita (2026-08-07)**: espelhar o Host; sem navegação própria neste ship.
 `Capture.HostViewerState`, um `Agent`); link no `/host`; sem classificação e
 sem Presence.
 
+**Retorno ao vivo na TV**: em `/tv`, ~10s fora do ao vivo (`:tv_idle_ms`, padrão
+`10_000`), reiniciado a cada interação local (`tv_activity`), com indicação
+visível ("volta ao vivo em Ns"). Não aplicado em `HostLive` / `ReviewLive`.
+
 ### 7. Retorno automático ao vivo por inatividade
 
-**Status**: FEITO **apenas em `/tv`** junto do item 6. Host e celulares de
-revisores **não** têm esse timeout — permanece diferido para o Host.
+**Status**: DIFERIDO para Host e Review.
 
 **Ideia levantada**: se a pessoa para de folhear e esquece de voltar ao vivo,
 retornar sozinho à foto mais recente depois de ~10s.
@@ -267,10 +270,6 @@ nada.
 Reavaliar para o Host depois que os itens 1 e 2 estiverem em uso e, se for
 adiante, usar uma janela maior (~30s), reiniciada a cada interação e com
 indicação visível de que vai voltar. Nos celulares dos revisores, não aplicar.
-
-**O que entrou**: em `/tv`, ~10s fora do ao vivo (`:tv_idle_ms`, padrão
-`10_000`), reiniciado a cada interação local (`tv_activity`), com indicação
-visível ("volta ao vivo em Ns"). Não aplicado em `HostLive` / `ReviewLive`.
 
 ### 8. `raw_path` vazio para todas as fotos
 
