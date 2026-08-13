@@ -83,20 +83,38 @@ defmodule Revela.Delivery do
       case File.ls(root) do
         {:ok, entries} ->
           Enum.each(entries, fn entry ->
-            path = Path.join(root, entry)
-
-            with true <- String.starts_with?(entry, "revela-raw-"),
-                 {:ok, stat} <- File.lstat(path, time: :posix),
-                 true <- stale_raw_artifact?(entry, stat.type),
-                 true <- stat.mtime < DateTime.to_unix(cutoff) do
-              remove_raw_artifact(path, stat.type)
-            end
+            sweep_stale_raw_artifact(root, entry, cutoff)
           end)
 
         {:error, _} ->
           :ok
       end
     end)
+  end
+
+  defp sweep_stale_raw_artifact(root, entry, cutoff) do
+    with true <- String.starts_with?(entry, "revela-raw-"),
+         token when token != "" <- raw_artifact_token(entry) do
+      RawDownload.try_with_token_lock(token, fn ->
+        path = Path.join(root, entry)
+
+        with {:ok, stat} <- File.lstat(path, time: :posix),
+             true <- stale_raw_artifact?(entry, stat.type),
+             true <- stat.mtime < DateTime.to_unix(cutoff) do
+          remove_raw_artifact(path, stat.type)
+        end
+      end)
+    end
+  end
+
+  defp raw_artifact_token(entry) do
+    token = String.replace_prefix(entry, "revela-raw-", "")
+
+    cond do
+      String.ends_with?(token, ".zip.tmp") -> String.trim_trailing(token, ".zip.tmp")
+      String.ends_with?(token, ".zip") -> String.trim_trailing(token, ".zip")
+      true -> token
+    end
   end
 
   defp stale_raw_artifact?(entry, :regular),

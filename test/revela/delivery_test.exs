@@ -3,6 +3,7 @@ defmodule Revela.DeliveryTest do
 
   alias Revela.{Capture, Delivery}
   alias Revela.Capture.BrandShare
+  alias Revela.Delivery.RawDownload
 
   setup do
     {:ok, editorial} =
@@ -143,6 +144,47 @@ defmodule Revela.DeliveryTest do
     assert {:ok, _download} = Delivery.create_raw_download(editorial.id, [p1.id])
     refute File.exists?(orphan)
     refute File.exists?(temp)
+    refute File.exists?(work_dir)
+  end
+
+  test "preserva staging RAW antigo durante geracao ativa", %{editorial: editorial, p1: p1} do
+    dir = Path.join(System.tmp_dir!(), "revela-raw-lock-#{System.unique_integer([:positive])}")
+    raw_dir = Path.join(dir, "editorial")
+    staging = Path.join(raw_dir, ".raw-pulls")
+    token = Ecto.UUID.generate()
+    work_dir = Path.join(staging, "revela-raw-#{token}")
+    File.mkdir_p!(work_dir)
+    File.write!(Path.join(work_dir, "shot.cr2"), "RAW")
+    File.touch!(work_dir, {{2020, 1, 1}, {0, 0, 0}})
+
+    {:ok, _photo} =
+      Ecto.Changeset.change(p1, raw_path: Path.join(raw_dir, "shot.cr2")) |> Repo.update()
+
+    parent = self()
+
+    lock_owner =
+      start_supervised!(
+        {Task,
+         fn ->
+           RawDownload.with_token_lock(token, fn ->
+             send(parent, {:raw_lock_acquired, self()})
+
+             receive do
+               :release_raw_lock -> :ok
+             end
+           end)
+         end}
+      )
+
+    assert_receive {:raw_lock_acquired, ^lock_owner}
+    assert {:ok, _download} = Delivery.create_raw_download(editorial.id, [p1.id])
+    assert File.dir?(work_dir)
+
+    monitor = Process.monitor(lock_owner)
+    send(lock_owner, :release_raw_lock)
+    assert_receive {:DOWN, ^monitor, :process, ^lock_owner, :normal}
+
+    assert {:ok, _download} = Delivery.create_raw_download(editorial.id, [p1.id])
     refute File.exists?(work_dir)
   end
 

@@ -2,6 +2,14 @@ defmodule Revela.Delivery.RawDownload do
   use Ecto.Schema
   import Ecto.Changeset
 
+  def with_token_lock(token, fun) when is_binary(token) and is_function(fun, 0) do
+    :global.trans(lock_id(token), fun)
+  end
+
+  def try_with_token_lock(token, fun) when is_binary(token) and is_function(fun, 0) do
+    :global.trans(lock_id(token), fun, [node() | Node.list()], 0)
+  end
+
   schema "raw_downloads" do
     field :token, :string
     field :photo_ids, :string
@@ -40,4 +48,6 @@ defmodule Revela.Delivery.RawDownload do
         []
     end
   end
+
+  defp lock_id(token), do: {{__MODULE__, token}, self()}
 end

@@ -7,6 +7,7 @@ defmodule RevelaWeb.RawDownloadController do
   use RevelaWeb, :controller
 
   alias Revela.Delivery
+  alias Revela.Delivery.RawDownload
 
   def create_token(editorial_id, photo_ids) when is_list(photo_ids) do
     {:ok, download} = Delivery.create_raw_download(editorial_id, photo_ids)
@@ -16,7 +17,7 @@ defmodule RevelaWeb.RawDownloadController do
   def download(conn, %{"token" => token}) do
     case Delivery.get_raw_download(token) do
       %{editorial_id: editorial_id} = download ->
-        photo_ids = Revela.Delivery.RawDownload.decode_photo_ids(download)
+        photo_ids = RawDownload.decode_photo_ids(download)
         pull = Delivery.raw_pull(photo_ids)
 
         cond do
@@ -40,7 +41,7 @@ defmodule RevelaWeb.RawDownloadController do
                   |> put_resp_header("content-disposition", ~s(attachment; filename="#{name}"))
                   |> send_file(200, zip_path)
 
-                schedule_zip_cleanup(zip_path)
+                schedule_zip_cleanup(zip_path, token)
                 conn
 
               {:error, reason} ->
@@ -59,10 +60,10 @@ defmodule RevelaWeb.RawDownloadController do
     end
   end
 
-  defp schedule_zip_cleanup(zip_path) do
+  defp schedule_zip_cleanup(zip_path, token) do
     Task.start(fn ->
       Process.sleep(3_600_000)
-      _ = File.rm(zip_path)
+      RawDownload.with_token_lock(token, fn -> File.rm(zip_path) end)
     end)
 
     :ok
@@ -84,7 +85,7 @@ defmodule RevelaWeb.RawDownloadController do
   end
 
   defp build_zip(files, token) do
-    :global.trans({{__MODULE__, token}, self()}, fn ->
+    RawDownload.with_token_lock(token, fn ->
       case staging_paths(files, token) do
         {:ok, nil, zip_path} ->
           {:ok, zip_path}
