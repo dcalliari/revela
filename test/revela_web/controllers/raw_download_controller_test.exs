@@ -34,6 +34,33 @@ defmodule RevelaWeb.RawDownloadControllerTest do
     assert conn.resp_body =~ "raw_path"
   end
 
+  test "substitui artefato temporario de uma geracao interrompida", %{conn: conn} do
+    {:ok, editorial} =
+      Capture.start_editorial(
+        "Raw interrompido",
+        "/tmp/raw-interrompido-#{System.unique_integer()}"
+      )
+
+    dir =
+      Path.join(System.tmp_dir!(), "revela-dl-interrompido-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(dir)
+    raw = Path.join(dir, "IMG.CR2")
+    File.write!(raw, "RAWDATA")
+    {:ok, photo} = Capture.create_photo(%{web_path: "/uploads/i.jpg", raw_path: raw})
+    token = RawDownloadController.create_token(editorial.id, [photo.id])
+    staging = Path.join(dir, ".raw-pulls")
+    temp_zip = Path.join(staging, "revela-raw-#{token}.zip.tmp")
+    File.mkdir_p!(staging)
+    File.write!(temp_zip, "TRUNCADO")
+
+    conn = get(conn, ~p"/raws/#{token}")
+
+    assert conn.status == 200
+    refute File.exists?(temp_zip)
+    assert {:ok, [{_name, "RAWDATA"}]} = :zip.unzip(conn.resp_body, [:memory])
+  end
+
   test "link expirado nao entrega o arquivo", %{conn: conn} do
     {:ok, editorial} =
       Capture.start_editorial("Expirado", "/tmp/expirado-#{System.unique_integer()}")

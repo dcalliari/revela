@@ -90,20 +90,24 @@ defmodule RevelaWeb.RawDownloadController do
           {:ok, zip_path}
 
         {:ok, work_dir, zip_path} ->
+          temp_zip_path = zip_path <> ".tmp"
+
           try do
+            _ = File.rm(temp_zip_path)
+
             with :ok <- stage_files(files, work_dir),
-                 {:ok, _} <- create_zip_file(work_dir, zip_path) do
+                 {:ok, _} <- create_zip_file(work_dir, temp_zip_path),
+                 :ok <- File.rename(temp_zip_path, zip_path) do
               {:ok, zip_path}
             else
-              {:error, _} = err ->
-                _ = File.rm(zip_path)
-                err
+              {:error, _} = error ->
+                error
 
               other ->
-                _ = File.rm(zip_path)
                 {:error, other}
             end
           after
+            _ = File.rm(temp_zip_path)
             File.rm_rf(work_dir)
           end
 
