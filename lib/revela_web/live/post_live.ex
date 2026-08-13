@@ -2,8 +2,9 @@ defmodule RevelaWeb.PostLive do
   @moduledoc """
   Tela de pos-producao: navega o editorial completo (nao so as 24 recentes),
   filtra por cor, seleciona intervalo contiguo (clique + shift-clique), aplica
-  classificacao na selecao, gera URL de previews para a marca e baixa RAW da
-  selecao. Desfazer: botao fixo + Ctrl/Cmd+Z + historico visivel da sessao.
+  classificacao na selecao e gera URL de previews para a marca. Os votos do
+  BrandShare mais recente alimentam os tallies e a selecao de RAW, em ordem de
+  captura. Desfazer: botao fixo + Ctrl/Cmd+Z + historico visivel da sessao.
   """
   use RevelaWeb, :live_view
 

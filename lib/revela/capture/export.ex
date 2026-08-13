@@ -12,8 +12,8 @@ defmodule Revela.Capture.Export do
   arquivo e devolvido a origem; so se o rollback tambem falhar o destino e
   contado como exportado com aviso.
 
-  Entrada tipica via `mix revela.export_colors` ou chamada direta daqui (a tela
-  de pos-producao, item 11, pode reutilizar esta API sem bloquear este export).
+  Entrada tipica via `mix revela.export_colors` ou chamada direta daqui. Uma
+  futura acao de organizar por cor em `PostLive` deve reutilizar esta API.
   """
 
   require Logger

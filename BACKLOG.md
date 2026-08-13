@@ -215,8 +215,8 @@ preenchida na entrega no-mistakes.
 **Entregue**: grade do Host com paginação real (24/página, prev/next) e bolinhas
 de cor como filtro multi-select; consulta e filtro no banco via
 `Capture.list_photos/1` + `count_photos/1`; página da grade em LiveView stream.
-Filtro vazio = todas; mudar filtro volta à página 1. Ver também item 11 (tela
-de pós-produção dedicada ainda aberta).
+Filtro vazio = todas; mudar filtro volta à página 1. Ver também item 11, agora
+atendido pela tela de pós-produção dedicada.
 
 ## P1: melhorias de fluxo
 
@@ -294,27 +294,20 @@ foto (UPDATE condicional + índice único parcial); `mix revela.backfill_raw_pat
 
 ### 11. Tela de pós-produção
 
+**Status**: FEITO. O uso e o contrato atual estão na seção
+**Pós-produção e entrega** do README; esta entrada preserva apenas o contexto
+que motivou a tela.
+
 **Observado**: terminado o editorial, a equipe quis rever e classificar as fotos
 com calma pelo host. Na sessão de 2026-08-04 a grade do host só mostrava as 24
 mais recentes; foi preciso improvisar uma paginação temporária no código
 durante a própria sessão para conseguir chegar nas primeiras fotos.
 
-**Estado atual**: o item 5 entregou paginação real e filtro por cor **na grade
-do host** (captura ao vivo). A tela ainda é a de sessão ao vivo, não uma
-revisão pós-editorial dedicada.
-
-**Proposta**: uma tela própria de pós-produção, separada da de captura ao vivo,
-com navegação por todo o conjunto, filtro por cor, classificação e (ver abaixo)
-seleção por intervalo. O item 5 cobriu o mínimo na grade do host; este item
-continua sendo o destino para o fluxo pós-sessão sem espremer o uso dentro da
-tela de captura.
-
-**Relacionado**: o item 10 (apagar classificações ao finalizar) já foi FEITO.
-Ainda assim a tela dedicada permanece aberta — o bloqueio de dados sumiu, mas
-o fluxo de pós-produção não. Quando a seleção por intervalo existir, a ação de
-organizar por cor deve chamar `Revela.Capture.Export.export/1` (já usado por
-`mix revela.export_colors`; item 12) em vez de reimplementar cópia/movimento de
-arquivos.
+**Feito**: a tela dedicada mantém o fluxo pós-sessão fora do Host de captura e
+reutiliza os dados persistentes entregues pelo item 10. A organização por pastas
+de cor ainda não é uma ação da UI; quando entrar, deve chamar
+`Revela.Capture.Export.export/1` (já usado por `mix revela.export_colors`; item
+12) em vez de reimplementar cópia ou movimento de arquivos.
 
 #### O índice de contato validou a ideia na prática
 
@@ -384,7 +377,8 @@ ou movem arquivos para pastas `vermelho` / `amarelo` / `verde` / `azul` /
 `roxo`, com filtro por cor e/ou photo ids, editorial ativo ou `--editorial`.
 Prefere `raw_path`; se vazio/ausente, exporta JPEG/preview com aviso. A seleção
 por intervalo (item 11) não bloqueia: o mix/`Export.export/1` já aceita ids
-explícitos e pode ser ligado à UI de pós-produção quando ela existir.
+explícitos e deve ser ligado à UI quando a organização por pastas for adicionada
+ao `/post`.
 
 **Atenção ao destino (fase 2)**: Drive e Fotos são produtos diferentes. Uso real
 até agora foi **Fotos** (álbum para a modelo). Dois fluxos: entrega (Fotos,
