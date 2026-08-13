@@ -115,22 +115,35 @@ defmodule Revela.DeliveryTest do
              Delivery.create_brand_share(editorial.id, [p1.id], backend: :google_drive)
   end
 
-  test "limpa ZIP orfao no staging junto dos RAWs", %{editorial: editorial, p1: p1} do
+  test "limpa artefatos RAW antigos somente ao criar token", %{editorial: editorial, p1: p1} do
     dir = Path.join(System.tmp_dir!(), "revela-raw-root-#{System.unique_integer([:positive])}")
     raw_dir = Path.join(dir, "editorial")
     staging = Path.join(raw_dir, ".raw-pulls")
     orphan = Path.join(staging, "revela-raw-orphan.zip")
+    temp = Path.join(staging, "revela-raw-interrompido.zip.tmp")
+    work_dir = Path.join(staging, "revela-raw-interrompido")
     File.mkdir_p!(staging)
     File.write!(orphan, "ZIP")
+    File.write!(temp, "ZIP incompleto")
+    File.mkdir_p!(work_dir)
+    File.write!(Path.join(work_dir, "shot.cr2"), "RAW")
     File.touch!(orphan, {{2020, 1, 1}, {0, 0, 0}})
+    File.touch!(temp, {{2020, 1, 1}, {0, 0, 0}})
+    File.touch!(work_dir, {{2020, 1, 1}, {0, 0, 0}})
 
     {:ok, raw} =
       Ecto.Changeset.change(p1, raw_path: Path.join(raw_dir, "shot.cr2")) |> Repo.update()
 
     assert raw.raw_path == Path.join(raw_dir, "shot.cr2")
+    assert is_nil(Delivery.get_raw_download("token-invalido"))
+    assert File.exists?(orphan)
+    assert File.exists?(temp)
+    assert File.dir?(work_dir)
 
     assert {:ok, _download} = Delivery.create_raw_download(editorial.id, [p1.id])
     refute File.exists?(orphan)
+    refute File.exists?(temp)
+    refute File.exists?(work_dir)
   end
 
   test "raw_pull separa arquivos presentes e ausentes", %{p1: p1, p2: p2} do

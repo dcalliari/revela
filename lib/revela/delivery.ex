@@ -54,8 +54,6 @@ defmodule Revela.Delivery do
   end
 
   def get_raw_download(token) do
-    cleanup_expired_raw_downloads()
-
     case Repo.get_by(RawDownload, token: token) do
       %RawDownload{expires_at: %DateTime{} = expires_at} = download ->
         if DateTime.compare(expires_at, DateTime.utc_now()) == :gt, do: download, else: nil
@@ -85,14 +83,13 @@ defmodule Revela.Delivery do
       case File.ls(root) do
         {:ok, entries} ->
           Enum.each(entries, fn entry ->
-            if String.starts_with?(entry, "revela-raw-") and String.ends_with?(entry, ".zip") do
-              path = Path.join(root, entry)
+            path = Path.join(root, entry)
 
-              with {:ok, stat} <- File.stat(path, time: :posix),
-                   cutoff_posix <- DateTime.to_unix(cutoff),
-                   true <- stat.mtime < cutoff_posix do
-                _ = File.rm(path)
-              end
+            with true <- String.starts_with?(entry, "revela-raw-"),
+                 {:ok, stat} <- File.lstat(path, time: :posix),
+                 true <- stale_raw_artifact?(entry, stat.type),
+                 true <- stat.mtime < DateTime.to_unix(cutoff) do
+              remove_raw_artifact(path, stat.type)
             end
           end)
 
@@ -101,6 +98,17 @@ defmodule Revela.Delivery do
       end
     end)
   end
+
+  defp stale_raw_artifact?(entry, :regular),
+    do: String.ends_with?(entry, ".zip") or String.ends_with?(entry, ".zip.tmp")
+
+  defp stale_raw_artifact?(entry, :directory),
+    do: not String.ends_with?(entry, ".zip") and not String.ends_with?(entry, ".zip.tmp")
+
+  defp stale_raw_artifact?(_entry, _type), do: false
+
+  defp remove_raw_artifact(path, :directory), do: File.rm_rf(path)
+  defp remove_raw_artifact(path, :regular), do: File.rm(path)
 
   defp raw_archive_roots do
     editorials =
