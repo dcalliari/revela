@@ -1,7 +1,7 @@
 defmodule Revela.CaptureTest do
   use Revela.DataCase, async: false
 
-  alias Revela.Capture
+  alias Revela.{Capture, Delivery}
 
   describe "editorial lifecycle preserva classificacoes" do
     test "iniciar um novo editorial nao apaga as classificacoes do editorial anterior" do
@@ -20,6 +20,8 @@ defmodule Revela.CaptureTest do
 
       # a tela do editorial novo comeca vazia, mas nada foi apagado do banco
       assert Capture.list_photos() == []
+      assert Capture.list_photos(colors: [0]) == []
+      assert Capture.count_photos(colors: [0]) == 0
       assert Capture.labels_for_reviewer("host") == %{}
       assert Capture.tallies() == %{}
 
@@ -64,6 +66,27 @@ defmodule Revela.CaptureTest do
                  started_at: DateTime.utc_now()
                })
                |> Repo.insert()
+    end
+  end
+
+  describe "consultas de fotos por editorial" do
+    test "restringe o editorial e preserva a ordem de captura" do
+      {:ok, editorial_a} = Capture.start_editorial("Consulta A", "/tmp/consulta-a")
+      {:ok, a1} = Capture.create_photo(%{web_path: "/uploads/consulta-a1.jpg"})
+      {:ok, a2} = Capture.create_photo(%{web_path: "/uploads/consulta-a2.jpg"})
+      {:ok, editorial_b} = Capture.start_editorial("Consulta B", "/tmp/consulta-b")
+      {:ok, b1} = Capture.create_photo(%{web_path: "/uploads/consulta-b1.jpg"})
+
+      assert Enum.map(Capture.list_photos_for_editorial(editorial_a.id), & &1.id) ==
+               [a1.id, a2.id]
+
+      assert Enum.map(
+               Capture.get_photos_in_editorial(editorial_a.id, [b1.id, a2.id, a1.id]),
+               & &1.id
+             ) == [a1.id, a2.id]
+
+      assert Enum.map(Capture.list_photos_for_editorial(editorial_b.id), & &1.id) == [b1.id]
+      assert Enum.map(Capture.get_photos([b1.id, a2.id]), & &1.id) == [a2.id, b1.id]
     end
   end
 
@@ -122,6 +145,77 @@ defmodule Revela.CaptureTest do
       paged = Capture.list_photos(colors: [0], order: :desc, limit: 1, offset: 0)
       assert length(paged) == 1
       assert hd(paged).id == p3.id
+    end
+  end
+
+  describe "tallies_for_editorial/1" do
+    test "ignora votos brand-* de shares supersedidos" do
+      {:ok, editorial} =
+        Capture.start_editorial("Tallies", "/tmp/tallies-#{System.unique_integer()}")
+
+      {:ok, a} = Capture.create_photo(%{web_path: "/uploads/tally-a.jpg"})
+      {:ok, b} = Capture.create_photo(%{web_path: "/uploads/tally-b.jpg"})
+
+      {:ok, old_share, _} = Delivery.create_brand_share(editorial.id, [a.id], label: "velho")
+      Capture.set_label(a.id, "brand-#{old_share.token}", "marca", 1)
+
+      {:ok, share, _} = Delivery.create_brand_share(editorial.id, [b.id], label: "novo")
+      Capture.set_label(b.id, "brand-#{share.token}", "marca", 2)
+      Capture.set_label(a.id, "host", "host", 0)
+
+      tallies = Capture.tallies_for_editorial(editorial.id)
+
+      # host color 0 only — brand color 1 from superseded share must not appear
+      assert tallies[a.id] == %{0 => 1}
+      assert tallies[b.id] == %{2 => 1}
+    end
+  end
+
+  describe "labels em lote" do
+    test "aplica e restaura varias cores com um broadcast por operacao" do
+      {:ok, editorial} = Capture.start_editorial("Lote", "/tmp/lote")
+      {:ok, a} = Capture.create_photo(%{web_path: "/uploads/lote-a.jpg"})
+      {:ok, b} = Capture.create_photo(%{web_path: "/uploads/lote-b.jpg"})
+      Capture.subscribe_labels()
+
+      assert {:ok, 2} = Capture.set_labels([a.id, b.id], "host", "host", 3)
+      assert_receive {:labels_changed, ids}
+      assert MapSet.new(ids) == MapSet.new([a.id, b.id])
+      refute_receive {:label_changed, _photo_id}
+
+      assert Capture.labels_for_reviewer_in_editorial("host", editorial.id) == %{
+               a.id => 3,
+               b.id => 3
+             }
+
+      assert {:ok, 2} = Capture.update_labels(%{a.id => nil, b.id => 1}, "host", "host")
+      assert_receive {:labels_changed, ids}
+      assert MapSet.new(ids) == MapSet.new([a.id, b.id])
+      refute_receive {:label_changed, _photo_id}
+
+      assert Capture.labels_for_reviewer_in_editorial("host", editorial.id) == %{b.id => 1}
+    end
+  end
+
+  describe "tallies/0" do
+    test "ignora votos brand-* de shares supersedidos no editorial ativo" do
+      {:ok, editorial} =
+        Capture.start_editorial("HostTallies", "/tmp/host-tallies-#{System.unique_integer()}")
+
+      {:ok, a} = Capture.create_photo(%{web_path: "/uploads/host-tally-a.jpg"})
+      {:ok, b} = Capture.create_photo(%{web_path: "/uploads/host-tally-b.jpg"})
+
+      {:ok, old_share, _} = Delivery.create_brand_share(editorial.id, [a.id], label: "velho")
+      Capture.set_label(a.id, "brand-#{old_share.token}", "marca", 1)
+
+      {:ok, share, _} = Delivery.create_brand_share(editorial.id, [b.id], label: "novo")
+      Capture.set_label(b.id, "brand-#{share.token}", "marca", 2)
+      Capture.set_label(a.id, "host", "host", 0)
+
+      tallies = Capture.tallies()
+
+      assert tallies[a.id] == %{0 => 1}
+      assert tallies[b.id] == %{2 => 1}
     end
   end
 end

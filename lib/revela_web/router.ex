@@ -20,6 +20,11 @@ defmodule RevelaWeb.Router do
     live "/", ReviewLive
     live "/host", HostLive
     live "/tv", TvLive
+    live "/post", PostLive, :index
+    live "/post/:editorial_id", PostLive, :show
+    live "/share/:token", BrandShareLive
+
+    get "/raws/:token", RawDownloadController, :download
   end
 
   # Other scopes may use custom stacks.

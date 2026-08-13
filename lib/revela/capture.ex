@@ -13,7 +13,7 @@ defmodule Revela.Capture do
 
   import Ecto.Query, warn: false
   alias Revela.Repo
-  alias Revela.Capture.{Photo, Label, Editorial}
+  alias Revela.Capture.{BrandShare, Editorial, Label, Photo}
   alias Phoenix.PubSub
 
   @photos_topic "photos"
@@ -112,6 +112,9 @@ defmodule Revela.Capture do
   defp broadcast_label(photo_id),
     do: PubSub.broadcast(Revela.PubSub, @labels_topic, {:label_changed, photo_id})
 
+  defp broadcast_brand_round(editorial_id),
+    do: PubSub.broadcast(Revela.PubSub, @labels_topic, {:brand_round_changed, editorial_id})
+
   # ── Fotos ─────────────────────────────────────────────────────────────────
 
   @doc """
@@ -142,6 +145,38 @@ defmodule Revela.Capture do
   end
 
   def get_photo!(id), do: Repo.get!(Photo, id)
+
+  @doc "Fotos de um editorial, em ordem de captura."
+  def list_photos_for_editorial(editorial_id) when is_integer(editorial_id) do
+    from(p in Photo,
+      where: p.editorial_id == ^editorial_id,
+      order_by: [asc: p.seq]
+    )
+    |> Repo.all()
+  end
+
+  def list_photos_for_editorial(_editorial_id), do: []
+
+  @doc "Fotos pelos ids informados, em ordem de captura."
+  def get_photos(photo_ids) when is_list(photo_ids) do
+    from(p in Photo,
+      where: p.id in ^photo_ids,
+      order_by: [asc: p.seq]
+    )
+    |> Repo.all()
+  end
+
+  @doc "Fotos pelos ids, restritas ao editorial informado e em ordem de captura."
+  def get_photos_in_editorial(editorial_id, photo_ids)
+      when is_integer(editorial_id) and is_list(photo_ids) do
+    from(p in Photo,
+      where: p.editorial_id == ^editorial_id and p.id in ^photo_ids,
+      order_by: [asc: p.seq]
+    )
+    |> Repo.all()
+  end
+
+  def get_photos_in_editorial(_editorial_id, _photo_ids), do: []
 
   defp photos_query(opts) do
     colors = normalize_colors(Keyword.get(opts, :colors))
@@ -182,11 +217,14 @@ defmodule Revela.Capture do
   defp apply_color_filter(query, []), do: query
 
   defp apply_color_filter(query, colors) do
+    brand_scope = brand_label_scope(current_editorial_id())
+
     from(p in query,
       where:
         exists(
           from(l in Label,
             where: l.photo_id == parent_as(:photo).id and l.color in ^colors,
+            where: ^brand_scope,
             select: 1
           )
         )
@@ -197,7 +235,9 @@ defmodule Revela.Capture do
   Registra uma foto recem baixada, associada ao editorial ativo (se houver).
   Calcula o proximo `seq` e transmite o evento para todos os LiveViews conectados.
   """
-  def create_photo(attrs) do
+  def create_photo(attrs), do: create_photo(attrs, 3)
+
+  defp create_photo(attrs, attempts) do
     seq = (Repo.one(from p in Photo, select: max(p.seq)) || 0) + 1
 
     attrs =
@@ -205,13 +245,19 @@ defmodule Revela.Capture do
       |> Map.put(:seq, seq)
       |> Map.put_new(:editorial_id, current_editorial_id())
 
-    %Photo{}
-    |> Photo.changeset(attrs)
-    |> Repo.insert()
-    |> case do
+    case Repo.insert(Photo.changeset(%Photo{}, attrs)) do
       {:ok, photo} ->
         broadcast_photo(photo)
         {:ok, photo}
+
+      {:error, %Ecto.Changeset{} = changeset} = error when attempts > 0 ->
+        if Enum.any?(changeset.errors, fn {field, {_message, opts}} ->
+             field == :seq and Keyword.get(opts, :constraint) == :unique
+           end) do
+          create_photo(attrs, attempts - 1)
+        else
+          error
+        end
 
       error ->
         error
@@ -380,6 +426,127 @@ defmodule Revela.Capture do
     end
   end
 
+  @doc "Editorial por id, ou nil."
+  def get_editorial(id) when is_integer(id), do: Repo.get(Editorial, id)
+  def get_editorial(_), do: nil
+
+  @doc "Todos os editoriais, mais recentes primeiro (ativos e finalizados)."
+  def list_editorials do
+    from(e in Editorial, order_by: [desc: e.started_at])
+    |> Repo.all()
+  end
+
+  @doc "Mapa %{photo_id => color} de um revisor num editorial (ativo ou nao)."
+  def labels_for_reviewer_in_editorial(reviewer_id, editorial_id) do
+    from(l in Label,
+      join: p in Photo,
+      on: p.id == l.photo_id,
+      where: l.reviewer_id == ^reviewer_id and p.editorial_id == ^editorial_id,
+      select: {l.photo_id, l.color}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc """
+  Agregacao de cores para um editorial especifico.
+
+  Labels `brand-*` so entram do BrandShare mais recente (mesmo criterio de
+  `brand_labeled_photo_ids/1`); shares supersedidos nao aparecem na grade Post.
+  """
+  def tallies_for_editorial(editorial_id) do
+    brand_scope = brand_label_scope(editorial_id)
+
+    from(l in Label,
+      join: p in Photo,
+      on: p.id == l.photo_id,
+      where: p.editorial_id == ^editorial_id,
+      where: ^brand_scope,
+      group_by: [l.photo_id, l.color],
+      select: {l.photo_id, l.color, count(l.id)}
+    )
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn {photo_id, color, count}, acc ->
+      Map.update(acc, photo_id, %{color => count}, &Map.put(&1, color, count))
+    end)
+  end
+
+  @doc """
+  IDs de fotos marcadas no BrandShare mais recente deste editorial
+  (`brand-<token>`), em ordem de captura (`seq`). Shares antigos nao entram.
+  """
+  def brand_labeled_photo_ids(editorial_id) do
+    case list_brand_shares_for_editorial(editorial_id) do
+      [] ->
+        []
+
+      [%BrandShare{token: token} | _] ->
+        reviewer_id = "brand-#{token}"
+
+        from(p in Photo,
+          join: l in Label,
+          on: l.photo_id == p.id,
+          where: p.editorial_id == ^editorial_id,
+          where: l.reviewer_id == ^reviewer_id,
+          order_by: [asc: p.seq],
+          select: p.id
+        )
+        |> Repo.all()
+    end
+  end
+
+  # ── Brand shares (URL de previews para a marca) ─────────────────────────────
+
+  def create_brand_share(attrs) do
+    case %BrandShare{} |> BrandShare.changeset(attrs) |> Repo.insert() do
+      {:ok, share} = result ->
+        broadcast_brand_round(share.editorial_id)
+        result
+
+      error ->
+        error
+    end
+  end
+
+  def touch_brand_share(%BrandShare{} = share, opts \\ []) when is_list(opts) do
+    changes = %{updated_at: DateTime.utc_now(:microsecond)}
+
+    changes =
+      if Keyword.has_key?(opts, :label) do
+        Map.put(changes, :label, Keyword.get(opts, :label))
+      else
+        changes
+      end
+
+    changes =
+      if Keyword.has_key?(opts, :photo_ids) do
+        Map.put(changes, :photo_ids, Keyword.fetch!(opts, :photo_ids))
+      else
+        changes
+      end
+
+    case share |> Ecto.Changeset.change(changes) |> Repo.update() do
+      {:ok, touched} = result ->
+        broadcast_brand_round(touched.editorial_id)
+        result
+
+      error ->
+        error
+    end
+  end
+
+  def get_brand_share_by_token(token) when is_binary(token) do
+    Repo.get_by(BrandShare, token: token)
+  end
+
+  def list_brand_shares_for_editorial(editorial_id) do
+    from(s in BrandShare,
+      where: s.editorial_id == ^editorial_id,
+      order_by: [desc: s.updated_at, desc: s.id]
+    )
+    |> Repo.all()
+  end
+
   defp finish_active_editorial do
     from(e in Editorial, where: is_nil(e.finished_at))
     |> Repo.update_all(set: [finished_at: DateTime.utc_now()])
@@ -443,17 +610,106 @@ defmodule Revela.Capture do
     :ok
   end
 
+  @doc "Define a mesma cor para varias fotos com uma unica notificacao."
+  def set_labels(photo_ids, reviewer_id, reviewer_name, color) when is_list(photo_ids) do
+    photo_ids
+    |> Map.new(&{&1, color})
+    |> update_labels(reviewer_id, reviewer_name)
+  end
+
+  @doc "Remove a cor de varias fotos com uma unica notificacao."
+  def clear_labels(photo_ids, reviewer_id) when is_list(photo_ids) do
+    photo_ids
+    |> Map.new(&{&1, nil})
+    |> update_labels(reviewer_id, nil)
+  end
+
+  @doc "Aplica cores ou remocoes em lote, atomicamente e com uma unica notificacao."
+  def update_labels(updates, reviewer_id, reviewer_name)
+      when is_map(updates) and is_binary(reviewer_id) do
+    updates = Enum.to_list(updates)
+
+    if valid_label_updates?(updates) do
+      ids = Enum.map(updates, &elem(&1, 0))
+      now = DateTime.utc_now(:microsecond)
+
+      result =
+        Repo.transaction(fn ->
+          clear_ids = for {photo_id, nil} <- updates, do: photo_id
+
+          if clear_ids != [] do
+            from(l in Label,
+              where: l.reviewer_id == ^reviewer_id and l.photo_id in ^clear_ids
+            )
+            |> Repo.delete_all()
+          end
+
+          entries =
+            for {photo_id, color} <- updates, not is_nil(color) do
+              %{
+                photo_id: photo_id,
+                reviewer_id: reviewer_id,
+                reviewer_name: reviewer_name,
+                color: color,
+                inserted_at: now,
+                updated_at: now
+              }
+            end
+
+          if entries != [] do
+            Repo.insert_all(Label, entries,
+              on_conflict: {:replace, [:color, :reviewer_name, :updated_at]},
+              conflict_target: [:photo_id, :reviewer_id]
+            )
+          end
+
+          length(ids)
+        end)
+
+      case result do
+        {:ok, _count} = success ->
+          if ids != [], do: broadcast_labels(ids)
+          success
+
+        error ->
+          error
+      end
+    else
+      {:error, :invalid_labels}
+    end
+  end
+
+  defp valid_label_updates?(updates) do
+    Enum.all?(updates, fn
+      {photo_id, color} when is_integer(photo_id) -> is_nil(color) or color in Label.colors()
+      _ -> false
+    end)
+  end
+
+  defp broadcast_labels(photo_ids),
+    do: PubSub.broadcast(Revela.PubSub, @labels_topic, {:labels_changed, photo_ids})
+
   @doc """
   Agregacao para a tela do host no editorial atual: mapa
   `%{photo_id => %{color => count}}` com a contagem de cada cor entre todos os
   revisores. Vazio se nao ha editorial ativo.
+
+  Labels `brand-*` seguem o mesmo criterio de `tallies_for_editorial/1`:
+  so o BrandShare mais recente conta.
   """
   def tallies do
+    brand_scope =
+      case current_editorial_id() do
+        nil -> dynamic([l], true)
+        editorial_id -> brand_label_scope(editorial_id)
+      end
+
     from(l in Label,
       join: p in Photo,
       as: :photo,
       on: p.id == l.photo_id,
       where: ^editorial_scope(),
+      where: ^brand_scope,
       group_by: [l.photo_id, l.color],
       select: {l.photo_id, l.color, count(l.id)}
     )
@@ -461,5 +717,18 @@ defmodule Revela.Capture do
     |> Enum.reduce(%{}, fn {photo_id, color, count}, acc ->
       Map.update(acc, photo_id, %{color => count}, &Map.put(&1, color, count))
     end)
+  end
+
+  defp brand_label_scope(nil), do: dynamic([l], not like(l.reviewer_id, "brand-%"))
+
+  defp brand_label_scope(editorial_id) do
+    case list_brand_shares_for_editorial(editorial_id) do
+      [%BrandShare{token: token} | _] ->
+        latest = "brand-#{token}"
+        dynamic([l], not like(l.reviewer_id, "brand-%") or l.reviewer_id == ^latest)
+
+      [] ->
+        dynamic([l], not like(l.reviewer_id, "brand-%"))
+    end
   end
 end

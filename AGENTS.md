@@ -99,8 +99,8 @@ files into `vermelho`/`amarelo`/`verde`/`azul`/`roxo` using one reviewer's
 labels (default `host`). Prefers `raw_path`, then JPEG, then web preview (with
 warnings). Unlabeled photos are skipped. `:move` updates `raw_path`/
 `original_path` in the DB; web preview is never moved. Google Fotos vs Drive
-upload is phase-2 — see README. Post-prod UI (item 11) should call
-`Export.export/1` rather than reimplementing file ops.
+upload is phase-2 — see README. Any future organize-by-color action in
+`PostLive` should call `Export.export/1` rather than reimplementing file ops.
 
 ## Domain: JPEG↔RAW sibling matching
 
@@ -115,6 +115,21 @@ RAW to two photos. Default post-preview discard of the camera JPEG runs only aft
 that RAW is linked **and** watcher-settled (`raw_settled: true` / `attach_raw`);
 never delete RAW or web preview; keep JPEGs with `REVELA_KEEP_CAMERA_JPEG=1`
 (see README).
+
+## Domain: post-production
+
+`PostLive` (`/post`) is the calm review surface for a full editorial (active or
+finished) — not Host’s live strip of 24. Contiguous range selection (click +
+shift-click) is the unit of work; brand JPG delivery is a tokenized local URL
+(`/share/:token` via `Revela.Delivery` / `BrandShare`). Only the latest promoted
+share for an editorial contributes brand tallies and picks; `prepare_raw` uses
+those picks in capture order, never the current manual selection. Photographer
+RAW pull uses `raw_path` only (`/raws/:token`) and errors clearly when missing.
+Creating or promoting a share broadcasts `{:brand_round_changed, editorial_id}`
+so both `HostLive` and `PostLive` refresh without polling.
+Undo must stay discoverable: fixed control + Ctrl/Cmd+Z + visible session
+history (never toast-only). Prefer extending this LiveView over stuffing post
+workflows into Host capture. See README and `BACKLOG` §11.
 
 ## Project guidelines
 

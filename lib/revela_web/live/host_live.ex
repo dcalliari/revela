@@ -5,8 +5,7 @@ defmodule RevelaWeb.HostLive do
   retomar apos stop, ingestao degradada), estimativa de fotos restantes no
   disco, quem esta online e a agregacao de cores (consenso) de cada foto entre
   todos os revisores. Sem `:os_mon`, a estimativa de fotos nao aparece e o
-  help pede vinculo manual quando ha camera; o console do browser tambem
-  recebe um aviso via `push_event("disk-awareness", ...)`.
+  help exibe um aviso de monitoramento indisponivel.
 
   **Importar do cartao** (`#card-import`): pasta sob raizes allowlisted
   (`:card_import_allowed_roots` / `REVELA_CARD_IMPORT_ROOTS`; padrao
@@ -56,7 +55,7 @@ defmodule RevelaWeb.HostLive do
       Presence.subscribe()
     end
 
-    url = review_url()
+    url = RevelaWeb.Lan.base_url()
     capture = CameraServer.status()
 
     socket =
@@ -64,7 +63,6 @@ defmodule RevelaWeb.HostLive do
       |> assign(:url, url)
       |> assign(:qr, qr_svg(url))
       |> assign(:capture, capture)
-      |> assign(:disk_warn_pushed, false)
       |> assign(:reviewers, Presence.list_reviewers())
       |> assign(:open, false)
       |> assign(:idx, 0)
@@ -77,7 +75,6 @@ defmodule RevelaWeb.HostLive do
       |> assign(:filter_colors, MapSet.new())
       |> stream_configure(:grid_photos, dom_id: &"grid-photo-#{&1.id}")
       |> load_photos()
-      |> maybe_warn_disk(capture)
 
     socket =
       if connected?(socket) do
@@ -353,10 +350,7 @@ defmodule RevelaWeb.HostLive do
 
   @impl true
   def handle_info({:capture_status, status}, socket) do
-    {:noreply,
-     socket
-     |> assign(:capture, status)
-     |> maybe_warn_disk(status)}
+    {:noreply, assign(socket, :capture, status)}
   end
 
   def handle_info({:new_photo, _photo}, socket) do
@@ -368,7 +362,21 @@ defmodule RevelaWeb.HostLive do
   end
 
   def handle_info({:label_changed, photo_id}, socket) do
+    socket = assign(socket, :labels, Capture.labels_for_reviewer(@host_id))
     {:noreply, refresh_grid_for_label(socket, photo_id)}
+  end
+
+  def handle_info({:labels_changed, photo_ids}, socket) do
+    socket = assign(socket, :labels, Capture.labels_for_reviewer(@host_id))
+    {:noreply, refresh_grid_for_labels(socket, photo_ids)}
+  end
+
+  def handle_info({:brand_round_changed, editorial_id}, socket) do
+    if Capture.current_editorial_id() == editorial_id do
+      {:noreply, load_photos(socket)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info(%{event: "presence_diff"}, socket) do
@@ -514,6 +522,21 @@ defmodule RevelaWeb.HostLive do
     end
   end
 
+  defp refresh_grid_for_labels(socket, photo_ids) do
+    if MapSet.size(socket.assigns.filter_colors) > 0 do
+      load_grid(socket)
+    else
+      visible_ids = MapSet.intersection(socket.assigns.grid_photo_ids, MapSet.new(photo_ids))
+
+      socket = assign(socket, :tallies, Capture.tallies())
+
+      photo_ids
+      |> Capture.get_photos()
+      |> Enum.filter(&MapSet.member?(visible_ids, &1.id))
+      |> Enum.reduce(socket, &stream_insert(&2, :grid_photos, &1))
+    end
+  end
+
   defp maybe_restream_grid_photo(socket, photo_id) do
     if MapSet.member?(socket.assigns.grid_photo_ids, photo_id) do
       stream_insert(socket, :grid_photos, Capture.get_photo!(photo_id))
@@ -545,54 +568,6 @@ defmodule RevelaWeb.HostLive do
     |> assign(idx: idx, follow: idx == last)
     |> broadcast_host_viewer()
   end
-
-  defp review_url do
-    "http://#{lan_ip()}:#{http_port()}/"
-  end
-
-  defp http_port do
-    :revela
-    |> Application.get_env(RevelaWeb.Endpoint, [])
-    |> get_in([:http, :port]) || 4000
-  end
-
-  # Endereco IPv4 acessivel pelos celulares na LAN. Pode ser fixado via a env
-  # TETHER_LAN_IP; senao, escolhe entre as interfaces ignorando loopback,
-  # link-local, CGNAT/Tailscale, docker/bridges e VPNs, preferindo 192.168/10/172.
-  defp lan_ip do
-    System.get_env("TETHER_LAN_IP") || detect_lan_ip() || "localhost"
-  end
-
-  defp detect_lan_ip do
-    {:ok, ifs} = :inet.getifaddrs()
-
-    ifs
-    |> Enum.reject(fn {name, _opts} -> skip_iface?(to_string(name)) end)
-    |> Enum.flat_map(fn {_name, opts} -> Keyword.get_values(opts, :addr) end)
-    |> Enum.filter(&usable_ipv4?/1)
-    |> Enum.sort_by(&ipv4_rank/1)
-    |> List.first()
-    |> case do
-      {a, b, c, d} -> "#{a}.#{b}.#{c}.#{d}"
-      _ -> nil
-    end
-  end
-
-  defp skip_iface?(name) do
-    String.starts_with?(name, ~w(lo docker br- veth virbr tailscale tun wg zt))
-  end
-
-  defp usable_ipv4?({127, _, _, _}), do: false
-  defp usable_ipv4?({169, 254, _, _}), do: false
-  # 100.64.0.0/10 = CGNAT (Tailscale e afins)
-  defp usable_ipv4?({100, b, _, _}) when b in 64..127, do: false
-  defp usable_ipv4?({a, _, _, _}) when a in 1..223, do: true
-  defp usable_ipv4?(_), do: false
-
-  defp ipv4_rank({192, 168, _, _}), do: 0
-  defp ipv4_rank({10, _, _, _}), do: 1
-  defp ipv4_rank({172, b, _, _}) when b in 16..31, do: 2
-  defp ipv4_rank(_), do: 3
 
   defp qr_svg(url), do: RevelaWeb.QR.svg(url, class: "block h-full w-full")
 
@@ -639,7 +614,12 @@ defmodule RevelaWeb.HostLive do
 
             <div class="card bg-base-100 shadow">
               <div class="card-body gap-2">
-                <h2 class="card-title text-base">Editorial</h2>
+                <div class="flex items-center justify-between gap-2">
+                  <h2 class="card-title text-base">Editorial</h2>
+                  <.link navigate={~p"/post"} id="link-post" class="btn btn-ghost btn-xs">
+                    Pós-produção
+                  </.link>
+                </div>
 
                 <form :if={!@capture.editorial} phx-submit="start_editorial" class="flex gap-2">
                   <input
@@ -1010,29 +990,16 @@ defmodule RevelaWeb.HostLive do
 
   # traduz espaco livre para o que o fotografo entende: quantas fotos ainda
   # cabem, calculado a partir da media real de bytes por disparo do editorial.
-  # Sem os_mon (:disk_awareness :unavailable) esta dica some; o aviso de
-  # monitoramento vai ao help (camera presente) e ao console via push_event
-  # "disk-awareness" (ver maybe_warn_disk/1).
+  # Sem os_mon (:disk_awareness :unavailable), mostra o aviso de monitoramento.
   defp free_space_hint(%{estimated_shots_left: n}) when is_integer(n),
     do: "Espaço livre: cabem ~#{n} fotos."
 
+  defp free_space_hint(%{disk_awareness: :unavailable}),
+    do:
+      "Aviso: monitoramento de disco indisponível (pacote erlang-os_mon). " <>
+        "Parada preventiva desativada."
+
   defp free_space_hint(_capture), do: nil
-
-  # aviso de os_mon ausente so no DevTools (uma vez por conexao LiveView)
-  defp maybe_warn_disk(socket, %{disk_awareness: :unavailable}) do
-    if connected?(socket) and not socket.assigns[:disk_warn_pushed] do
-      socket
-      |> assign(:disk_warn_pushed, true)
-      |> push_event("disk-awareness", %{
-        message:
-          "monitoramento de disco indisponível (pacote erlang-os_mon); parada preventiva desativada"
-      })
-    else
-      socket
-    end
-  end
-
-  defp maybe_warn_disk(socket, _capture), do: socket
 
   defp status_badge(assigns) do
     {label, class} =
