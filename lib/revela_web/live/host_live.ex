@@ -366,6 +366,11 @@ defmodule RevelaWeb.HostLive do
     {:noreply, refresh_grid_for_label(socket, photo_id)}
   end
 
+  def handle_info({:labels_changed, photo_ids}, socket) do
+    socket = assign(socket, :labels, Capture.labels_for_reviewer(@host_id))
+    {:noreply, refresh_grid_for_labels(socket, photo_ids)}
+  end
+
   def handle_info({:brand_round_changed, editorial_id}, socket) do
     if Capture.current_editorial_id() == editorial_id do
       {:noreply, load_photos(socket)}
@@ -514,6 +519,21 @@ defmodule RevelaWeb.HostLive do
       socket
       |> assign(:tallies, Capture.tallies())
       |> maybe_restream_grid_photo(photo_id)
+    end
+  end
+
+  defp refresh_grid_for_labels(socket, photo_ids) do
+    if MapSet.size(socket.assigns.filter_colors) > 0 do
+      load_grid(socket)
+    else
+      visible_ids = MapSet.intersection(socket.assigns.grid_photo_ids, MapSet.new(photo_ids))
+
+      socket = assign(socket, :tallies, Capture.tallies())
+
+      photo_ids
+      |> Capture.get_photos()
+      |> Enum.filter(&MapSet.member?(visible_ids, &1.id))
+      |> Enum.reduce(socket, &stream_insert(&2, :grid_photos, &1))
     end
   end
 

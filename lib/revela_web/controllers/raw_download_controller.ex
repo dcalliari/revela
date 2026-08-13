@@ -84,7 +84,7 @@ defmodule RevelaWeb.RawDownloadController do
   end
 
   defp build_zip(files, token) do
-    :global.trans({__MODULE__, token}, fn ->
+    :global.trans({{__MODULE__, token}, self()}, fn ->
       case staging_paths(files, token) do
         {:ok, nil, zip_path} ->
           {:ok, zip_path}

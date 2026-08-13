@@ -159,9 +159,7 @@ defmodule RevelaWeb.PostLive do
       before =
         Map.new(ids, fn id -> {id, Map.get(socket.assigns.labels, id)} end)
 
-      Enum.each(ids, fn id ->
-        Capture.set_label(id, @host_id, @host_name, color)
-      end)
+      {:ok, _count} = Capture.set_labels(ids, @host_id, @host_name, color)
 
       labels =
         Enum.reduce(ids, socket.assigns.labels, fn id, acc -> Map.put(acc, id, color) end)
@@ -189,7 +187,7 @@ defmodule RevelaWeb.PostLive do
     else
       before = Map.new(ids, fn id -> {id, Map.get(socket.assigns.labels, id)} end)
 
-      Enum.each(ids, fn id -> Capture.clear_label(id, @host_id) end)
+      {:ok, _count} = Capture.clear_labels(ids, @host_id)
 
       labels = Enum.reduce(ids, socket.assigns.labels, fn id, acc -> Map.delete(acc, id) end)
 
@@ -363,6 +361,13 @@ defmodule RevelaWeb.PostLive do
   end
 
   def handle_info({:label_changed, _photo_id}, socket) do
+    {:noreply,
+     socket
+     |> refresh_labels_and_tallies()
+     |> refresh_brand_selection()}
+  end
+
+  def handle_info({:labels_changed, _photo_ids}, socket) do
     {:noreply,
      socket
      |> refresh_labels_and_tallies()
@@ -569,14 +574,15 @@ defmodule RevelaWeb.PostLive do
         socket
 
       [entry | rest] ->
+        updates = Map.new(entry.reverse, fn {:label, id, color} -> {id, color} end)
+        {:ok, _count} = Capture.update_labels(updates, @host_id, @host_name)
+
         labels =
           Enum.reduce(entry.reverse, socket.assigns.labels, fn
             {:label, id, nil}, acc ->
-              Capture.clear_label(id, @host_id)
               Map.delete(acc, id)
 
             {:label, id, color}, acc ->
-              Capture.set_label(id, @host_id, @host_name, color)
               Map.put(acc, id, color)
           end)
 

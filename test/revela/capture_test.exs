@@ -171,6 +171,32 @@ defmodule Revela.CaptureTest do
     end
   end
 
+  describe "labels em lote" do
+    test "aplica e restaura varias cores com um broadcast por operacao" do
+      {:ok, editorial} = Capture.start_editorial("Lote", "/tmp/lote")
+      {:ok, a} = Capture.create_photo(%{web_path: "/uploads/lote-a.jpg"})
+      {:ok, b} = Capture.create_photo(%{web_path: "/uploads/lote-b.jpg"})
+      Capture.subscribe_labels()
+
+      assert {:ok, 2} = Capture.set_labels([a.id, b.id], "host", "host", 3)
+      assert_receive {:labels_changed, ids}
+      assert MapSet.new(ids) == MapSet.new([a.id, b.id])
+      refute_receive {:label_changed, _photo_id}
+
+      assert Capture.labels_for_reviewer_in_editorial("host", editorial.id) == %{
+               a.id => 3,
+               b.id => 3
+             }
+
+      assert {:ok, 2} = Capture.update_labels(%{a.id => nil, b.id => 1}, "host", "host")
+      assert_receive {:labels_changed, ids}
+      assert MapSet.new(ids) == MapSet.new([a.id, b.id])
+      refute_receive {:label_changed, _photo_id}
+
+      assert Capture.labels_for_reviewer_in_editorial("host", editorial.id) == %{b.id => 1}
+    end
+  end
+
   describe "tallies/0" do
     test "ignora votos brand-* de shares supersedidos no editorial ativo" do
       {:ok, editorial} =

@@ -610,6 +610,85 @@ defmodule Revela.Capture do
     :ok
   end
 
+  @doc "Define a mesma cor para varias fotos com uma unica notificacao."
+  def set_labels(photo_ids, reviewer_id, reviewer_name, color) when is_list(photo_ids) do
+    photo_ids
+    |> Map.new(&{&1, color})
+    |> update_labels(reviewer_id, reviewer_name)
+  end
+
+  @doc "Remove a cor de varias fotos com uma unica notificacao."
+  def clear_labels(photo_ids, reviewer_id) when is_list(photo_ids) do
+    photo_ids
+    |> Map.new(&{&1, nil})
+    |> update_labels(reviewer_id, nil)
+  end
+
+  @doc "Aplica cores ou remocoes em lote, atomicamente e com uma unica notificacao."
+  def update_labels(updates, reviewer_id, reviewer_name)
+      when is_map(updates) and is_binary(reviewer_id) do
+    updates = Enum.to_list(updates)
+
+    if valid_label_updates?(updates) do
+      ids = Enum.map(updates, &elem(&1, 0))
+      now = DateTime.utc_now(:microsecond)
+
+      result =
+        Repo.transaction(fn ->
+          clear_ids = for {photo_id, nil} <- updates, do: photo_id
+
+          if clear_ids != [] do
+            from(l in Label,
+              where: l.reviewer_id == ^reviewer_id and l.photo_id in ^clear_ids
+            )
+            |> Repo.delete_all()
+          end
+
+          entries =
+            for {photo_id, color} <- updates, not is_nil(color) do
+              %{
+                photo_id: photo_id,
+                reviewer_id: reviewer_id,
+                reviewer_name: reviewer_name,
+                color: color,
+                inserted_at: now,
+                updated_at: now
+              }
+            end
+
+          if entries != [] do
+            Repo.insert_all(Label, entries,
+              on_conflict: {:replace, [:color, :reviewer_name, :updated_at]},
+              conflict_target: [:photo_id, :reviewer_id]
+            )
+          end
+
+          length(ids)
+        end)
+
+      case result do
+        {:ok, _count} = success ->
+          if ids != [], do: broadcast_labels(ids)
+          success
+
+        error ->
+          error
+      end
+    else
+      {:error, :invalid_labels}
+    end
+  end
+
+  defp valid_label_updates?(updates) do
+    Enum.all?(updates, fn
+      {photo_id, color} when is_integer(photo_id) -> is_nil(color) or color in Label.colors()
+      _ -> false
+    end)
+  end
+
+  defp broadcast_labels(photo_ids),
+    do: PubSub.broadcast(Revela.PubSub, @labels_topic, {:labels_changed, photo_ids})
+
   @doc """
   Agregacao para a tela do host no editorial atual: mapa
   `%{photo_id => %{color => count}}` com a contagem de cada cor entre todos os
