@@ -43,7 +43,7 @@ defmodule RevelaWeb.RawDownloadControllerTest do
     raw = Path.join(dir, "IMG.CR2")
     File.write!(raw, "RAWDATA")
     {:ok, photo} = Capture.create_photo(%{web_path: "/uploads/e.jpg", raw_path: raw})
-    {:ok, token} = RawDownloadController.create_token(editorial.id, [photo.id])
+    token = RawDownloadController.create_token(editorial.id, [photo.id])
     Repo.update_all(RawDownload, set: [expires_at: DateTime.add(DateTime.utc_now(), -1, :second)])
 
     conn = get(conn, ~p"/raws/#{token}")

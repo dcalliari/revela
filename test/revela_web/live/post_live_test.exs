@@ -26,6 +26,7 @@ defmodule RevelaWeb.PostLiveTest do
     assert has_element?(view, "#post-root")
     assert has_element?(view, "#post-grid")
     assert has_element?(view, "#post-photo-#{a.id}")
+    assert has_element?(view, "#post-photo-#{a.id} img[loading='lazy'][decoding='async']")
     assert has_element?(view, "#session-history")
     assert has_element?(view, "#post-undo")
   end
@@ -67,6 +68,34 @@ defmodule RevelaWeb.PostLiveTest do
     view |> element("#filter-0") |> render_click()
     assert has_element?(view, "#post-photo-#{a.id}")
     refute has_element?(view, "#post-photo-#{b.id}")
+  end
+
+  test "shift reinicia selecao quando a ancora sai do filtro", %{
+    conn: conn,
+    editorial: editorial,
+    a: a,
+    b: b,
+    c: c
+  } do
+    Capture.set_label(a.id, "host", "host", 0)
+    Capture.set_label(b.id, "host", "host", 0)
+    Capture.set_label(c.id, "host", "host", 0)
+    {:ok, view, _html} = live(conn, ~p"/post/#{editorial.id}")
+
+    view |> element("#filter-0") |> render_click()
+    render_hook(view, "select_photo", %{"id" => to_string(a.id), "shift" => false})
+    view |> element("#label-sel-1") |> render_click()
+    refute has_element?(view, "#post-photo-#{a.id}")
+
+    render_hook(view, "select_photo", %{"id" => to_string(c.id), "shift" => true})
+    assert view |> element("#selection-count") |> render() =~ "1"
+    view |> element("#label-sel-2") |> render_click()
+
+    assert Capture.labels_for_reviewer_in_editorial("host", editorial.id) == %{
+             a.id => 1,
+             b.id => 0,
+             c.id => 2
+           }
   end
 
   test "cria link local para a marca a partir da selecao", %{

@@ -99,10 +99,11 @@ defmodule RevelaWeb.PostLive do
     unless photo_id in ids do
       {:noreply, socket}
     else
+      from_idx = Enum.find_index(ids, &(&1 == socket.assigns.anchor_id))
+
       {selected, anchor} =
-        if shift? and socket.assigns.anchor_id do
-          from_idx = Enum.find_index(ids, &(&1 == socket.assigns.anchor_id)) || 0
-          to_idx = Enum.find_index(ids, &(&1 == photo_id)) || 0
+        if shift? and is_integer(from_idx) do
+          to_idx = Enum.find_index(ids, &(&1 == photo_id))
           {lo, hi} = if from_idx <= to_idx, do: {from_idx, to_idx}, else: {to_idx, from_idx}
           range = ids |> Enum.slice(lo..hi) |> MapSet.new()
           {range, socket.assigns.anchor_id}
@@ -550,7 +551,7 @@ defmodule RevelaWeb.PostLive do
               type="button"
               phx-click="undo"
               disabled={@history == []}
-              class="btn btn-outline btn-sm"
+              class="btn btn-primary btn-sm fixed bottom-4 right-4 z-40 shadow-xl"
               title="Ctrl+Z / Cmd+Z"
             >
               Desfazer
@@ -749,6 +750,8 @@ defmodule RevelaWeb.PostLive do
                       <img
                         src={photo.web_path}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         class="w-full aspect-[3/2] object-cover pointer-events-none"
                         draggable="false"
                       />

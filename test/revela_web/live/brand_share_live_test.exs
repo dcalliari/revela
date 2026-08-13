@@ -23,6 +23,7 @@ defmodule RevelaWeb.BrandShareLiveTest do
     assert html =~ "Looks"
     assert has_element?(view, "#brand-share-grid")
     assert has_element?(view, "#brand-photo-#{a.id}")
+    assert has_element?(view, "#brand-photo-#{a.id} img[loading='lazy'][decoding='async']")
 
     view |> element("#brand-pick-#{a.id}-2") |> render_click()
 

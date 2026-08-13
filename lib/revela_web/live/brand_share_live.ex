@@ -122,6 +122,8 @@ defmodule RevelaWeb.BrandShareLive do
                 <img
                   src={photo.web_path}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   class="w-full aspect-[3/2] object-cover bg-neutral-900 transition duration-200 group-hover:brightness-110"
                 />
               <% else %>
