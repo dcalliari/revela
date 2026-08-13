@@ -156,6 +156,39 @@ defmodule RevelaWeb.PostLiveTest do
     assert RawDownload.decode_photo_ids(download) == [b.id]
   end
 
+  test "mudanca nos picks invalida RAW e resincroniza a selecao", %{
+    conn: conn,
+    editorial: editorial,
+    a: a,
+    b: b
+  } do
+    dir = Path.join(System.tmp_dir!(), "revela-sync-raw-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    raw_a = Path.join(dir, "a.cr2")
+    raw_b = Path.join(dir, "b.cr2")
+    File.write!(raw_a, <<1>>)
+    File.write!(raw_b, <<2>>)
+
+    {:ok, _a} = a |> Ecto.Changeset.change(raw_path: raw_a) |> Revela.Repo.update()
+    {:ok, _b} = b |> Ecto.Changeset.change(raw_path: raw_b) |> Revela.Repo.update()
+    {:ok, share, _} = Delivery.create_brand_share(editorial.id, [a.id, b.id])
+    Capture.set_label(a.id, "brand-#{share.token}", "marca", 1)
+
+    {:ok, view, _html} = live(conn, ~p"/post/#{editorial.id}")
+    view |> element("#prepare-raw") |> render_click()
+    assert has_element?(view, "#raw-download-link")
+
+    Capture.clear_label(a.id, "brand-#{share.token}")
+    Capture.set_label(b.id, "brand-#{share.token}", "marca", 2)
+    _ = :sys.get_state(view.pid)
+
+    refute has_element?(view, "#raw-download-link")
+    assert view |> element("#selection-count") |> render() =~ "1"
+    view |> element("#label-sel-3") |> render_click()
+
+    assert Capture.labels_for_reviewer_in_editorial("host", editorial.id) == %{b.id => 3}
+  end
+
   test "muda selecao/filtro limpa link RAW preparado", %{
     conn: conn,
     editorial: editorial,

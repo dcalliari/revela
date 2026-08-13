@@ -640,6 +640,8 @@ defmodule Revela.Capture do
     end)
   end
 
+  defp brand_label_scope(nil), do: dynamic([l], not like(l.reviewer_id, "brand-%"))
+
   defp brand_label_scope(editorial_id) do
     case list_brand_shares_for_editorial(editorial_id) do
       [%BrandShare{token: token} | _] ->

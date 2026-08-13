@@ -20,6 +20,8 @@ defmodule Revela.CaptureTest do
 
       # a tela do editorial novo comeca vazia, mas nada foi apagado do banco
       assert Capture.list_photos() == []
+      assert Capture.list_photos(colors: [0]) == []
+      assert Capture.count_photos(colors: [0]) == 0
       assert Capture.labels_for_reviewer("host") == %{}
       assert Capture.tallies() == %{}
 
